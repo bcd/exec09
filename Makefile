@@ -5,12 +5,18 @@ TARGET_CC = /usr/local/m6809/bin/gcc
 TARGET_CFLAGS = -fomit-frame-pointer -fno-builtin -save-temps -I$(progdir)
 TARGET_LDFLAGS=-Xlinker --sectionstart -Xlinker vector=0xFFF0
 
-# Uncomment the following to turn on linker verbosity.
-# You can see what command's gcc is sending to the ld wrapper, and
-# what it's sending to aslink.
+# Enable verbose option in ld, to see what it's really doing
+ifdef VERBOSE
 TARGET_LDFLAGS += -Xlinker --verbose
+endif
 
-TARGET_CFLAGS += -I/home/bdominy/src/newlib6809/trunk/newlib/libc/include
+# Enable interactive debugging
+ifdef DEBUG
+HOST_CFLAGS += -DDEBUG_MONITOR
+endif
+
+# Include C library header files
+TARGET_CFLAGS += -I$(HOME)/src/newlib6809/trunk/newlib/libc/include
 
 ifndef prog
 prog=hello
@@ -35,7 +41,7 @@ $(TARGET_OBJS) : CFLAGS=$(TARGET_CFLAGS)
 .PHONY : $(prog)
 $(prog) : $(progdir)/$(prog)
 
-$(progdir)/$(prog): $(TARGET_OBJS)
+$(progdir)/$(prog): $(TARGET_OBJS) $(EXTRA_$(prog)_OBJS)
 	$(TARGET_CC) $(TARGET_LDFLAGS) -o $@ $(TARGET_OBJS)
 	
 clean:

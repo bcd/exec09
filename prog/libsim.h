@@ -1,4 +1,3 @@
-
 #ifndef _LIBSIM_H
 #define _LIBSIM_H
 
@@ -10,7 +9,5 @@
 /* Function prototypes */
 void sys_console_write (char c);
 char sys_console_read (void);
-int sys_read (int fd, const char *buf, int len);
-int sys_write (int fd, const char *buf, int len);
 
 #endif /* _LIBSIM_H */

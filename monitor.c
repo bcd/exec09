@@ -1330,8 +1330,11 @@ void monitor_init (void)
 
   for (tmp = 0; tmp < MAX_BREAKS; tmp++) brkpoints[tmp] = CLEAR_BREAK;
   inst_count = do_break = 0;
-  //monitor_on = 1;
+#ifdef DEBUG_MONITOR
+  monitor_on = 1;
+#else
   monitor_on = 0;
+#endif
   signal(SIGINT, monitor_signal);
 }
 
