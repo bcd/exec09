@@ -1,9 +1,12 @@
 
-#include <libsim.h>
+/* Needed for write() */
+#include <unistd.h>
 
 int main (void)
 {
-	sys_write (1, "Hello, World\n", 13);
+   /* We don't have printf() working yet, so we have to
+	 * use the UNIX-like system calls. */
+	write (1, "Hello, World\n", 13);
 	return (0);
 }
 

@@ -4,14 +4,20 @@ HOST_CFLAGS += -I.
 TARGET_CC = /usr/local/m6809/bin/gcc
 TARGET_CFLAGS = -fomit-frame-pointer -fno-builtin -save-temps -I$(progdir)
 TARGET_LDFLAGS=-Xlinker --sectionstart -Xlinker vector=0xFFF0
-# TARGET_LDFLAGS += -Xlinker --verbose
+
+# Uncomment the following to turn on linker verbosity.
+# You can see what command's gcc is sending to the ld wrapper, and
+# what it's sending to aslink.
+TARGET_LDFLAGS += -Xlinker --verbose
+
+TARGET_CFLAGS += -I/home/bdominy/src/newlib6809/trunk/newlib/libc/include
 
 ifndef prog
 prog=hello
 endif
 progdir=prog
 
-TARGET_OBJS = $(progdir)/$(prog).o $(progdir)/libsim.o
+TARGET_OBJS = $(progdir)/$(prog).o # $(progdir)/libsim.o
 EXEC_OBJS = 6809.o main.o monitor.o
 
 run : exec09 $(prog)
@@ -30,7 +36,7 @@ $(TARGET_OBJS) : CFLAGS=$(TARGET_CFLAGS)
 $(prog) : $(progdir)/$(prog)
 
 $(progdir)/$(prog): $(TARGET_OBJS)
-	@echo "Linking target program..." && $(TARGET_CC) $(TARGET_LDFLAGS) -o $@ $(TARGET_OBJS)
+	$(TARGET_CC) $(TARGET_LDFLAGS) -o $@ $(TARGET_OBJS)
 	
 clean:
-	@echo "Cleaing all objects..." && rm -f $(EXEC_OBJS) $(TARGET_OBJS) *.i *.s $(progdir)/*.i $(progdir)/*.s
+	@echo "Cleaning all objects..." && rm -f $(EXEC_OBJS) $(TARGET_OBJS) *.i *.s $(progdir)/*.i $(progdir)/*.s
