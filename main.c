@@ -24,10 +24,12 @@ enum { HEX, S19, BIN };
 
 static char *Options[]=
 {
- "hex","s19","bin","s",NULL
+ "d","hex","s19","bin","s",NULL
 };
 
 int total = 0;
+
+int debug_enabled = 0;
 
 char *exename;
 
@@ -72,12 +74,14 @@ int main (int argc, char *argv[])
       for (j=0;Options[j];j++) if (!strcmp(argv[i]+1,Options[j])) break;
       switch (j)
       {
-        case 0:  type = HEX;  break;
-        case 1:  type = S19;  break;
-        case 2:  type = BIN;  break;
-        case 3:  i++; if (i>argc) usage();
+        case 0:  debug_enabled = 1; break;
+        case 1:  type = HEX;  break;
+        case 2:  type = S19;  break;
+        case 3:  type = BIN;  break;
+        case 4:  i++; if (i>argc) usage();
                  off  = strtoul(argv[i],NULL,16);
                  type = BIN;
+					  printf ("off = %X\n", off);
                  break;
 
         default: usage();

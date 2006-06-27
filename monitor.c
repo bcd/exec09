@@ -1327,14 +1327,11 @@ static void monitor_signal (int sigtype)
 void monitor_init (void)
 {
   int tmp;
+  extern int debug_enabled;
 
   for (tmp = 0; tmp < MAX_BREAKS; tmp++) brkpoints[tmp] = CLEAR_BREAK;
   inst_count = do_break = 0;
-#ifdef DEBUG_MONITOR
-  monitor_on = 1;
-#else
-  monitor_on = 0;
-#endif
+  monitor_on = debug_enabled;
   signal(SIGINT, monitor_signal);
 }
 
