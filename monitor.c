@@ -1269,7 +1269,7 @@ command_t cmd_table [] =
   { CMD_BRKOFF,  "boff"  },
   { CMD_BRKON,   "bon"   },
   { CMD_QUIT,    "q"    },
-  { CMD_EXIT,    "x"    },
+  { CMD_EXIT,    "g"    },
   {-1,   NULL}
 };
 
@@ -1506,11 +1506,11 @@ int monitor6809 (void)
                         puts("SHOW   flag           - show CC flag             ");
                         puts("SETBRK addr           - set breakpoint to addr   ");
                         puts("CLRBRK addr           - clear breakpoint at addr ");
-                        puts("BRKSHOW               - show breakpoints         ");
-                        puts("BRKOFF                - disable all breakpoints  ");
-                        puts("BRKON                 - enable all breakpoints   ");
-                        puts("QUIT                  - quit simulator           ");
-                        puts("EXIT                  - exit monitor (like GO)   ");
+                        puts("bl                    - list breakpoints         ");
+                        puts("boff                  - disable all breakpoints  ");
+                        puts("bon                   - enable all breakpoints   ");
+                        puts("q                     - quit simulator           ");
+                        puts("g                     - go!                      ");
                         puts("number formats $hex, @oct, %bin, dec           \n");
                         continue;
 

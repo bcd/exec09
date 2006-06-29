@@ -734,6 +734,22 @@ void rts (void)
   PC  = read_stack16(S);     S = (S + 2) & 0xffff;
 }
 
+void irq (void)
+{
+  EFI |= E_FLAG;
+  S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);
+  S = (S - 2) & 0xffff; write_stack16(S, U);
+  S = (S - 2) & 0xffff; write_stack16(S,  Y);
+  S = (S - 2) & 0xffff; write_stack16(S,  X);
+  S = (S - 1) & 0xffff; write_stack(S, DP >> 8);
+  S = (S - 1) & 0xffff; write_stack(S, B);
+  S = (S - 1) & 0xffff; write_stack(S, A);
+  S = (S - 1) & 0xffff; write_stack(S, get_cc());
+  EFI |= (I_FLAG|F_FLAG);
+
+  PC = (memory[0xfff8] << 8) | memory[0xfff9];
+}
+
 void swi (void)
 {
   cpu_clk -= 19;

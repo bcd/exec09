@@ -24,10 +24,16 @@ enum { HEX, S19, BIN };
 
 static char *Options[]=
 {
- "d","hex","s19","bin","s",NULL
+ "d","hex","s19","bin","s","mhz","irq","firq",NULL
 };
 
 int total = 0;
+
+int mhz = 1;
+
+int cycles_per_irq = 1952;
+
+int cycles_per_firq = 0;
 
 int debug_enabled = 0;
 
@@ -81,9 +87,16 @@ int main (int argc, char *argv[])
         case 4:  i++; if (i>argc) usage();
                  off  = strtoul(argv[i],NULL,16);
                  type = BIN;
-					  printf ("off = %X\n", off);
                  break;
-
+        case 5:  i++; if (i>argc) usage();
+                 mhz = strtoul(argv[i],NULL,16);
+					  break;
+        case 6:  i++; if (i>argc) usage();
+                 cycles_per_irq = strtoul(argv[i],NULL,16);
+					  break;
+        case 7:  i++; if (i>argc) usage();
+                 cycles_per_firq = strtoul(argv[i],NULL,16);
+					  break;
         default: usage();
       }
     }
@@ -105,15 +118,24 @@ int main (int argc, char *argv[])
 
   monitor_init();
   cpu_reset();
-  // printf ("AS,JF, 1.2, file %s\n",name);
   do
   {
-    total += cpu_execute (60);
+    if (cycles_per_irq != 0)
+	 {
+    	total += cpu_execute (cycles_per_irq);
+    	irq ();
+    }
+	 else
+	 {
+    	total += cpu_execute (500);
+	 }
+	 fflush (stdout);
   } while (cpu_quit != 0);
 
-  printf("6809 stopped after %d cycles\n",total);
+  printf("m6809-run stopped after %d cycles\n",total);
 
   free(memory);
 
   return 0;
 }
+
