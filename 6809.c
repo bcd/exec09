@@ -37,6 +37,18 @@ int cpu_quit = 1;
 
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
+extern int debug_enabled;
+
+
+void check_pc (void)
+{
+  if (PC < 0x8000)
+  {
+	  fprintf (stderr, "m6809-run: invalid PC = %04X\n", PC);
+	  exit (2);
+  }
+}
+
 unsigned imm_byte (void)
 {
   unsigned val = memory[PC & 0xffff]; PC++;
@@ -178,7 +190,7 @@ void set_x  (unsigned val) { X = val & 0xffff; }
 void set_y  (unsigned val) { Y = val & 0xffff; }
 void set_s  (unsigned val) { S = val & 0xffff; }
 void set_u  (unsigned val) { U = val & 0xffff; }
-void set_pc (unsigned val) { PC = val & 0xffff; }
+void set_pc (unsigned val) { PC = val & 0xffff; check_pc (); }
 void set_d  (unsigned val) { A = (val >> 8) & 0xff; B = val & 0xff; }
 
 /* handle condition code register */
@@ -237,7 +249,7 @@ void set_reg (unsigned nro, unsigned val)
     case  2: Y = val;        break;
     case  3: U = val;        break;
     case  4: S = val;        break;
-    case  5: PC = val;       break;
+    case  5: PC = val; check_pc (); break;
     case  8: A = val;        break;
     case  9: B = val;        break;
     case 10: set_cc(val);    break;
@@ -708,6 +720,7 @@ void jsr (void)
 {
   S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);     
   PC = ea;
+  check_pc ();
 }
 
 void rti (void)
@@ -748,6 +761,7 @@ void irq (void)
   EFI |= (I_FLAG|F_FLAG);
 
   PC = (memory[0xfff8] << 8) | memory[0xfff9];
+  check_pc ();
 }
 
 void swi (void)
@@ -765,6 +779,7 @@ void swi (void)
   EFI |= (I_FLAG|F_FLAG);
 
   PC = (memory[0xfffa] << 8) | memory[0xfffb];
+  check_pc ();
 }
 
 void swi2 (void)
@@ -781,6 +796,7 @@ void swi2 (void)
   S = (S - 1) & 0xffff; write_stack(S, get_cc());
 
   PC = (memory[0xfff4] << 8) | memory[0xfff5];
+  check_pc ();
 }
 
 void swi3 (void)
@@ -797,6 +813,7 @@ void swi3 (void)
   S = (S - 1) & 0xffff; write_stack(S, get_cc());
 
   PC = (memory[0xfff2] << 8) | memory[0xfff3];
+  check_pc ();
 }
 
 void cwai (void)
@@ -884,6 +901,7 @@ void long_bsr (void)
   S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);     
   PC = ea;
   cpu_clk -= 9;
+  check_pc ();
 }
 
 void bsr (void)
@@ -893,6 +911,7 @@ void bsr (void)
   S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);     
   PC = ea;
   cpu_clk -= 7;
+  check_pc ();
 }
 
 /* execute 6809 code */
@@ -970,7 +989,10 @@ int cpu_execute (int cycles)
           case 0xef: cpu_clk--; indexed();                st16(S);                               break; 
           case 0xfe:            extended(); cpu_clk -= 6; S = ld16(RDMEM16(ea));                 break;
           case 0xff:            extended(); cpu_clk -= 6; st16(S);                               break;
-          default:   printf("%X: invalid opcode $10%02X\n",iPC,opcode); monitor_on = 1;          break;
+          default:   
+						printf("%X: invalid opcode $10%02X\n",iPC,opcode); 
+          			if (debug_enabled) { monitor_on = 1; } else { exit (1); }
+						break;
         }           
       }
       break;
@@ -990,7 +1012,10 @@ int cpu_execute (int cycles)
           case 0xac: cpu_clk--; indexed();                cmp16(S,RDMEM16(ea));       cpu_clk--; break;
           case 0xb3:            extended(); cpu_clk -= 6; cmp16(U,RDMEM16(ea));       cpu_clk--; break;
           case 0xbc:            extended(); cpu_clk -= 6; cmp16(S,RDMEM16(ea));       cpu_clk--; break;
-          default:   printf("%X: invalid opcode $11%02X\n",iPC,opcode); monitor_on = 1;          break;
+          default:   
+					printf("%X: invalid opcode $11%02X\n",iPC,opcode);
+       			if (debug_enabled) { monitor_on = 1; } else { exit (1); }
+					break;
         }
       }
       break;
@@ -1220,7 +1245,7 @@ int cpu_execute (int cycles)
       case 0xff: extended(); cpu_clk -= 5; st16(U);                   break;
 
 	default:   printf("%04X: invalid opcode $%02X\n",iPC,opcode); cpu_clk -= 2; 
-          monitor_on = 1;
+          if (debug_enabled) { monitor_on = 1; } else { exit (1); }
           break;
     }
 
@@ -1236,4 +1261,5 @@ void cpu_reset (void)
   EFI = F_FLAG|I_FLAG;
 
   PC = (memory[0xfffe] << 8) | memory[0xffff];
+  check_pc ();
 }
