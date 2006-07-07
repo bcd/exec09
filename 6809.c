@@ -154,7 +154,11 @@ void indexed (void) /* note take 1 extra cycle */
        case 0x1c: ea = (INT8)imm_byte(); ea = (ea + PC) & 0xffff;   cpu_clk -= 5; ea = RDMEM16(ea); cpu_clk -= 2; break;
        case 0x1d: ea = imm_word(); ea = (ea + PC) & 0xffff;         cpu_clk -= 9; ea = RDMEM16(ea); cpu_clk -= 2; break;
        case 0x1f: ea = imm_word();                                  cpu_clk -= 6; ea = RDMEM16(ea); cpu_clk -= 2; break;      
-       default:   ea = 0;  printf("%X: invalid index post $%02X\n",iPC,post); monitor_on = 1;                     break;
+       default:   
+			ea = 0;  
+			printf("%X: invalid index post $%02X\n",iPC,post);
+  			if (debug_enabled) { monitor_on = 1; } else { exit (1); }
+			break;
      }
    }
    else
