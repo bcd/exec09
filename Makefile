@@ -41,7 +41,7 @@ endif
 
 TARGET_OBJS = $(progdir)/$(prog).o
 
-EXEC_OBJS = 6809.o main.o monitor.o
+EXEC_OBJS = 6809.o main.o monitor.o gdb.o
 
 .PHONY : build
 build : $(TARGET_SIM)

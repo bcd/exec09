@@ -61,6 +61,8 @@ int main (int argc, char *argv[])
   int off  = 0;
   int i, j, n;
 
+	gdb_init ();
+
   exename = argv[0];
 
   if (argc == 1) usage();
@@ -130,6 +132,8 @@ int main (int argc, char *argv[])
     	total += cpu_execute (500);
 	 }
 	 fflush (stdout);
+	 gdb_periodic_task ();
+	 usleep (10000);
   } while (cpu_quit != 0);
 
   printf("m6809-run stopped after %d cycles\n",total);
