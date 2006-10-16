@@ -7,6 +7,12 @@
 HOST_CC = gcc
 HOST_CFLAGS += -I.
 
+ifeq ($(profile),y)
+HOST_CFLAGS += -pg
+HOST_LFLAGS += -pg
+endif
+HOST_CFLAGS += -O2
+
 # Target-side configuration
 TARGET_SIM = m6809-run
 TARGET_BINDIR = /usr/local/m6809/bin
@@ -51,7 +57,7 @@ install : build
 	@echo "Installing simulator..." && $(SUDO) cp -p m6809-run /usr/local/bin
 
 $(TARGET_SIM) : $(EXEC_OBJS)
-	@echo "Linking simulator..." && $(HOST_CC) -o $@ $(EXEC_OBJS)
+	@echo "Linking simulator..." && $(HOST_CC) -o $@ $(EXEC_OBJS) $(HOST_LFLAGS)
 
 $(EXEC_OBJS) : CC=$(HOST_CC) 
 $(EXEC_OBJS) : CFLAGS=$(HOST_CFLAGS)
