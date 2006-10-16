@@ -31,11 +31,18 @@ int total = 0;
 
 int mhz = 1;
 
-int cycles_per_irq = 1952;
+/* When nonzero, indicates that the IRQ should be triggered periodically,
+every so many cycles.  By default no periodic IRQ is generated. */
+int cycles_per_irq = 0;
 
+/* When nonzero, indicates that the FIRQ should be triggered periodically,
+every so many cycles.  By default no periodic FIRQ is generated. */
 int cycles_per_firq = 0;
 
+/* Nonzero if GDB debugging support is turned on */
 int debug_enabled = 0;
+
+int need_flush = 0;
 
 char *exename;
 
@@ -120,6 +127,7 @@ int main (int argc, char *argv[])
 
   monitor_init();
   cpu_reset();
+
   do
   {
     if (cycles_per_irq != 0)
@@ -129,11 +137,19 @@ int main (int argc, char *argv[])
     }
 	 else
 	 {
-    	total += cpu_execute (500);
+    	total += cpu_execute (10000);
 	 }
+
+	if (need_flush)
+	{
 	 fflush (stdout);
-	 gdb_periodic_task ();
-	 usleep (10000);
+	 need_flush = 0;
+	}
+
+	 if (debug_enabled)
+	 	gdb_periodic_task ();
+	 // usleep (10000);
+
   } while (cpu_quit != 0);
 
   printf("m6809-run stopped after %d cycles\n",total);

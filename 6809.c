@@ -39,6 +39,8 @@ unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
 extern int debug_enabled;
 
+extern int need_flush;
+
 
 void check_pc (void)
 {
@@ -49,13 +51,13 @@ void check_pc (void)
   }
 }
 
-unsigned imm_byte (void)
+static unsigned imm_byte (void)
 {
   unsigned val = memory[PC & 0xffff]; PC++;
   return val;
 }
 
-unsigned imm_word (void)
+static unsigned imm_word (void)
 {
   unsigned val = (memory[PC & 0xffff] << 8) | memory[(PC + 1) & 0xffff]; PC += 2; 
   return val;
@@ -67,6 +69,7 @@ static void WRMEM (unsigned addr, unsigned data)
 	{
 		case 0xE000:
 	  		putchar (data);
+			need_flush = 1;
 			break;
 		case 0xE001:
 			exit (data);
@@ -75,14 +78,14 @@ static void WRMEM (unsigned addr, unsigned data)
 	}
 }
 
-void WRMEM16 (unsigned addr, unsigned data)
+static void WRMEM16 (unsigned addr, unsigned data)
 {
   WRMEM(addr,data >> 8);
   cpu_clk--;
   WRMEM((addr + 1) & 0xffff,data & 0xff);
 }
 
-unsigned RDMEM (unsigned addr)
+static unsigned RDMEM (unsigned addr)
 {
 	switch (addr)
 	{
@@ -93,7 +96,7 @@ unsigned RDMEM (unsigned addr)
 	}
 }
 
-unsigned RDMEM16 (unsigned addr)
+static unsigned RDMEM16 (unsigned addr)
 {
   unsigned val = RDMEM(addr) << 8;
   cpu_clk--;
@@ -104,24 +107,24 @@ unsigned RDMEM16 (unsigned addr)
 #define write_stack WRMEM
 #define read_stack  RDMEM
 
-void write_stack16 (unsigned addr, unsigned data)
+static void write_stack16 (unsigned addr, unsigned data)
 {
   write_stack((addr + 1) & 0xffff,data & 0xff); 
   write_stack(addr,data >> 8);
 }
 
-unsigned read_stack16 (unsigned addr)
+static unsigned read_stack16 (unsigned addr)
 {
   return (read_stack(addr) << 8) | read_stack((addr + 1) & 0xffff);
 }
 
-void direct (void)
+static void direct (void)
 {
   unsigned val = memory[PC & 0xffff] | DP; PC++;
   ea = val;
 }
 
-void indexed (void) /* note take 1 extra cycle */
+static void indexed (void) /* note take 1 extra cycle */
 {
    unsigned post = imm_byte();
    unsigned *R   = index_regs[(post >> 5) & 0x3];
@@ -169,7 +172,7 @@ void indexed (void) /* note take 1 extra cycle */
    }
 }
 
-void extended (void)
+static void extended (void)
 {
   unsigned val = (memory[PC & 0xffff] << 8) | memory[(PC + 1) & 0xffff]; PC += 2; 
   ea = val;
