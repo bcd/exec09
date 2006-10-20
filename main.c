@@ -68,8 +68,6 @@ int main (int argc, char *argv[])
   int off  = 0;
   int i, j, n;
 
-	gdb_init ();
-
   exename = argv[0];
 
   if (argc == 1) usage();
@@ -127,6 +125,8 @@ int main (int argc, char *argv[])
 
   monitor_init();
   cpu_reset();
+  if (debug_enabled)
+		gdb_init ();
 
   do
   {
@@ -148,7 +148,6 @@ int main (int argc, char *argv[])
 
 	 if (debug_enabled)
 	 	gdb_periodic_task ();
-	 // usleep (10000);
 
   } while (cpu_quit != 0);
 
