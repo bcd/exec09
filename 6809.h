@@ -22,16 +22,23 @@
 #define M6809_H
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#ifdef HAVE_STDLIB_H
+# include <stdlib.h>
+#endif
+#ifdef HAVE_STRING_H
+# include <string.h>
+#endif
+#ifdef HAVE_STDINT_H
+# include <stdint.h>
+#endif
 
-typedef unsigned char UINT8;
+typedef uint8_t UINT8;
 typedef signed char INT8;
 
-typedef unsigned short UINT16;
+typedef uint16_t UINT16;
 typedef signed short INT16;
 
-typedef unsigned int UINT32;
+typedef uint32_t UINT32;
 typedef signed int INT32;
 
 #define E_FLAG 0x80

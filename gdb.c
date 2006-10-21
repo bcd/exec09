@@ -1,11 +1,16 @@
 
-#include <unistd.h>
+#ifdef HAVE_UNISTD_H
+# include <unistd.h>
+#endif
 #include <fcntl.h>
-#include <sys/socket.h>
+#ifdef HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#endif
 #include <netinet/in.h>
 #include <stdio.h>
-#include <stdlib.h>
-
+#ifdef HAVE_STDLIB_H
+# include <stdlib.h>
+#endif
 
 #define gdb_printf printf
 
