@@ -1,4 +1,4 @@
-AC_PREREQ(2.60)
+AC_PREREQ(2.57)
 AC_INIT(m6809-run, 0.90, brian@oddchange.com)
 AC_CONFIG_SRCDIR([6809.c])
 AM_INIT_AUTOMAKE([foreign])
