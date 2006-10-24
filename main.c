@@ -44,6 +44,8 @@ int debug_enabled = 0;
 
 int need_flush = 0;
 
+int max_cycles = 10000000;
+
 char *exename;
 
 static void usage (void)
@@ -149,9 +151,15 @@ int main (int argc, char *argv[])
 	 if (debug_enabled)
 	 	gdb_periodic_task ();
 
+	if ((max_cycles > 0) && (total > max_cycles))
+	{
+		printf ("m6809-run: maximum cycle count exceeded\n");
+		exit (100);
+	}
+
   } while (cpu_quit != 0);
 
-  printf("m6809-run stopped after %d cycles\n",total);
+  printf("m6809-run stopped after %d cycles\n", total);
 
   free(memory);
 
