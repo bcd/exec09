@@ -19,13 +19,10 @@
 */
 
 
-#ifdef HAVE_STRING_H
-# include <string.h>
-#endif
+#include "6809.h"
 #include <ctype.h>
 #include <signal.h>
 
-#include "6809.h"
 
 enum addr_mode
 {
@@ -1170,24 +1167,7 @@ void str_toupper (char *str)
 
 int str_getnumber (char *str)
 {
-  int val = 0;
-  
-  if (*str == '\0' || str == NULL) return val;
-
-  switch (*str)
-  {
-    case '$': sscanf(str+1,"%x",&val); break;
-    case '@': sscanf(str+1,"%o",&val); break;
-    default : sscanf(str,"%d",&val);   break;
-    case '%': for (;;)
-              {
-                str++;
-                if (*str < '0' || *str > '1') break;
-                val = (val << 1) | (*str & 1);
-              }
-              break;
-  }
-  return val;
+	return strtoul (str, NULL, 0);
 }
 
 int str_scan (char *str, char *table[],int maxi)
@@ -1220,19 +1200,16 @@ enum cmd_numbers
   CMD_DUMP,
   CMD_DASM,
   CMD_RUN,
-  CMD_GO,
+  CMD_STEP,
+  CMD_CONTINUE,
   CMD_SET,
   CMD_CLR,
   CMD_SHOW,
- 
   CMD_SETBRK,
   CMD_CLRBRK,
   CMD_BRKSHOW,
-  CMD_BRKOFF,
-  CMD_BRKON,
-
+  CMD_JUMP,
   CMD_QUIT,
-  CMD_EXIT,
 
   REG_PC,
   REG_X,
@@ -1244,7 +1221,6 @@ enum cmd_numbers
   REG_DP,
   REG_A,
   REG_B,
-
   CCR_E,
   CCR_F,
   CCR_H,
@@ -1261,17 +1237,16 @@ command_t cmd_table [] =
   { CMD_DUMP,    "dump"    },
   { CMD_DASM,    "dasm"    },
   { CMD_RUN,     "r"     },
-  { CMD_GO,      "g"      },
-  { CMD_SET,     "s"     },
-  { CMD_CLR,     "c"     },
-  { CMD_SHOW,    "show"    },
+  { CMD_JUMP,    "jump"  },
+  { CMD_SET,     "set" },
+  { CMD_CLR,     "clear" },
+  { CMD_SHOW,    "show"  },
   { CMD_SETBRK,  "b"  },
   { CMD_CLRBRK,  "bc"  },
   { CMD_BRKSHOW, "bl" },
-  { CMD_BRKOFF,  "boff"  },
-  { CMD_BRKON,   "bon"   },
   { CMD_QUIT,    "q"    },
-  { CMD_EXIT,    "g"    },
+  { CMD_CONTINUE,"c"    },
+  { CMD_STEP,    "s"    },
   {-1,   NULL}
 };
 
@@ -1305,8 +1280,6 @@ int get_command (char *str, command_t *table)
   int nro = -1;
 
   if (*str == '\0' || str == NULL) return -1;
-
-  // str_toupper(str);
 
   for (index = 0; table[index].cmd_string != NULL; index++)
   {
@@ -1363,12 +1336,24 @@ void add_breakpoint (int break_pc)
 
   for (tmp = 0; tmp < MAX_BREAKS; tmp++)
   {
-    if (brkpoints[tmp] == break_pc   ) { clear = -1; break; }
-    if (brkpoints[tmp] == CLEAR_BREAK)   clear = tmp; 
+    if (brkpoints[tmp] == break_pc)
+	 	break;
+    else if (brkpoints[tmp] == CLEAR_BREAK)
+	 {
+	 	clear = tmp;
+		break;
+	}
   }
 
-  if (clear == -1) printf("failed to add breakpoint\n");
-  else brkpoints[clear] = break_pc;
+  if (clear == -1) 
+  {
+  	printf("failed to add breakpoint\n");
+	return;
+	}
+  
+	brkpoints[clear] = break_pc;
+	do_break++;
+	printf ("breakpoint %d set at 0x%X\n", clear, break_pc);
 }
 
 void clear_breakpoint (int break_pc)
@@ -1377,7 +1362,11 @@ void clear_breakpoint (int break_pc)
 
   for (tmp = 0; tmp < MAX_BREAKS; tmp++) 
   {
-    if (brkpoints[tmp] == break_pc) brkpoints[tmp] = CLEAR_BREAK;
+    if (brkpoints[tmp] == break_pc) 
+	 {
+	 	brkpoints[tmp] = CLEAR_BREAK;
+		do_break--;
+	}
   }
 }
 
@@ -1486,7 +1475,6 @@ int monitor6809 (void)
     fflush(stdin);
    
     fgets(cmd_str,sizeof(cmd_str),stdin);
-	 // cmd_str[strlen(cmd_str)-1] = '\0';
 
     arg_count = str_scan(cmd_str,arg,5);
 
@@ -1494,6 +1482,10 @@ int monitor6809 (void)
 
     switch (get_command(arg[0],cmd_table))
     {
+	 	case CMD_STEP:
+			inst_count = 1;
+			return 0;
+
       case CMD_HELP:    puts("\n6809 monitor commands:                         ");
                         puts("HELP                  - shows this text          ");
                         puts("DUMP   start end      - dump memory start to end ");
@@ -1529,9 +1521,10 @@ int monitor6809 (void)
                         if (inst_count != 0) return 0;
                         break;
 
-      case CMD_GO:      if (arg_count != 2) break;
-                        set_pc(str_getnumber(arg[1]) & 0xffff);
-                        return 0;
+      case CMD_JUMP:      
+			if (arg_count != 2) break;
+        	set_pc(str_getnumber(arg[1]) & 0xffff);
+         return 0;
 
       case CMD_SET:     if (arg_count == 3)
                         {
@@ -1632,10 +1625,8 @@ int monitor6809 (void)
 
       case CMD_BRKSHOW: show_breakpoints (); continue;
 
-      case CMD_BRKOFF:  puts("break points OFF"); do_break = 0; continue;
-      case CMD_BRKON:   puts("break points ON");  do_break = 1; continue;
       case CMD_QUIT:    cpu_quit = 0; return 1;
-      case CMD_EXIT:    return 0;
+      case CMD_CONTINUE: return 0;
       default:
       case -1:          puts("invalid command"); continue;
     }

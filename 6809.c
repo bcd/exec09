@@ -41,6 +41,9 @@ extern int debug_enabled;
 
 extern int need_flush;
 
+extern int total;
+
+extern int dump_cycles_on_success;
 
 void check_pc (void)
 {
@@ -72,6 +75,10 @@ static void WRMEM (unsigned addr, unsigned data)
 			need_flush = 1;
 			break;
 		case 0xE001:
+			if ((data == 0) && (dump_cycles_on_success))
+			{
+				printf ("Finished in %d cycles\n", total);
+			}
 			exit (data);
 		default:
   			memory[addr] = (UINT8)data;

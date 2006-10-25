@@ -42,74 +42,94 @@ int cycles_per_firq = 0;
 /* Nonzero if GDB debugging support is turned on */
 int debug_enabled = 0;
 
+/* Nonzero if the program wrote to stdout and it needs to be flushed */
 int need_flush = 0;
 
-int max_cycles = 10000000;
+/* When nonzero, causes the program to print the total number of cycles
+on a successful exit. */
+int dump_cycles_on_success = 0;
+
+/* When nonzero, indicates the total number of cycles before an automated
+exit.  This is to help speed through test cases that never finish. */
+int max_cycles = 100000000;
 
 char *exename;
 
 static void usage (void)
 {
-  printf("Usage: %s <options> filename\n",exename);
-  printf("Options are:\n");
-  printf("-hex	- load intel hex file\n");
-  printf("-s19	- load motorola s record file\n");
-  printf("-bin	- load binary file\n");
-  printf("-s addr - specify binary load address hexadecimal (default 0)\n");
-  printf("default format is motorola s record\n");
-
-  if(memory != NULL) free(memory);
+  printf ("Usage: %s <options> filename\n",exename);
+  printf ("Options are:\n");
+  printf ("-hex	- load intel hex file\n");
+  printf ("-s19	- load motorola s record file\n");
+  printf ("-bin	- load binary file\n");
+  printf ("-s addr - specify binary load address hexadecimal (default 0)\n");
+  printf ("default format is motorola s record\n");
   exit (1);
 }
 
 
 int main (int argc, char *argv[])
 {
-  char *name;
+  char *name = NULL;
   int type = S19;
   int off  = 0;
   int i, j, n;
+	int argn = 1;
 
   exename = argv[0];
 
-  if (argc == 1) usage();
- 
-  for (i=1,n=0;i<argc;++i)
-  {
-    if (argv[i][0]!='-')
-    {
-      switch (++n)
-      {
-        case 1:  name=argv[i]; break;
-        default: usage();
-      }
-    }
-    else
-    {
-      for (j=0;Options[j];j++) if (!strcmp(argv[i]+1,Options[j])) break;
-      switch (j)
-      {
-        case 0:  debug_enabled = 1; break;
-        case 1:  type = HEX;  break;
-        case 2:  type = S19;  break;
-        case 3:  type = BIN;  break;
-        case 4:  i++; if (i>argc) usage();
-                 off  = strtoul(argv[i],NULL,16);
-                 type = BIN;
-                 break;
-        case 5:  i++; if (i>argc) usage();
-                 mhz = strtoul(argv[i],NULL,16);
-					  break;
-        case 6:  i++; if (i>argc) usage();
-                 cycles_per_irq = strtoul(argv[i],NULL,16);
-					  break;
-        case 7:  i++; if (i>argc) usage();
-                 cycles_per_firq = strtoul(argv[i],NULL,16);
-					  break;
-        default: usage();
-      }
-    }
-  }
+  if (argc == 1)
+  	usage();
+
+	while (argn < argc)
+	{
+		if (argv[argn][0] == '-')
+		{
+			int argpos = 1;
+next_arg:
+			switch (argv[argn][argpos++])
+			{
+				case 'd':
+					debug_enabled = 1;
+					goto next_arg;
+				case 'h':
+					type = HEX;
+					goto next_arg;
+				case 'b':
+					type = BIN;
+					goto next_arg;
+				case 'M':
+					mhz = strtoul (argv[++argn], NULL, 16);
+					break;
+				case 'o':			
+					off = strtoul (argv[++argn], NULL, 16);
+					type = BIN;
+					break;
+				case 'I':
+					cycles_per_irq = strtoul (argv[++argn], NULL, 16);
+					break;
+				case 'F':
+					cycles_per_firq = strtoul (argv[++argn], NULL, 16);
+					break;
+				case 'C':
+					dump_cycles_on_success = 1;
+					goto next_arg;
+				case '\0':
+					break;
+				default:
+					usage ();
+			}
+		}
+		else if (!name)
+		{
+			name = argv[argn];
+		}
+		else
+		{
+			usage ();
+		}
+		argn++;
+	}
 
   memory = (UINT8 *)malloc(0x10000);
 
@@ -160,8 +180,6 @@ int main (int argc, char *argv[])
   } while (cpu_quit != 0);
 
   printf("m6809-run stopped after %d cycles\n", total);
-
-  free(memory);
 
   return 0;
 }
