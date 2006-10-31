@@ -38,20 +38,24 @@ int cpu_quit = 1;
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
 extern int debug_enabled;
-
 extern int need_flush;
-
 extern int total;
-
 extern int dump_cycles_on_success;
+extern int trace_enabled;
 
-void check_pc (void)
+void change_pc (unsigned newPC)
 {
-  if (PC < 0x8000)
+  /* TODO - will let some RAM execute for trampolines */
+  if ((newPC < 0x1C00) || (newPC > 0xFFFF))
   {
-	  fprintf (stderr, "m6809-run: invalid PC = %04X\n", PC);
+	  fprintf (stderr, "m6809-run: invalid PC = %04X, previous was %04X\n",
+	  	newPC, PC);
 	  exit (2);
   }
+
+  if (trace_enabled)
+		fprintf (stderr, "PC : %04X -> %04X\n", PC, newPC);
+  PC = newPC;
 }
 
 static unsigned imm_byte (void)
@@ -76,9 +80,9 @@ static void WRMEM (unsigned addr, unsigned data)
 			break;
 		case 0xE001:
 			if ((data == 0) && (dump_cycles_on_success))
-			{
 				printf ("Finished in %d cycles\n", total);
-			}
+			else
+				printf ("m6809-run: program exited with %d\n", data);
 			exit (data);
 		default:
   			memory[addr] = (UINT8)data;
@@ -204,7 +208,7 @@ void set_x  (unsigned val) { X = val & 0xffff; }
 void set_y  (unsigned val) { Y = val & 0xffff; }
 void set_s  (unsigned val) { S = val & 0xffff; }
 void set_u  (unsigned val) { U = val & 0xffff; }
-void set_pc (unsigned val) { PC = val & 0xffff; check_pc (); }
+void set_pc (unsigned val) { change_pc (val & 0xffff); }
 void set_d  (unsigned val) { A = (val >> 8) & 0xff; B = val & 0xff; }
 
 /* handle condition code register */
@@ -263,7 +267,7 @@ void set_reg (unsigned nro, unsigned val)
     case  2: Y = val;        break;
     case  3: U = val;        break;
     case  4: S = val;        break;
-    case  5: PC = val; check_pc (); break;
+    case  5: change_pc (val); break;
     case  8: A = val;        break;
     case  9: B = val;        break;
     case 10: set_cc(val);    break;
@@ -733,8 +737,7 @@ void nop (void)
 void jsr (void)
 {
   S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);     
-  PC = ea;
-  check_pc ();
+  change_pc (ea);
 }
 
 void rti (void)
@@ -774,8 +777,7 @@ void irq (void)
   S = (S - 1) & 0xffff; write_stack(S, get_cc());
   EFI |= (I_FLAG|F_FLAG);
 
-  PC = (memory[0xfff8] << 8) | memory[0xfff9];
-  check_pc ();
+  change_pc ((memory[0xfff8] << 8) | memory[0xfff9]);
 }
 
 void swi (void)
@@ -792,8 +794,7 @@ void swi (void)
   S = (S - 1) & 0xffff; write_stack(S, get_cc());
   EFI |= (I_FLAG|F_FLAG);
 
-  PC = (memory[0xfffa] << 8) | memory[0xfffb];
-  check_pc ();
+  change_pc ((memory[0xfffa] << 8) | memory[0xfffb]);
 }
 
 void swi2 (void)
@@ -809,8 +810,7 @@ void swi2 (void)
   S = (S - 1) & 0xffff; write_stack(S, A);
   S = (S - 1) & 0xffff; write_stack(S, get_cc());
 
-  PC = (memory[0xfff4] << 8) | memory[0xfff5];
-  check_pc ();
+  change_pc ((memory[0xfff4] << 8) | memory[0xfff5]);
 }
 
 void swi3 (void)
@@ -826,18 +826,19 @@ void swi3 (void)
   S = (S - 1) & 0xffff; write_stack(S, A);
   S = (S - 1) & 0xffff; write_stack(S, get_cc());
 
-  PC = (memory[0xfff2] << 8) | memory[0xfff3];
-  check_pc ();
+  change_pc ((memory[0xfff2] << 8) | memory[0xfff3]);
 }
 
 void cwai (void)
 {
   puts("CWAI - not suported yet!");
+  exit (100);
 }
 
 void sync (void)
 {
   puts("SYNC - not suported yet!");
+  exit (100);
   cpu_clk -= 4;
 }
 
@@ -913,9 +914,8 @@ void long_bsr (void)
   INT16 tmp = (INT16)imm_word();
   ea = PC + tmp;
   S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);     
-  PC = ea;
   cpu_clk -= 9;
-  check_pc ();
+  change_pc (ea);
 }
 
 void bsr (void)
@@ -923,9 +923,8 @@ void bsr (void)
   INT8 tmp = (INT8)imm_byte();
   ea = PC + tmp;
   S = (S - 2) & 0xffff; write_stack16(S, PC & 0xffff);     
-  PC = ea;
   cpu_clk -= 7;
-  check_pc ();
+  change_pc (ea);
 }
 
 /* execute 6809 code */
@@ -956,7 +955,7 @@ int cpu_execute (int cycles)
       case 0x0a: direct();   cpu_clk -= 4; WRMEM(ea, dec(RDMEM(ea))); break; /* DEC direct */
       case 0x0c: direct();   cpu_clk -= 4; WRMEM(ea, inc(RDMEM(ea))); break; /* INC direct */
       case 0x0d: direct();   cpu_clk -= 4;           tst(RDMEM(ea));  break; /* TST direct */
-      case 0x0e: direct();   cpu_clk -= 3;           PC = ea;         break; /* JMP direct */
+      case 0x0e: direct();   cpu_clk -= 3;           change_pc (ea);  break; /* JMP direct */
       case 0x0f: direct();   cpu_clk -= 4; WRMEM(ea, clr(RDMEM(ea))); break; /* CLR direct */
 
       case 0x10:
@@ -1004,7 +1003,7 @@ int cpu_execute (int cycles)
           case 0xfe:            extended(); cpu_clk -= 6; S = ld16(RDMEM16(ea));                 break;
           case 0xff:            extended(); cpu_clk -= 6; st16(S);                               break;
           default:   
-						printf("%X: invalid opcode $10%02X\n",iPC,opcode); 
+						printf("at %04X, invalid opcode $10%02X\n", iPC, opcode); 
           			if (debug_enabled) { monitor_on = 1; } else { exit (1); }
 						break;
         }           
@@ -1027,7 +1026,7 @@ int cpu_execute (int cycles)
           case 0xb3:            extended(); cpu_clk -= 6; cmp16(U,RDMEM16(ea));       cpu_clk--; break;
           case 0xbc:            extended(); cpu_clk -= 6; cmp16(S,RDMEM16(ea));       cpu_clk--; break;
           default:   
-					printf("%X: invalid opcode $11%02X\n",iPC,opcode);
+					printf("at %X, invalid opcode $11%02X\n", iPC, opcode);
        			if (debug_enabled) { monitor_on = 1; } else { exit (1); }
 					break;
         }
@@ -1111,7 +1110,7 @@ int cpu_execute (int cycles)
       case 0x6a: indexed();                WRMEM(ea, dec(RDMEM(ea))); break; /* DEC indexed */
       case 0x6c: indexed();                WRMEM(ea, inc(RDMEM(ea))); break; /* INC indexed */
       case 0x6d: indexed();                          tst(RDMEM(ea));  break; /* TST indexed */
-      case 0x6e: indexed();  cpu_clk += 1;           PC = ea;         break; /* JMP indexed */
+      case 0x6e: indexed();  cpu_clk += 1;           change_pc (ea);  break; /* JMP indexed */
       case 0x6f: indexed();                WRMEM(ea, clr(RDMEM(ea))); break; /* CLR indexed */
 
       case 0x70: extended(); cpu_clk -= 5; WRMEM(ea, neg(RDMEM(ea))); break; /* NEG extended */
@@ -1124,7 +1123,7 @@ int cpu_execute (int cycles)
       case 0x7a: extended(); cpu_clk -= 5; WRMEM(ea, dec(RDMEM(ea))); break; /* DEC extended */
       case 0x7c: extended(); cpu_clk -= 5; WRMEM(ea, inc(RDMEM(ea))); break; /* INC extended */
       case 0x7d: extended(); cpu_clk -= 5;           tst(RDMEM(ea));  break; /* TST extended */
-      case 0x7e: extended(); cpu_clk -= 4;           PC = ea;         break; /* JMP extended */
+      case 0x7e: extended(); cpu_clk -= 4;           change_pc (ea);  break; /* JMP extended */
       case 0x7f: extended(); cpu_clk -= 5; WRMEM(ea, clr(RDMEM(ea))); break; /* CLR extended */
 
       case 0x80:             cpu_clk -= 2; A = sub(A, imm_byte());    break;
@@ -1258,9 +1257,10 @@ int cpu_execute (int cycles)
       case 0xfe: extended(); cpu_clk -= 5; U = ld16(RDMEM16(ea));     break;
       case 0xff: extended(); cpu_clk -= 5; st16(U);                   break;
 
-	default:   printf("%04X: invalid opcode $%02X\n",iPC,opcode); cpu_clk -= 2; 
-          if (debug_enabled) { monitor_on = 1; } else { exit (1); }
-          break;
+	default:   
+		printf("at %04X, invalid opcode $%02X\n", iPC, opcode); cpu_clk -= 2; 
+      if (debug_enabled) { monitor_on = 1; } else { exit (1); }
+      break;
     }
 
   } while (cpu_clk > 0);
@@ -1274,6 +1274,5 @@ void cpu_reset (void)
   H = N = V = C = 0; Z = 1;
   EFI = F_FLAG|I_FLAG;
 
-  PC = (memory[0xfffe] << 8) | memory[0xffff];
-  check_pc ();
+  change_pc ((memory[0xfffe] << 8) | memory[0xffff]);
 }
