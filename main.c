@@ -42,6 +42,9 @@ int cycles_per_firq = 0;
 /* Nonzero if GDB debugging support is turned on */
 int debug_enabled = 0;
 
+/* Nonzero if tracing is enabled */
+int trace_enabled = 0;
+
 /* Nonzero if the program wrote to stdout and it needs to be flushed */
 int need_flush = 0;
 
@@ -113,6 +116,9 @@ next_arg:
 					break;
 				case 'C':
 					dump_cycles_on_success = 1;
+					goto next_arg;
+				case 'T':
+					trace_enabled = 1;
 					goto next_arg;
 				case '\0':
 					break;
