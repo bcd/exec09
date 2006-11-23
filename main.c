@@ -163,6 +163,9 @@ main (int argc, char *argv[])
     }
 
   monitor_init ();
+  load_map_file (name);
+  TARGET_MACHINE.init ();
+
   cpu_reset ();
   if (debug_enabled)
     gdb_init ();

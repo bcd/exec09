@@ -33,6 +33,7 @@ struct symbol {
 	union {
 		struct named_symbol {
 			char *id;
+			char *file;
 			target_addr_t addr;
 		} named;
 
@@ -48,6 +49,9 @@ struct symbol {
 
 struct symbol_table {
 	struct symbol *addr_to_symbol[0x10000];
+	char *name_area;
+	int name_area_free;
+	char *name_area_next;
 };
 
 
@@ -66,4 +70,13 @@ struct function_call {
 	struct cpu_regs entry_regs;
 	int flags;
 };
+
+void add_named_symbol (const char *id, target_addr_t value, const char *filename);
+struct symbol * find_symbol (target_addr_t value);
+void monitor_branch (void);
+void monitor_call (unsigned int flags);
+void monitor_return (void);
+const char * monitor_addr_name (target_addr_t addr);
+
+
 

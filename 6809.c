@@ -23,7 +23,7 @@
 
 #include "6809.h"
 #include "monitor.h"
-
+#include <stdarg.h>
 
 unsigned X, Y, S, U, PC;
 unsigned A, B, DP;
@@ -50,6 +50,7 @@ int cpu_quit = 1;
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
 extern int dump_cycles_on_success;
+
 extern int trace_enabled;
 
 
@@ -63,6 +64,24 @@ check_pc (void)
     }
 }
 
+
+void
+sim_error (const char *format, ...)
+{
+	va_list ap;
+
+	va_start (ap, format);
+	fprintf (stderr, "m6809-run: ");
+	vfprintf (stderr, format, ap);
+	va_end (ap);
+
+	if (debug_enabled)
+		monitor_on = 1;
+	else
+		exit (2);
+}
+
+
 void
 sim_exit (uint8_t exit_code)
 {
@@ -72,6 +91,7 @@ sim_exit (uint8_t exit_code)
 		printf ("m6809-run: program exited with %d\n", exit_code);
 	exit (exit_code);
 }
+
 
 void change_pc (unsigned newPC)
 {
@@ -1350,7 +1370,7 @@ jsr (void)
   S = (S - 2) & 0xffff;
   write_stack16 (S, PC & 0xffff);
   change_pc (ea);
-  monitor_call ();
+  monitor_call (0);
 }
 
 void
@@ -1594,7 +1614,7 @@ long_bsr (void)
   write_stack16 (S, PC & 0xffff);
   cpu_clk -= 9;
   change_pc (ea);
-  monitor_call ();
+  monitor_call (0);
 }
 
 void
@@ -1606,7 +1626,7 @@ bsr (void)
   write_stack16 (S, PC & 0xffff);
   cpu_clk -= 7;
   change_pc (ea);
-  monitor_call ();
+  monitor_call (0);
 }
 
 /* execute 6809 code */

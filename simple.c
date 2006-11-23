@@ -20,9 +20,11 @@
  */
 
 #include "6809.h"
+#include "monitor.h"
 
 
-int simple_read_byte (target_addr_t addr, uint8_t *val)
+int
+simple_read_byte (target_addr_t addr, uint8_t *val)
 {
 	switch (addr)
 		{
@@ -36,7 +38,8 @@ int simple_read_byte (target_addr_t addr, uint8_t *val)
 }
 
 
-int simple_write_byte (target_addr_t addr, uint8_t val)
+int
+simple_write_byte (target_addr_t addr, uint8_t val)
 {
 	switch (addr)
 		{
@@ -55,8 +58,18 @@ int simple_write_byte (target_addr_t addr, uint8_t val)
 }
 
 
+void
+simple_init (void)
+{
+	add_named_symbol ("REG_OUT", 0xE000, NULL);
+	add_named_symbol ("REG_EXIT", 0xE001, NULL);
+	add_named_symbol ("REG_IN", 0xE002, NULL);
+}
+
+
 struct machine_config simple_machine = {
 	.name = "simple",
+	.init = simple_init,
 	.read_byte = simple_read_byte,
 	.write_byte = simple_write_byte,
 };

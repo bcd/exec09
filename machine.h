@@ -28,6 +28,7 @@
 
 struct machine_config {
 	const char *name;
+	void (*init) (void);
 	int (*read_byte) (target_addr_t addr, uint8_t *val);
 	int (*write_byte) (target_addr_t addr, uint8_t val);
 };

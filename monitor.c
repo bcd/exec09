@@ -48,6 +48,8 @@ int do_break = 0;
 
 int monitor_on = 0;
 
+
+
 enum addr_mode
 {
   _illegal, _implied, _imm_byte, _imm_word, _direct, _extended,
@@ -892,6 +894,66 @@ char *off4[] = {
 #define RDWORD (fetch1=(memory[0xffff & pc++] << 8),fetch1|memory[0xffff & pc++])
 
 
+void
+add_named_symbol (const char *id, target_addr_t value, const char *filename)
+{
+	struct symbol *sym;
+	static char *last_filename = "";
+	
+	symtab.addr_to_symbol[value] = sym = malloc (sizeof (struct symbol));
+	sym->flags = S_NAMED;
+	sym->u.named.id = symtab.name_area_next;
+	sym->u.named.addr = value;
+
+	strcpy (symtab.name_area_next, id);
+	symtab.name_area_next += strlen (symtab.name_area_next) + 1;
+
+	if (!filename)
+		filename = "";
+
+	if (strcmp (filename, last_filename))
+	{
+		last_filename = symtab.name_area_next;
+		strcpy (last_filename, filename);
+		symtab.name_area_next += strlen (symtab.name_area_next) + 1;
+	}
+	sym->u.named.file = last_filename;
+}
+
+
+struct symbol *
+find_symbol (target_addr_t value)
+{
+	struct symbol *sym;
+
+	while (value > 0)
+	{
+		sym = symtab.addr_to_symbol[value];
+		if (sym)
+			break;
+		else
+			value--;
+	}
+	return sym;
+}
+
+
+struct symbol *
+find_symbol_by_name (const char *id)
+{
+	unsigned int addr;
+	struct symbol *sym;
+
+	for (addr = 0; addr < 0x10000; addr++)
+	{
+		sym = symtab.addr_to_symbol[addr];
+		if (sym && !strcmp (sym->u.named.id, id))
+			return sym;
+	}
+	return NULL;
+}
+
+
 /* Disassemble the current instruction.  Returns the number of bytes that 
 compose it. */
 int
@@ -940,10 +1002,10 @@ dasm (char *buf, int opc)
       sprintf (buf, "%s #$%04X", op_str, RDWORD);
       break;
     case _direct:
-      sprintf (buf, "%s <$%02X", op_str, RDBYTE);
+      sprintf (buf, "%s <%s", op_str, monitor_addr_name (RDBYTE));
       break;
     case _extended:
-      sprintf (buf, "%s $%04X", op_str, RDWORD);
+      sprintf (buf, "%s %s", op_str, monitor_addr_name (RDWORD));
       break;
 
     case _indexed:
@@ -1025,7 +1087,7 @@ dasm (char *buf, int opc)
 	  sprintf (buf, "%s [$%04X,PC]", op_str, RDWORD);
 	  break;
 	case 0x1F:
-	  sprintf (buf, "%s [$%04X]", op_str, RDWORD);
+	  sprintf (buf, "%s [%s]", op_str, monitor_addr_name (RDWORD));
 	  break;
 	default:
 	  sprintf (buf, "%s ??", op_str);
@@ -1091,6 +1153,58 @@ sizeof_file (FILE * file)
 
   return size;
 }
+
+
+int
+load_map_file (const char *name)
+{
+	FILE *fp;
+	char map_filename[256];
+	char buf[256];
+	char *value_ptr, *id_ptr;
+	target_addr_t value;
+	char *file_ptr;
+
+	sprintf (map_filename, "%s.map", name);
+
+	fp = fopen (map_filename, "r");
+	if (!fp)
+		return -1;
+
+	for (;;)
+	{
+		fgets (buf, sizeof(buf)-1, fp);
+		if (feof (fp))
+			break;
+
+		value_ptr = buf;
+		if (strncmp (value_ptr, "      ", 6))
+			continue;
+
+		while (*value_ptr == ' ')
+			value_ptr++;
+
+		value = strtoul (value_ptr, &id_ptr, 16);
+		if (id_ptr == value_ptr)
+			continue;
+
+		while (*id_ptr == ' ')
+			id_ptr++;
+
+		id_ptr = strtok (id_ptr, " \t\n");
+		if (((*id_ptr == 'l') || (*id_ptr == 's')) && (id_ptr[1] == '_'))
+			continue;
+		++id_ptr;
+
+		file_ptr = strtok (NULL, " \t\n");
+
+		add_named_symbol (id_ptr, value, file_ptr);
+	}
+
+	fclose (fp);
+	return 0;
+}
+
 
 int
 load_hex (char *name)
@@ -1276,16 +1390,35 @@ monitor_call (unsigned int flags)
 void
 monitor_return (void)
 {
-	while (current_function_call->flags & FC_TAIL_CALL)
+	while ((current_function_call->flags & FC_TAIL_CALL) && 
+		(current_function_call > fctab))
+	{
 		current_function_call--;
-	current_function_call--;
+	}
+
+	if (current_function_call > fctab)
+		current_function_call--;
 }
 
 
-void
-monitor_print_addr (FILE *fp, target_addr_t addr)
+const char *
+monitor_addr_name (target_addr_t addr)
 {
-	fprintf (fp, "%04X", addr);
+	static char addr_name[256];
+	struct symbol *sym;
+
+	sym = find_symbol (addr);
+	if (sym)
+	{
+		if (sym->u.named.addr == addr)
+			return sym->u.named.id;
+		else
+			sprintf (addr_name, "%s+%d", 
+				sym->u.named.id, addr - sym->u.named.addr);
+	}
+	else
+		sprintf (addr_name, "$%04X", addr);
+	return addr_name;
 }
 
 
@@ -1308,6 +1441,10 @@ str_toupper (char *str)
 int
 str_getnumber (char *str)
 {
+	struct symbol *sym = find_symbol_by_name (str);
+	if (sym)
+		return sym->u.named.addr;
+
   return strtoul (str, NULL, 0);
 }
 
@@ -1461,6 +1598,8 @@ monitor_init (void)
 	target_addr_t a;
 	int bp;
 
+	symtab.name_area = symtab.name_area_next = 
+		malloc (symtab.name_area_free = 0x100000);
 	a = 0; 
 	do {
 		symtab.addr_to_symbol[a] = NULL;
@@ -1493,7 +1632,10 @@ check_break (unsigned break_pc)
       for (tmp = 0; tmp < MAX_BREAKPOINTS; tmp++)
 	{
 	if ((bptab[tmp].flags & BP_USED) && (bptab[tmp].addr == temp_pc))
-	    return 1;
+		{
+		printf ("Breakpoint %d at %s reached\n", tmp, monitor_addr_name (temp_pc));
+	    	return 1;
+		}
 	}
     }
 
@@ -1531,7 +1673,7 @@ add_breakpoint (int break_pc)
   bptab[clear].flags = BP_USED;
   bptab[clear].addr = break_pc;
   do_break++;
-  printf ("breakpoint %d set at 0x%X\n", clear, break_pc);
+  printf ("Breakpoint %d set at %s\n", clear, monitor_addr_name (break_pc));
 }
 
 void
@@ -1550,6 +1692,7 @@ clear_breakpoint (int break_pc)
     }
 }
 
+
 void
 show_breakpoints (void)
 {
@@ -1558,7 +1701,7 @@ show_breakpoints (void)
   for (tmp = 0; tmp < MAX_BREAKPOINTS; tmp++)
     {
       if (bptab[tmp].flags & BP_USED) 
-	printf ("%d : %04X\n", tmp, bptab[tmp].addr);
+	printf ("%d : %s\n", tmp, monitor_addr_name (bptab[tmp].addr));
     }
 }
 
@@ -1643,12 +1786,27 @@ cmd_show (void)
 	  (cc & H_FLAG ? '1' : '.'), (cc & I_FLAG ? '1' : '.'));
   printf ("%c%c%c%c\n", (cc & N_FLAG ? '1' : '.'), (cc & Z_FLAG ? '1' : '.'),
 	  (cc & V_FLAG ? '1' : '.'), (cc & C_FLAG ? '1' : '.'));
-  printf ("PC $%04X ", pc);
+  printf ("PC: %s  ", monitor_addr_name (pc));
   printf ("Cycle  %lX   ", total);
   for (offset = 0; offset < moffset; offset++)
     printf ("%02X", memory[0xffff & (offset + pc)]);
   printf ("  NextInst: %s\n", inst);
 }
+
+
+void
+monitor_prompt (void)
+{
+	char inst[50];
+	target_addr_t pc = get_pc ();
+	dasm (inst, pc);
+
+	printf ("      S:%04X U:%04X X:%04X Y:%04X D:%04X\n", 
+		get_s (), get_u (), get_x (), get_y (), get_d ());
+
+	printf ("%30.30s   %s\n", monitor_addr_name (pc), inst);
+}
+
 
 int
 monitor6809 (void)
@@ -1660,13 +1818,13 @@ monitor6809 (void)
   signal (SIGINT, monitor_signal);
   monitor_on = 0;
 
-  cmd_show ();
+  /* cmd_show (); */
+  monitor_prompt ();
 
   for (;;)
     {
 
-      printf ("monitor>");
-
+      printf ("(m6809-run) ");
       fflush (stdout);
       fflush (stdin);
 
@@ -1714,7 +1872,7 @@ monitor6809 (void)
 		{
 			struct function_call *fc = current_function_call;
 			while (fc >= &fctab[0]) {
-				printf ("%04X\n", fc->entry_point);
+				printf ("%s\n", monitor_addr_name (fc->entry_point));
 				fc--;
 			}
 		}
@@ -1895,7 +2053,7 @@ monitor6809 (void)
 	  switch (get_command (arg[1], arg_table))
 	    {
 	    case REG_PC:
-	      printf ("PC: $%04X\n", get_pc ());
+	      printf ("PC: %s\n", monitor_addr_name (get_pc ()));
 	      continue;
 	    case REG_X:
 	      printf ("X:  $%04X\n", get_x ());
