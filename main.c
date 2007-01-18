@@ -82,6 +82,7 @@ main (int argc, char *argv[])
   int off = 0;
   int i, j, n;
   int argn = 1;
+  int load_tmp_map = 0;
 
   exename = argv[0];
 
@@ -121,6 +122,12 @@ main (int argc, char *argv[])
 	    case 'C':
 	      dump_cycles_on_success = 1;
 	      goto next_arg;
+       case 't':
+		   load_tmp_map = 1;
+			break;
+       case 'T':
+		   trace_enabled = 1;
+			goto next_arg;
 	    case '\0':
 	      break;
 	    default:
@@ -163,12 +170,14 @@ main (int argc, char *argv[])
     }
 
   monitor_init ();
-  load_map_file (name);
+  load_map_file (load_tmp_map ? "tmp" : name);
   TARGET_MACHINE.init ();
 
   cpu_reset ();
+#ifdef GDB_SUPPORT
   if (debug_enabled)
     gdb_init ();
+#endif
 
   do
     {
@@ -188,13 +197,15 @@ main (int argc, char *argv[])
 	  need_flush = 0;
 	}
 
+#ifdef GDB_SUPPORT
       if (debug_enabled)
 	gdb_periodic_task ();
+#endif
 
       if ((max_cycles > 0) && (total > max_cycles))
 	{
-	  printf ("m6809-run: maximum cycle count exceeded\n");
-	  exit (100);
+	  sim_error ("maximum cycle count exceeded at %s\n",
+	     monitor_addr_name (get_pc ()));
 	}
 
     }
