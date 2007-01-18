@@ -6,7 +6,7 @@
 
 #define MAX_BREAKPOINTS 16
 
-#define MAX_FUNCTION_CALLS 32
+#define MAX_FUNCTION_CALLS 512
 
 #define BP_FREE 0x0
 #define BP_USED 0x1
