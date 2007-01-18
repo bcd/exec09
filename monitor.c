@@ -1373,12 +1373,6 @@ load_bin (char *name, int addr)
 
 
 void
-monitor_branch (void)
-{
-}
-
-
-void
 monitor_call (unsigned int flags)
 {
 	current_function_call++;
@@ -1413,7 +1407,7 @@ monitor_addr_name (target_addr_t addr)
 		if (sym->u.named.addr == addr)
 			return sym->u.named.id;
 		else
-			sprintf (addr_name, "%s+%d", 
+			sprintf (addr_name, "%s+0x%X", 
 				sym->u.named.id, addr - sym->u.named.addr);
 	}
 	else
@@ -1808,6 +1802,16 @@ monitor_prompt (void)
 }
 
 
+void
+monitor_backtrace (void)
+{
+	struct function_call *fc = current_function_call;
+	while (fc >= &fctab[0]) {
+		printf ("%s\n", monitor_addr_name (fc->entry_point));
+		fc--;
+	}
+}
+
 int
 monitor6809 (void)
 {
@@ -1869,13 +1873,7 @@ monitor6809 (void)
 	  continue;
 
 	case CMD_BACKTRACE:
-		{
-			struct function_call *fc = current_function_call;
-			while (fc >= &fctab[0]) {
-				printf ("%s\n", monitor_addr_name (fc->entry_point));
-				fc--;
-			}
-		}
+		monitor_backtrace ();
 		continue;
 
 	case CMD_DUMP:
