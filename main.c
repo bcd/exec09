@@ -56,7 +56,11 @@ int dump_cycles_on_success = 0;
 
 /* When nonzero, indicates the total number of cycles before an automated
 exit.  This is to help speed through test cases that never finish. */
+#ifdef CONFIG_WPC
+int max_cycles = -1;
+#else
 int max_cycles = 100000000;
+#endif
 
 char *exename;
 
@@ -145,11 +149,13 @@ main (int argc, char *argv[])
       argn++;
     }
 
-  memory = (UINT8 *) malloc (0x10000);
-
+#ifdef CONFIG_WPC
+  memory = (UINT8 *) calloc (0x10000, 1);
+#else
+  memory = (UINT8 *) calloc (0x100000, 1);
+#endif
   if (memory == NULL)
     usage ();
-  memset (memory, 0, 0x10000);
 
   cpu_quit = 1;
 

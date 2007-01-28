@@ -34,13 +34,11 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-LIBOBJDIR =
-bin_PROGRAMS = m6809-run$(EXEEXT)
+bin_PROGRAMS = wpc-run$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
-	$(top_srcdir)/configure COPYING INSTALL depcomp install-sh \
-	missing
+	$(top_srcdir)/configure COPYING depcomp install-sh missing
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
@@ -53,10 +51,10 @@ CONFIG_CLEAN_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am_m6809_run_OBJECTS = 6809.$(OBJEXT) gdb.$(OBJEXT) main.$(OBJEXT) \
-	monitor.$(OBJEXT) simple.$(OBJEXT)
-m6809_run_OBJECTS = $(am_m6809_run_OBJECTS)
-m6809_run_LDADD = $(LDADD)
+am_wpc_run_OBJECTS = 6809.$(OBJEXT) gdb.$(OBJEXT) main.$(OBJEXT) \
+	monitor.$(OBJEXT) simple.$(OBJEXT) wpc.$(OBJEXT)
+wpc_run_OBJECTS = $(am_wpc_run_OBJECTS)
+wpc_run_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -64,8 +62,8 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(m6809_run_SOURCES)
-DIST_SOURCES = $(m6809_run_SOURCES)
+SOURCES = $(wpc_run_SOURCES)
+DIST_SOURCES = $(wpc_run_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -157,8 +155,12 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-INCLUDES = -I.
-m6809_run_SOURCES = 6809.c gdb.c main.c monitor.c simple.c
+
+#INCLUDES = -I.
+#m6809_run_SOURCES = 6809.c gdb.c main.c monitor.c simple.c
+#bin_PROGRAMS = m6809-run
+INCLUDES = -I. -DCONFIG_WPC -g
+wpc_run_SOURCES = 6809.c gdb.c main.c monitor.c simple.c wpc.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -237,9 +239,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-m6809-run$(EXEEXT): $(m6809_run_OBJECTS) $(m6809_run_DEPENDENCIES) 
-	@rm -f m6809-run$(EXEEXT)
-	$(LINK) $(m6809_run_LDFLAGS) $(m6809_run_OBJECTS) $(m6809_run_LDADD) $(LIBS)
+wpc-run$(EXEEXT): $(wpc_run_OBJECTS) $(wpc_run_DEPENDENCIES) 
+	@rm -f wpc-run$(EXEEXT)
+	$(LINK) $(wpc_run_LDFLAGS) $(wpc_run_OBJECTS) $(wpc_run_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -252,6 +254,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/simple.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wpc.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \

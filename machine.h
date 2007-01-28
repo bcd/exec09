@@ -22,6 +22,10 @@
 #ifndef M6809_MACHINE_H
 #define M6809_MACHINE_H
 
+#ifdef CONFIG_WPC
+#define TARGET_MACHINE wpc_machine
+#endif
+
 #ifndef TARGET_MACHINE
 #define TARGET_MACHINE simple_machine
 #endif

@@ -25,6 +25,20 @@
 #include "monitor.h"
 #include <stdarg.h>
 
+#define STACK_MIN 0x1800
+#define STACK_MAX 0x2000
+#define CODE_MIN 0x8000
+#define CODE_MAX 0xDFFF
+#define IO_MIN 0xE000
+#define IO_MAX 0xEFFF
+
+#define ADDR_RANGE_P(a,min,max)   (((a) >= (min)) && ((a) <= (max)))
+#define STACK_ADDR_P(a)           ADDR_RANGE_P (a, STACK_MIN, STACK_MAX)
+#define CODE_ADDR_P(a)            ADDR_RANGE_P (a, CODE_MIN, CODE_MAX)
+#define IO_ADDR_P(a)              ADDR_RANGE_P (a, IO_MIN, IO_MAX)
+
+#define WRITABLE_P(a)             (!CODE_ADDR_P (a))
+
 unsigned X, Y, S, U, PC;
 unsigned A, B, DP;
 unsigned H, N, Z, V, C;
@@ -40,6 +54,13 @@ unsigned E, F, V, MD;
 
 unsigned iPC;
 
+#ifdef CONFIG_WPC
+/** Pointers to each 16KB portion of the 6809 address space,
+ * which may change due to bank registers */
+UINT8 *regions[4] = { NULL, NULL, NULL, NULL };
+#endif
+
+/** A pointer to the flat address space */
 UINT8 *memory = NULL;
 
 unsigned ea = 0;
@@ -54,14 +75,26 @@ extern int dump_cycles_on_success;
 extern int trace_enabled;
 
 
-void
+static inline void
 check_pc (void)
 {
-  if (PC < 0x8000)
+  if (!CODE_ADDR_P (PC) && !STACK_ADDR_P (PC))
     {
       fprintf (stderr, "m6809-run: invalid PC = %04X\n", PC);
       exit (2);
     }
+}
+
+
+static inline void
+check_stack (void)
+{
+	if (!STACK_ADDR_P (S))
+    {
+      fprintf (stderr, "m6809-run: invalid stack pointer = %04X\n", S);
+      exit (2);
+    }
+
 }
 
 
@@ -71,7 +104,7 @@ sim_error (const char *format, ...)
 	va_list ap;
 
 	va_start (ap, format);
-	fprintf (stderr, "m6809-run: ");
+	fprintf (stderr, "m6809-run: (at PC=%04X) ", PC);
 	vfprintf (stderr, format, ap);
 	va_end (ap);
 
@@ -88,48 +121,59 @@ sim_exit (uint8_t exit_code)
 	if (dump_cycles_on_success && !exit_code)
 		printf ("Finished in %d cycles\n", total);
 	else
+	{
 		printf ("m6809-run: program exited with %d\n", exit_code);
+		monitor_backtrace ();
+	}
 	exit (exit_code);
 }
 
 
-void change_pc (unsigned newPC)
+static inline void
+change_pc (unsigned newPC)
 {
   /* TODO - will let some RAM execute for trampolines */
   if ((newPC < 0x1C00) || (newPC > 0xFFFF))
   {
-	  fprintf (stderr, "m6809-run: invalid PC = %04X, previous was %04X\n",
-	  	newPC, PC);
+	  fprintf (stderr, "m6809-run: invalid PC = %04X, previous was %s\n",
+	  	newPC, monitor_addr_name (PC));
 	  exit (2);
   }
 
   if (trace_enabled)
-		fprintf (stderr, "PC : %04X -> %04X\n", PC, newPC);
+  {
+		fprintf (stderr, "PC : %s ", monitor_addr_name (PC));
+		fprintf (stderr, "-> %s\n", monitor_addr_name (newPC));
+	}
   PC = newPC;
 }
 
 
-static unsigned
+static inline unsigned
 imm_byte (void)
 {
-  unsigned val = memory[PC & 0xffff];
+  unsigned val = read8 (PC);
   PC++;
   return val;
 }
 
-static unsigned
+static inline unsigned
 imm_word (void)
 {
-  unsigned val = (memory[PC & 0xffff] << 8) | memory[(PC + 1) & 0xffff];
+  unsigned val = read16 (PC);
   PC += 2;
   return val;
 }
 
-static void
+static inline void
 WRMEM (unsigned addr, unsigned data)
 {
-	if (TARGET_MACHINE.write_byte (addr, data))
-      memory[addr] = (UINT8) data;
+	if (!WRITABLE_P (addr))
+		sim_error ("write to read-only location %04X from %s\n", 
+			addr, monitor_addr_name (PC));
+
+	if (!IO_ADDR_P (addr) || TARGET_MACHINE.write_byte (addr, data))
+      write8 (addr, (UINT8) data);
 }
 
 static void
@@ -140,12 +184,12 @@ WRMEM16 (unsigned addr, unsigned data)
   WRMEM ((addr + 1) & 0xffff, data & 0xff);
 }
 
-static unsigned
+static inline unsigned
 RDMEM (unsigned addr)
 {
 	uint8_t data;
-	if (TARGET_MACHINE.read_byte (addr, &data))
-		data = memory[addr];
+	if (!IO_ADDR_P (addr) || TARGET_MACHINE.read_byte (addr, &data))
+		data = read8 (addr);
 	return data;
 }
 
@@ -177,7 +221,7 @@ read_stack16 (unsigned addr)
 static void
 direct (void)
 {
-  unsigned val = memory[PC & 0xffff] | DP;
+  unsigned val = read8 (PC) | DP;
   PC++;
   ea = val;
 }
@@ -345,7 +389,7 @@ indexed (void)			/* note take 1 extra cycle */
 static void
 extended (void)
 {
-  unsigned val = (memory[PC & 0xffff] << 8) | memory[(PC + 1) & 0xffff];
+  unsigned val = read16 (PC);
   PC += 2;
   ea = val;
 }
@@ -484,6 +528,7 @@ void
 set_s (unsigned val)
 {
   S = val & 0xffff;
+  check_stack ();
 }
 
 void
@@ -700,7 +745,7 @@ set_reg (unsigned nro, unsigned val)
 
 /* 8-Bit Accumulator and Memory Instructions */
 
-unsigned
+static unsigned
 adc (unsigned arg, unsigned val)
 {
   unsigned res = arg + val + (C != 0);
@@ -712,7 +757,7 @@ adc (unsigned arg, unsigned val)
   return res;
 }
 
-unsigned
+static unsigned
 add (unsigned arg, unsigned val)
 {
   unsigned res = arg + val;
@@ -724,7 +769,7 @@ add (unsigned arg, unsigned val)
   return res;
 }
 
-unsigned
+static unsigned
 and (unsigned arg, unsigned val)
 {
   unsigned res = arg & val;
@@ -735,7 +780,7 @@ and (unsigned arg, unsigned val)
   return res;
 }
 
-unsigned
+static unsigned
 asl (unsigned arg)		/* same as lsl */
 {
   unsigned res = arg << 1;
@@ -748,7 +793,7 @@ asl (unsigned arg)		/* same as lsl */
   return res;
 }
 
-unsigned
+static unsigned
 asr (unsigned arg)
 {
   unsigned res = (INT8) arg;
@@ -760,7 +805,7 @@ asr (unsigned arg)
   return res;
 }
 
-void
+static void
 bit (unsigned arg, unsigned val)
 {
   unsigned res = arg & val;
@@ -769,7 +814,7 @@ bit (unsigned arg, unsigned val)
   V = 0;
 }
 
-unsigned
+static unsigned
 clr (unsigned arg)
 {
   C = N = Z = V = arg = 0;
@@ -778,7 +823,7 @@ clr (unsigned arg)
   return arg;
 }
 
-void
+static void
 cmp (unsigned arg, unsigned val)
 {
   unsigned res = arg - val;
@@ -788,7 +833,7 @@ cmp (unsigned arg, unsigned val)
   V = (arg ^ val) & (arg ^ res);
 }
 
-unsigned
+static unsigned
 com (unsigned arg)
 {
   unsigned res = arg ^ 0xff;
@@ -801,7 +846,7 @@ com (unsigned arg)
   return res;
 }
 
-void
+static void
 daa (void)
 {
   unsigned res = A;
@@ -822,7 +867,7 @@ daa (void)
   cpu_clk -= 2;
 }
 
-unsigned
+static unsigned
 dec (unsigned arg)
 {
   unsigned res = (arg - 1) & 0xff;
@@ -845,7 +890,7 @@ eor (unsigned arg, unsigned val)
   return res;
 }
 
-void
+static void
 exg (void)
 {
   unsigned tmp1 = 0xff;
@@ -864,7 +909,7 @@ exg (void)
   cpu_clk -= 8;
 }
 
-unsigned
+static unsigned
 inc (unsigned arg)
 {
   unsigned res = (arg + 1) & 0xff;
@@ -876,7 +921,7 @@ inc (unsigned arg)
   return res;
 }
 
-unsigned
+static unsigned
 ld (unsigned arg)
 {
   unsigned res = arg;
@@ -887,7 +932,7 @@ ld (unsigned arg)
   return res;
 }
 
-unsigned
+static unsigned
 lsr (unsigned arg)
 {
   unsigned res = arg >> 1;
@@ -900,7 +945,7 @@ lsr (unsigned arg)
   return res;
 }
 
-void
+static void
 mul (void)
 {
   unsigned res = (A * B) & 0xffff;
@@ -912,7 +957,7 @@ mul (void)
   cpu_clk -= 11;
 }
 
-unsigned
+static unsigned
 neg (int arg)
 {
   unsigned res = (-arg) & 0xff;
@@ -924,7 +969,7 @@ neg (int arg)
   return res;
 }
 
-unsigned
+static unsigned
 or (unsigned arg, unsigned val)
 {
   unsigned res = arg | val;
@@ -935,7 +980,7 @@ or (unsigned arg, unsigned val)
   return res;
 }
 
-unsigned
+static unsigned
 rol (unsigned arg)
 {
   unsigned res = (arg << 1) + (C != 0);
@@ -948,7 +993,7 @@ rol (unsigned arg)
   return res;
 }
 
-unsigned
+static unsigned
 ror (unsigned arg)
 {
   unsigned res = arg;
@@ -962,7 +1007,7 @@ ror (unsigned arg)
   return res;
 }
 
-unsigned
+static unsigned
 sbc (unsigned arg, unsigned val)
 {
   unsigned res = arg - val - (C != 0);
@@ -974,7 +1019,7 @@ sbc (unsigned arg, unsigned val)
   return res;
 }
 
-void
+static void
 st (unsigned arg)
 {
   unsigned res = arg;
@@ -985,7 +1030,7 @@ st (unsigned arg)
   WRMEM (ea, res);
 }
 
-unsigned
+static unsigned
 sub (unsigned arg, unsigned val)
 {
   unsigned res = arg - val;
@@ -997,7 +1042,7 @@ sub (unsigned arg, unsigned val)
   return res;
 }
 
-void
+static void
 tst (unsigned arg)
 {
   unsigned res = arg;
@@ -1007,7 +1052,7 @@ tst (unsigned arg)
   cpu_clk -= 2;
 }
 
-void
+static void
 tfr (void)
 {
   unsigned tmp1 = 0xff;
@@ -1024,14 +1069,14 @@ tfr (void)
 
 /* 16-Bit Accumulator Instructions */
 
-void
+static void
 abx (void)
 {
   X = (X + B) & 0xffff;
   cpu_clk -= 3;
 }
 
-void
+static void
 addd (unsigned val)
 {
   unsigned arg = (A << 8) | B;
@@ -1044,7 +1089,7 @@ addd (unsigned val)
   B = res & 0xff;
 }
 
-void
+static void
 cmp16 (unsigned arg, unsigned val)
 {
   unsigned res = arg - val;
@@ -1055,7 +1100,7 @@ cmp16 (unsigned arg, unsigned val)
   V = ((arg ^ val) & (arg ^ res)) >> 8;
 }
 
-void
+static void
 ldd (unsigned arg)
 {
   unsigned res = arg;
@@ -1066,7 +1111,7 @@ ldd (unsigned arg)
   V = 0;
 }
 
-unsigned
+static unsigned
 ld16 (unsigned arg)
 {
   unsigned res = arg;
@@ -1078,7 +1123,7 @@ ld16 (unsigned arg)
   return res;
 }
 
-void
+static void
 sex (void)
 {
   unsigned res = B;
@@ -1091,7 +1136,7 @@ sex (void)
   cpu_clk -= 2;
 }
 
-void
+static void
 std (void)
 {
   unsigned res = (A << 8) | B;
@@ -1102,7 +1147,7 @@ std (void)
   WRMEM16 (ea, res);
 }
 
-void
+static void
 st16 (unsigned arg)
 {
   unsigned res = arg;
@@ -1113,7 +1158,7 @@ st16 (unsigned arg)
   WRMEM16 (ea, res);
 }
 
-void
+static void
 subd (unsigned val)
 {
   unsigned arg = (A << 8) | B;
@@ -1128,7 +1173,7 @@ subd (unsigned val)
 
 /* stack instructions */
 
-void
+static void
 pshs (void)
 {
   unsigned post = imm_byte ();
@@ -1185,7 +1230,7 @@ pshs (void)
     }
 }
 
-void
+static void
 pshu (void)
 {
   unsigned post = imm_byte ();
@@ -1242,7 +1287,7 @@ pshu (void)
     }
 }
 
-void
+static void
 puls (void)
 {
   unsigned post = imm_byte ();
@@ -1293,13 +1338,15 @@ puls (void)
     }
   if (post & 0x80)
     {
+      monitor_return ();
       cpu_clk -= 2;
       PC = read_stack16 (S);
+		check_pc ();
       S = (S + 2) & 0xffff;
     }
 }
 
-void
+static void
 pulu (void)
 {
   unsigned post = imm_byte ();
@@ -1350,21 +1397,23 @@ pulu (void)
     }
   if (post & 0x80)
     {
+      monitor_return ();
       cpu_clk -= 2;
       PC = read_stack16 (U);
+		check_pc ();
       U = (U + 2) & 0xffff;
     }
 }
 
 /* Miscellaneous Instructions */
 
-void
+static void
 nop (void)
 {
   cpu_clk -= 2;
 }
 
-void
+static void
 jsr (void)
 {
   S = (S - 2) & 0xffff;
@@ -1373,7 +1422,7 @@ jsr (void)
   monitor_call (0);
 }
 
-void
+static void
 rti (void)
 {
   monitor_return ();
@@ -1398,15 +1447,17 @@ rti (void)
       S = (S + 2) & 0xffff;
     }
   PC = read_stack16 (S);
+  check_pc ();
   S = (S + 2) & 0xffff;
 }
 
-void
+static void
 rts (void)
 {
   monitor_return ();
   cpu_clk -= 5;
   PC = read_stack16 (S);
+  check_pc ();
   S = (S + 2) & 0xffff;
 }
 
@@ -1432,7 +1483,7 @@ irq (void)
   write_stack (S, get_cc ());
   EFI |= (I_FLAG | F_FLAG);
 
-  change_pc ((memory[0xfff8] << 8) | memory[0xfff9]);
+  change_pc (read16 (0xfff8));
 }
 
 void
@@ -1458,7 +1509,7 @@ swi (void)
   write_stack (S, get_cc ());
   EFI |= (I_FLAG | F_FLAG);
 
-  change_pc ((memory[0xfffa] << 8) | memory[0xfffb]);
+  change_pc (read16 (0xfffa));
 }
 
 void
@@ -1483,7 +1534,7 @@ swi2 (void)
   S = (S - 1) & 0xffff;
   write_stack (S, get_cc ());
 
-  change_pc ((memory[0xfff4] << 8) | memory[0xfff5]);
+  change_pc (read16 (0xfff4));
 }
 
 void
@@ -1508,7 +1559,7 @@ swi3 (void)
   S = (S - 1) & 0xffff;
   write_stack (S, get_cc ());
 
-  change_pc ((memory[0xfff2] << 8) | memory[0xfff3]);
+  change_pc (read16 (0xfff2));
 }
 
 void
@@ -1526,7 +1577,7 @@ sync (void)
   cpu_clk -= 4;
 }
 
-void
+static void
 orcc (void)
 {
   unsigned tmp = imm_byte ();
@@ -1535,7 +1586,7 @@ orcc (void)
   cpu_clk -= 3;
 }
 
-void
+static void
 andcc (void)
 {
   unsigned tmp = imm_byte ();
@@ -1561,15 +1612,14 @@ andcc (void)
 #define cond_GT() ((((N^V) & 0x80) == 0) && (Z != 0))
 #define cond_LE() ((((N^V) & 0x80) != 0) || (Z == 0))
 
-void
+static void
 bra (void)
 {
   INT8 tmp = (INT8) imm_byte ();
   PC += tmp;
-	monitor_branch ();
 }
 
-void
+static void
 branch (unsigned cond)
 {
   if (cond)
@@ -1578,18 +1628,16 @@ branch (unsigned cond)
     PC++;
 
   cpu_clk -= 3;
-	monitor_branch ();
 }
 
-void
+static void
 long_bra (void)
 {
   INT16 tmp = (INT16) imm_word ();
   PC += tmp;
-	monitor_branch ();
 }
 
-void
+static void
 long_branch (unsigned cond)
 {
   if (cond)
@@ -1602,10 +1650,9 @@ long_branch (unsigned cond)
       PC += 2;
       cpu_clk -= 5;
     }
-	monitor_branch ();
 }
 
-void
+static void
 long_bsr (void)
 {
   INT16 tmp = (INT16) imm_word ();
@@ -1617,7 +1664,7 @@ long_bsr (void)
   monitor_call (0);
 }
 
-void
+static void
 bsr (void)
 {
   INT8 tmp = (INT8) imm_byte ();
@@ -1719,6 +1766,7 @@ cpu_execute (int cycles)
 	  direct ();
 	  cpu_clk -= 3;
 	  PC = ea;
+     check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP direct */
 	case 0x0f:
@@ -1990,15 +2038,7 @@ cpu_execute (int cycles)
 		st16 (S);
 		break;
 	      default:
-		printf ("%X: invalid opcode $10%02X\n", iPC, opcode);
-		if (debug_enabled)
-		  {
-		    monitor_on = 1;
-		  }
-		else
-		  {
-		    exit (1);
-		  }
+	        sim_error ("invalid opcode at %s\n", monitor_addr_name (iPC));
 		break;
 	      }
 	  }
@@ -2058,15 +2098,7 @@ cpu_execute (int cycles)
 		cpu_clk--;
 		break;
 	      default:
-		printf ("%X: invalid opcode $11%02X\n", iPC, opcode);
-		if (debug_enabled)
-		  {
-		    monitor_on = 1;
-		  }
-		else
-		  {
-		    exit (1);
-		  }
+	        sim_error ("invalid opcode at %s\n", monitor_addr_name (iPC));
 		break;
 	      }
 	  }
@@ -2331,6 +2363,7 @@ cpu_execute (int cycles)
 	  indexed ();
 	  cpu_clk += 1;
 	  PC = ea;
+     check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP indexed */
 	case 0x6f:
@@ -2405,6 +2438,7 @@ cpu_execute (int cycles)
 	  extended ();
 	  cpu_clk -= 4;
 	  PC = ea;
+     check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP extended */
 	case 0x7f:
@@ -2990,16 +3024,8 @@ cpu_execute (int cycles)
 	  break;
 
 	default:
-	  printf ("at %04X, invalid opcode $%02X\n", iPC, opcode);
 	  cpu_clk -= 2;
-	  if (debug_enabled)
-	    {
-	      monitor_on = 1;
-	    }
-	  else
-	    {
-	      exit (1);
-	    }
+          sim_error ("invalid opcode at %s\n", monitor_addr_name (iPC));
 	  break;
 	}
     }
@@ -3019,5 +3045,5 @@ cpu_reset (void)
   MD = E = F = V = 0;
 #endif
 
-  change_pc ((memory[0xfffe] << 8) | memory[0xffff]);
+  change_pc (read16 (0xfffe));
 }

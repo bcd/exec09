@@ -890,9 +890,6 @@ char *off4[] = {
   "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1"
 };
 
-#define RDBYTE (memory[0xffff & pc++])
-#define RDWORD (fetch1=(memory[0xffff & pc++] << 8),fetch1|memory[0xffff & pc++])
-
 
 void
 add_named_symbol (const char *id, target_addr_t value, const char *filename)
@@ -965,17 +962,17 @@ dasm (char *buf, int opc)
   char R;
   int fetch1;			/* the first (MSB) fetched byte, used in macro RDWORD */
 
-  op = RDBYTE;
+  op = fetch8 ();
 
   if (op == 0x10)
     {
-      op = RDBYTE;
+      op = fetch8 ();
       am = codes10[op].mode;
       op = codes10[op].code;
     }
   else if (op == 0x11)
     {
-      op = RDBYTE;
+      op = fetch8 ();
       am = codes11[op].mode;
       op = codes11[op].code;
     }
@@ -996,20 +993,20 @@ dasm (char *buf, int opc)
       sprintf (buf, "%s ", op_str);
       break;
     case _imm_byte:
-      sprintf (buf, "%s #$%02X", op_str, RDBYTE);
+      sprintf (buf, "%s #$%02X", op_str, fetch8 ());
       break;
     case _imm_word:
-      sprintf (buf, "%s #$%04X", op_str, RDWORD);
+      sprintf (buf, "%s #$%04X", op_str, fetch16 ());
       break;
     case _direct:
-      sprintf (buf, "%s <%s", op_str, monitor_addr_name (RDBYTE));
+      sprintf (buf, "%s <%s", op_str, monitor_addr_name (fetch8 ()));
       break;
     case _extended:
-      sprintf (buf, "%s %s", op_str, monitor_addr_name (RDWORD));
+      sprintf (buf, "%s %s", op_str, monitor_addr_name (fetch16 ()));
       break;
 
     case _indexed:
-      op = RDBYTE;
+      op = fetch8 ();
       R = index_reg[(op >> 5) & 0x3];
 
       if ((op & 0x80) == 0)
@@ -1042,19 +1039,19 @@ dasm (char *buf, int opc)
 	  sprintf (buf, "%s A,%c", op_str, R);
 	  break;
 	case 0x08:
-	  sprintf (buf, "%s $%02X,%c", op_str, RDBYTE, R);
+	  sprintf (buf, "%s $%02X,%c", op_str, fetch8 (), R);
 	  break;
 	case 0x09:
-	  sprintf (buf, "%s $%04X,%c", op_str, RDWORD, R);
+	  sprintf (buf, "%s $%04X,%c", op_str, fetch16 (), R);
 	  break;
 	case 0x0B:
 	  sprintf (buf, "%s D,%c", op_str, R);
 	  break;
 	case 0x0C:
-	  sprintf (buf, "%s $%02X,PC", op_str, RDBYTE);
+	  sprintf (buf, "%s $%02X,PC", op_str, fetch8 ());
 	  break;
 	case 0x0D:
-	  sprintf (buf, "%s $%04X,PC", op_str, RDWORD);
+	  sprintf (buf, "%s $%04X,PC", op_str, fetch16 ());
 	  break;
 	case 0x11:
 	  sprintf (buf, "%s [,%c++]", op_str, R);
@@ -1072,22 +1069,22 @@ dasm (char *buf, int opc)
 	  sprintf (buf, "%s [A,%c]", op_str, R);
 	  break;
 	case 0x18:
-	  sprintf (buf, "%s [$%02X,%c]", op_str, RDBYTE, R);
+	  sprintf (buf, "%s [$%02X,%c]", op_str, fetch8 (), R);
 	  break;
 	case 0x19:
-	  sprintf (buf, "%s [$%04X,%c]", op_str, RDWORD, R);
+	  sprintf (buf, "%s [$%04X,%c]", op_str, fetch16 (), R);
 	  break;
 	case 0x1B:
 	  sprintf (buf, "%s [D,%c]", op_str, R);
 	  break;
 	case 0x1C:
-	  sprintf (buf, "%s [$%02X,PC]", op_str, RDBYTE);
+	  sprintf (buf, "%s [$%02X,PC]", op_str, fetch8 ());
 	  break;
 	case 0x1D:
-	  sprintf (buf, "%s [$%04X,PC]", op_str, RDWORD);
+	  sprintf (buf, "%s [$%04X,PC]", op_str, fetch16 ());
 	  break;
 	case 0x1F:
-	  sprintf (buf, "%s [%s]", op_str, monitor_addr_name (RDWORD));
+	  sprintf (buf, "%s [%s]", op_str, monitor_addr_name (fetch16 ()));
 	  break;
 	default:
 	  sprintf (buf, "%s ??", op_str);
@@ -1096,22 +1093,22 @@ dasm (char *buf, int opc)
       break;
 
     case _rel_byte:
-      fetch1 = ((INT8) RDBYTE);
+      fetch1 = ((INT8) fetch8 ());
       sprintf (buf, "%s $%04X", op_str, (fetch1 + pc) & 0xffff);
       break;
 
     case _rel_word:
-      sprintf (buf, "%s $%04X", op_str, (RDWORD + pc) & 0xffff);
+      sprintf (buf, "%s $%04X", op_str, (fetch16 () + pc) & 0xffff);
       break;
 
     case _reg_post:
-      op = RDBYTE;
+      op = fetch8 ();
       sprintf (buf, "%s %s,%s", op_str, reg[op >> 4], reg[op & 15]);
       break;
 
     case _usr_post:
     case _sys_post:
-      op = RDBYTE;
+      op = fetch8 ();
       sprintf (buf, "%s ", op_str);
 
       if (op & 0x80)
@@ -1240,7 +1237,7 @@ load_hex (char *name)
 	  for (; count != 0; count--, addr++, checksum += data)
 	    {
 	      fscanf (fp, "%2x", &data);
-	      memory[addr &= 0xffff] = (UINT8) data;
+	      write8 (addr, (UINT8) data);
 	    }
 
 	  checksum = (-checksum) & 0xff;
@@ -1309,7 +1306,7 @@ load_s19 (char *name)
 	  for (count -= 3; count != 0; count--, addr++, checksum += data)
 	    {
 	      fscanf (fp, "%2x", &data);
-	      memory[addr &= 0xffff] = (UINT8) data;
+	      write8 (addr, (UINT8) data);
 	    }
 
 	  checksum = (~checksum) & 0xff;
@@ -1603,7 +1600,7 @@ monitor_init (void)
 		bptab[bp].flags = BP_FREE;
 	}
 
-	fctab[0].entry_point = (memory[0xfffe] << 8 | memory[0xffff]);
+	fctab[0].entry_point = read16 (0xfffe);
 	memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
 	current_function_call = &fctab[0];
 
@@ -1720,7 +1717,7 @@ cmd_dump (int start, int end)
 
       for (lsize = 0; (addr < (end + 1)) && (lsize < 16); addr++, lsize++)
 	{
-	  int mb = memory[addr];
+	  int mb = read8 (addr);
 	  printf ("%02x ", mb);
 	  abuf[lsize] = isprint (mb) ? mb : '.';
 	}
@@ -1755,7 +1752,7 @@ cmd_dasm (int start, int end)
       printf ("%04x: %-15s ;", addr, buf);
 
       for (; size; size--)
-	printf ("%02x ", memory[0xffff & addr++]);
+	      printf ("%02x ", read8 (addr++));
       printf ("\n");
     }
   while (addr < (end + 1));
@@ -1783,7 +1780,7 @@ cmd_show (void)
   printf ("PC: %s  ", monitor_addr_name (pc));
   printf ("Cycle  %lX   ", total);
   for (offset = 0; offset < moffset; offset++)
-    printf ("%02X", memory[0xffff & (offset + pc)]);
+    printf ("%02X", read8 (offset+pc));
   printf ("  NextInst: %s\n", inst);
 }
 

@@ -67,7 +67,24 @@ extern int debug_enabled;
 extern int need_flush;
 extern int total;
 extern int dump_cycles_on_success;
+
+#ifdef CONFIG_WPC
+extern UINT8 *regions[4];
+#endif
 extern UINT8 *memory;
+
+/* Primitive read/write macros */
+#define read8(addr)        memory[addr]
+#define write8(addr,val)   do { memory[addr] = val; } while (0)
+
+/* 16-bit versions */
+#define read16(addr)       (read8(addr) << 8 | read8(addr+1))
+#define write16(addr,val)  do { write8(addr, val & 0xFF); write8(addr+1, (val >> 8) & 0xFF) } while (0)
+
+/* Fetch macros */
+
+#define fetch8()           read8(pc++)
+#define fetch16()          (pc += 2, read16(pc-2))
 
 /* 6809.c */
 extern int cpu_quit;

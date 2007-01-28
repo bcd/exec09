@@ -37,6 +37,12 @@ AC_CHECK_FUNCS([memset socket strtoul])
 #if test $enable_name = yes; then
 #   AC_DEFINE(CONFIG_NAME, 1, [doc string when enabled])
 #fi
+AC_ARG_ENABLE([wpc],
+   AC_HELP_STRING([--enable-wpc], [Enable WPC address map]),
+   [wpc=$enableval], [wpc=no])
+if test $wpc = yes; then
+   AC_DEFINE(CONFIG_WPC, 1, [Use WPC address map])
+fi
 
 # Template for --with options
 #AC_ARG_WITH([name],
