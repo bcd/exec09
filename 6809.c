@@ -123,7 +123,8 @@ sim_exit (uint8_t exit_code)
 	else
 	{
 		printf ("m6809-run: program exited with %d\n", exit_code);
-		monitor_backtrace ();
+		if (exit_code)
+			monitor_backtrace ();
 	}
 	exit (exit_code);
 }
