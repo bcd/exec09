@@ -43,12 +43,12 @@ simple_write_byte (target_addr_t addr, uint8_t val)
 {
 	switch (addr)
 		{
-		case 0xE000:
+		case 0xFF00:
 			putchar (val);
 			need_flush = 1;
 			return 0;
 
-		case 0xE001:
+		case 0xFF01:
 			sim_exit (val);
 			return 0;
 
@@ -61,9 +61,9 @@ simple_write_byte (target_addr_t addr, uint8_t val)
 void
 simple_init (void)
 {
-	add_named_symbol ("REG_OUT", 0xE000, NULL);
-	add_named_symbol ("REG_EXIT", 0xE001, NULL);
-	add_named_symbol ("REG_IN", 0xE002, NULL);
+	add_named_symbol ("REG_OUT", 0xFF00, NULL);
+	add_named_symbol ("REG_EXIT", 0xFF01, NULL);
+	add_named_symbol ("REG_IN", 0xFF02, NULL);
 }
 
 

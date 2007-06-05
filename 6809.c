@@ -1,6 +1,6 @@
 /*
  * Copyright 2001 by Arto Salmi and Joze Fabcic
- * Copyright 2006 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -28,9 +28,9 @@
 #define STACK_MIN 0x1800
 #define STACK_MAX 0x2000
 #define CODE_MIN 0x8000
-#define CODE_MAX 0xDFFF
-#define IO_MIN 0xE000
-#define IO_MAX 0xEFFF
+#define CODE_MAX 0xFEFF
+#define IO_MIN 0xFF00
+#define IO_MAX 0xFF7F
 
 #define ADDR_RANGE_P(a,min,max)   (((a) >= (min)) && ((a) <= (max)))
 #define STACK_ADDR_P(a)           ADDR_RANGE_P (a, STACK_MIN, STACK_MAX)
