@@ -118,14 +118,19 @@ sim_error (const char *format, ...)
 void
 sim_exit (uint8_t exit_code)
 {
-	if (dump_cycles_on_success && !exit_code)
-		printf ("Finished in %d cycles\n", total);
-	else
+
+	/* On a nonzero exit, always print an error message. */
+	if (exit_code != 0)
 	{
 		printf ("m6809-run: program exited with %d\n", exit_code);
 		if (exit_code)
 			monitor_backtrace ();
 	}
+
+	/* If a cycle count should be printed, do that last. */
+	if (dump_cycles_on_success)
+		printf ("Finished in %d cycles\n", total + cpu_period - cpu_clk);
+
 	exit (exit_code);
 }
 
