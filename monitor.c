@@ -1373,14 +1373,23 @@ void
 monitor_call (unsigned int flags)
 {
 	current_function_call++;
-	current_function_call->entry_point = get_pc ();
-	current_function_call->flags = flags;
+	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1])
+	{
+		current_function_call->entry_point = get_pc ();
+		current_function_call->flags = flags;
+	}
 }
 
 
 void
 monitor_return (void)
 {
+	if (current_function_call > &fctab[MAX_FUNCTION_CALLS-1])
+	{
+		current_function_call--;
+		return;
+	}
+
 	while ((current_function_call->flags & FC_TAIL_CALL) && 
 		(current_function_call > fctab))
 	{

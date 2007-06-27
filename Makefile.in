@@ -34,7 +34,7 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-bin_PROGRAMS = wpc-run$(EXEEXT)
+bin_PROGRAMS = m6809-run$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
 	$(srcdir)/Makefile.in $(srcdir)/config.h.in \
@@ -51,10 +51,10 @@ CONFIG_CLEAN_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
-am_wpc_run_OBJECTS = 6809.$(OBJEXT) gdb.$(OBJEXT) main.$(OBJEXT) \
-	monitor.$(OBJEXT) simple.$(OBJEXT) wpc.$(OBJEXT)
-wpc_run_OBJECTS = $(am_wpc_run_OBJECTS)
-wpc_run_LDADD = $(LDADD)
+am_m6809_run_OBJECTS = 6809.$(OBJEXT) main.$(OBJEXT) monitor.$(OBJEXT) \
+	simple.$(OBJEXT)
+m6809_run_OBJECTS = $(am_m6809_run_OBJECTS)
+m6809_run_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -62,8 +62,8 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
-SOURCES = $(wpc_run_SOURCES)
-DIST_SOURCES = $(wpc_run_SOURCES)
+SOURCES = $(m6809_run_SOURCES)
+DIST_SOURCES = $(m6809_run_SOURCES)
 ETAGS = etags
 CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -157,10 +157,7 @@ sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 
 #INCLUDES = -I.
-#m6809_run_SOURCES = 6809.c gdb.c main.c monitor.c simple.c
-#bin_PROGRAMS = m6809-run
-INCLUDES = -I. -DCONFIG_WPC -g
-wpc_run_SOURCES = 6809.c gdb.c main.c monitor.c simple.c wpc.c
+m6809_run_SOURCES = 6809.c main.c monitor.c simple.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -239,9 +236,9 @@ uninstall-binPROGRAMS:
 
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
-wpc-run$(EXEEXT): $(wpc_run_OBJECTS) $(wpc_run_DEPENDENCIES) 
-	@rm -f wpc-run$(EXEEXT)
-	$(LINK) $(wpc_run_LDFLAGS) $(wpc_run_OBJECTS) $(wpc_run_LDADD) $(LIBS)
+m6809-run$(EXEEXT): $(m6809_run_OBJECTS) $(m6809_run_DEPENDENCIES) 
+	@rm -f m6809-run$(EXEEXT)
+	$(LINK) $(m6809_run_LDFLAGS) $(m6809_run_OBJECTS) $(m6809_run_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -250,11 +247,9 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/6809.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gdb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/simple.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wpc.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \
@@ -542,6 +537,9 @@ uninstall-am: uninstall-binPROGRAMS uninstall-info-am
 	tags uninstall uninstall-am uninstall-binPROGRAMS \
 	uninstall-info-am
 
+#INCLUDES = -I. -DCONFIG_WPC -g
+#wpc_run_SOURCES = 6809.c main.c monitor.c simple.c wpc.c
+#bin_PROGRAMS = wpc-run
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.
 .NOEXPORT:

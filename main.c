@@ -25,12 +25,11 @@
 enum
 { HEX, S19, BIN };
 
-static char *Options[] = {
-  "d", "hex", "s19", "bin", "s", "mhz", "irq", "firq", NULL
-};
 
+/* The total number of cycles that have executed */
 int total = 0;
 
+/* The frequency of the emulated CPU, in megahertz */
 int mhz = 1;
 
 /* When nonzero, indicates that the IRQ should be triggered periodically,
@@ -41,7 +40,7 @@ int cycles_per_irq = 0;
 every so many cycles.  By default no periodic FIRQ is generated. */
 int cycles_per_firq = 0;
 
-/* Nonzero if GDB debugging support is turned on */
+/* Nonzero if debugging support is turned on */
 int debug_enabled = 0;
 
 /* Nonzero if tracing is enabled */
@@ -132,6 +131,9 @@ main (int argc, char *argv[])
        case 'T':
 		   trace_enabled = 1;
 			goto next_arg;
+       case 'm':
+		   max_cycles = strtoul (argv[++argn], NULL, 16);
+			break;
 	    case '\0':
 	      break;
 	    default:
@@ -180,11 +182,6 @@ main (int argc, char *argv[])
   TARGET_MACHINE.init ();
 
   cpu_reset ();
-#ifdef GDB_SUPPORT
-  if (debug_enabled)
-    gdb_init ();
-#endif
-
   do
     {
       if (cycles_per_irq != 0)
@@ -203,12 +200,7 @@ main (int argc, char *argv[])
 	  need_flush = 0;
 	}
 
-#ifdef GDB_SUPPORT
-      if (debug_enabled)
-	gdb_periodic_task ();
-#endif
-
-      if ((max_cycles > 0) && (total > max_cycles))
+	if ((max_cycles > 0) && (total > max_cycles))
 	{
 	  sim_error ("maximum cycle count exceeded at %s\n",
 	     monitor_addr_name (get_pc ()));

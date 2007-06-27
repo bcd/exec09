@@ -64,7 +64,6 @@ struct breakpoint {
 
 #define FC_TAIL_CALL 0x1
 
-
 struct function_call {
 	target_addr_t entry_point;
 	struct cpu_regs entry_regs;
