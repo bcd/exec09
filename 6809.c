@@ -25,6 +25,7 @@
 #include "monitor.h"
 #include <stdarg.h>
 
+/* TODO - all of these are properties of the machine */
 #define STACK_MIN 0x1800
 #define STACK_MAX 0x2000
 #define CODE_MIN 0x8000
@@ -171,6 +172,8 @@ imm_word (void)
   return val;
 }
 
+#define WRMEM(addr, data) TARGET_WRITE (addr, data)
+#if 0
 static inline void
 WRMEM (unsigned addr, unsigned data)
 {
@@ -181,6 +184,7 @@ WRMEM (unsigned addr, unsigned data)
 	if (!IO_ADDR_P (addr) || TARGET_MACHINE.write_byte (addr, data))
       write8 (addr, (UINT8) data);
 }
+#endif
 
 static void
 WRMEM16 (unsigned addr, unsigned data)
@@ -190,6 +194,8 @@ WRMEM16 (unsigned addr, unsigned data)
   WRMEM ((addr + 1) & 0xffff, data & 0xff);
 }
 
+#define RDMEM(addr) TARGET_READ (addr)
+#if 0
 static inline unsigned
 RDMEM (unsigned addr)
 {
@@ -198,6 +204,7 @@ RDMEM (unsigned addr)
 		data = read8 (addr);
 	return data;
 }
+#endif
 
 static unsigned
 RDMEM16 (unsigned addr)
@@ -1622,7 +1629,7 @@ static void
 bra (void)
 {
   INT8 tmp = (INT8) imm_byte ();
-  PC += tmp;
+  change_pc (PC + tmp);
 }
 
 static void
@@ -1631,7 +1638,7 @@ branch (unsigned cond)
   if (cond)
     bra ();
   else
-    PC++;
+    change_pc (PC+1);
 
   cpu_clk -= 3;
 }
@@ -1640,7 +1647,7 @@ static void
 long_bra (void)
 {
   INT16 tmp = (INT16) imm_word ();
-  PC += tmp;
+  change_pc (PC + tmp);
 }
 
 static void
@@ -1653,7 +1660,7 @@ long_branch (unsigned cond)
     }
   else
     {
-      PC += 2;
+      change_pc (PC + 2);
       cpu_clk -= 5;
     }
 }

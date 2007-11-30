@@ -1,6 +1,6 @@
 /*
  * Copyright 2001 by Arto Salmi and Joze Fabcic
- * Copyright 2006 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -45,9 +45,6 @@ int debug_enabled = 0;
 
 /* Nonzero if tracing is enabled */
 int trace_enabled = 0;
-
-/* Nonzero if the program wrote to stdout and it needs to be flushed */
-int need_flush = 0;
 
 /* When nonzero, causes the program to print the total number of cycles
 on a successful exit. */
@@ -151,15 +148,14 @@ main (int argc, char *argv[])
       argn++;
     }
 
+	/* Allocate memory for the processor memory map. */
 #ifdef CONFIG_WPC
-  memory = (UINT8 *) calloc (0x10000, 1);
-#else
   memory = (UINT8 *) calloc (0x100000, 1);
+#else
+  memory = (UINT8 *) calloc (0x10000, 1);
 #endif
   if (memory == NULL)
     usage ();
-
-  cpu_quit = 1;
 
   switch (type)
     {
@@ -177,39 +173,38 @@ main (int argc, char *argv[])
       break;
     }
 
-  monitor_init ();
-  load_map_file (load_tmp_map ? "tmp" : name);
-  TARGET_MACHINE.init ();
+	/* Initialize all of the simulator pieces. */
+	monitor_init ();
+	load_map_file (load_tmp_map ? "tmp" : name);
+	TARGET_INIT ();
 
-  cpu_reset ();
-  do
-    {
-      if (cycles_per_irq != 0)
+	/* OK, ready to run.  Reset the CPU first. */
+	cpu_reset ();
+
+	/* Now, iterate through the instructions.
+	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()
+	 * and let it run for a long time; otherwise, we need to come back
+	 * here periodically and do the interrupt handling. */
+	for (cpu_quit = 1; cpu_quit != 0;)
 	{
-	  total += cpu_execute (cycles_per_irq);
-	  irq ();
+   	if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
+		{
+			total += cpu_execute (max_cycles ? max_cycles-1 : 500000);
+		}
+		else
+		{
+			/* TODO - FIRQ not handled yet */
+			total += cpu_execute (cycles_per_irq);
+			irq ();
+		}
+
+		/* Check for a rogue program that won't end */
+		if ((max_cycles > 0) && (total > max_cycles))
+		{
+			sim_error ("maximum cycle count exceeded at %s\n",
+				monitor_addr_name (get_pc ()));
+		}
 	}
-      else
-	{
-	  total += cpu_execute (10000);
-	}
-
-      if (need_flush)
-	{
-	  fflush (stdout);
-	  need_flush = 0;
-	}
-
-	if ((max_cycles > 0) && (total > max_cycles))
-	{
-	  sim_error ("maximum cycle count exceeded at %s\n",
-	     monitor_addr_name (get_pc ()));
-	}
-
-    }
-  while (cpu_quit != 0);
-
-  printf ("m6809-run stopped after %d cycles\n", total);
-
-  return 0;
+	printf ("m6809-run stopped after %d cycles\n", total);
+	return 0;
 }

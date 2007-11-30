@@ -921,7 +921,7 @@ add_named_symbol (const char *id, target_addr_t value, const char *filename)
 struct symbol *
 find_symbol (target_addr_t value)
 {
-	struct symbol *sym;
+	struct symbol *sym = NULL;
 
 	while (value > 0)
 	{
@@ -1372,9 +1372,9 @@ load_bin (char *name, int addr)
 void
 monitor_call (unsigned int flags)
 {
-	current_function_call++;
 	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1])
 	{
+		current_function_call++;
 		current_function_call->entry_point = get_pc ();
 		current_function_call->flags = flags;
 	}

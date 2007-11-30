@@ -1,5 +1,5 @@
 /*
- * Copyright 2006 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -22,22 +22,19 @@
 #ifndef M6809_MACHINE_H
 #define M6809_MACHINE_H
 
+/* Define TARGET_MACHINE to the correct machine_config structure */
 #ifdef CONFIG_WPC
-#define TARGET_MACHINE wpc_machine
+#define TARGET_MACHINE_NAME "WPC"
+#define TARGET_INIT wpc_init
+#define TARGET_READ wpc_read
+#define TARGET_WRITE wpc_write
 #endif
 
 #ifndef TARGET_MACHINE
-#define TARGET_MACHINE simple_machine
+#define TARGET_MACHINE_NAME "SIMPLE"
+#define TARGET_INIT simple_init
+#define TARGET_READ simple_read
+#define TARGET_WRITE simple_write
 #endif
-
-struct machine_config {
-	const char *name;
-	void (*init) (void);
-	int (*read_byte) (target_addr_t addr, uint8_t *val);
-	int (*write_byte) (target_addr_t addr, uint8_t val);
-};
-
-
-extern struct machine_config TARGET_MACHINE;
 
 #endif /* M6809_MACHINE_H */

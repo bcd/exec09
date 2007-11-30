@@ -1,5 +1,4 @@
 /*
- * Copyright 2001 by Arto Salmi and Joze Fabcic
  * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
@@ -104,35 +103,27 @@
 #define WPC_ZEROCROSS_IRQ_CLEAR 		0x3FFF
 
 
-int wpc_read_byte (target_addr_t addr, uint8_t *val)
+uint8_t wpc_read (target_addr_t addr)
 {
 	switch (addr)
 		{
 		default:
-			return -1;
+			return read8 (addr);
 		}
 }
 
 
-int wpc_write_byte (target_addr_t addr, uint8_t val)
+void wpc_write (target_addr_t addr, uint8_t val)
 {
 	switch (addr)
 		{
 		default:
-			return -1;
+			write8 (addr, val);
 		}
 }
+
 
 void wpc_init (void)
 {
 }
-
-
-struct machine_config wpc_machine = {
-	.name = "WPC",
-	.read_byte = wpc_read_byte,
-	.write_byte = wpc_write_byte,
-	.init = wpc_init,
-};
-
 
