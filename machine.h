@@ -22,6 +22,79 @@
 #ifndef M6809_MACHINE_H
 #define M6809_MACHINE_H
 
+typedef unsigned char U8;
+typedef unsigned short U16;
+
+#define MAX_CPU_ADDR 65536
+
+/* The generic bus architecture. */
+
+/* Up to 32 devices may be connected.  Each device is addressed by a 32-bit physical address */
+#define MAX_BUS_DEVICES 32
+
+/* A bus map says how to convert a CPU address into a bus address.
+A single bus map defines 128 bytes of address space; for a 64KB CPU,
+that requires a total of 512 such structures. */
+#define BUS_MAP_SIZE 128
+
+struct bus_map
+{
+	unsigned int devid; /* The devid mapped here */
+	unsigned long offset; /* The offset within the device */
+};
+
+#define NUM_BUS_MAPS (MAX_CPU_ADDR / BUS_MAP_SIZE)
+
+
+/* A hardware device structure exists for each physical device
+in the machine */
+
+struct hw_device;
+
+struct hw_class
+{
+	void (*reset) (struct hw_device *dev);
+	U8 (*read) (struct hw_device *dev, unsigned long phy_addr);
+	void (*write) (struct hw_device *dev, unsigned long phy_addr, U8 val);
+};
+
+struct hw_device
+{
+	struct hw_class *class_ptr;
+	unsigned int devid;
+	unsigned long size;
+	void *priv;
+};
+
+/* Predefine address regions, needed at boot time */
+
+/* I/O regions (1KB) */
+#define BOOT_IO_ADDR 0xE000
+#define DEVICE_BASE(n)  (BOOT_IO_ADDR + (BUS_MAP_SIZE * (n)))
+
+	#define MMU_DEVID      0
+	#define MMU_ADDR       DEVICE_BASE(MMU_DEVID)
+		#define MMU_DEV(p)      (MMU_ADDR + (p * 8) + 0)
+		#define MMU_OFF(p)      (MMU_ADDR + (p * 8) + 1)
+		#define MMU_FLG(p)      (MMU_ADDR + (p * 8) + 2)
+
+	#define POWERMGR_DEVID 1
+	#define POWERMGR_ADDR  DEVICE_BASE(POWERMGR_DEVID)
+		#define POWER_CTRL      (POWERMGR_ADDR + 0)
+
+	#define CONSOLE_DEVID 2
+	#define CONSOLE_ADDR   DEVICE_BASE(CONSOLE_DEVID)
+		#define CONSOLE_OUT    (CONSOLE_ADDR + 0)
+		#define LEGACY_EXIT    (CONSOLE_ADDR + 1)
+		#define CONSOLE_IN     (CONSOLE_ADDR + 2)
+
+	#define DISPLAY_ADDR   DEVICE_BASE(3)
+
+	#define DISK_ADDR(n)   DEVICE_BASE(4 + (n))
+
+/* Boot ROM region (7KB) */
+#define BOOT_ROM_ADDR 0xE400
+
 /* Define TARGET_MACHINE to the correct machine_config structure */
 #ifdef CONFIG_WPC
 #define TARGET_MACHINE_NAME "WPC"

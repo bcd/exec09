@@ -61,8 +61,10 @@ unsigned iPC;
 UINT8 *regions[4] = { NULL, NULL, NULL, NULL };
 #endif
 
+#ifdef OLDSYS
 /** A pointer to the flat address space */
 UINT8 *memory = NULL;
+#endif
 
 unsigned ea = 0;
 int cpu_clk = 0;

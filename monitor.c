@@ -1347,6 +1347,7 @@ load_s19 (char *name)
   return 0;
 }
 
+#ifdef OLDSYS
 int
 load_bin (char *name, int addr)
 {
@@ -1375,6 +1376,7 @@ load_bin (char *name, int addr)
   fclose (fp);
   return 0;
 }
+#endif
 
 
 void

@@ -57,6 +57,7 @@ static_inline int console_read_ready (void)
 	return 0;
 }
 
+#ifdef OLDSYS
 static_inline uint8_t console_read (void)
 {
 	return getchar ();
@@ -67,6 +68,7 @@ static_inline void console_write (uint8_t val)
 	putchar (val);
 	fflush (stdout);
 }
+#endif
 
 /**************** Virtual disk driver ***************************/
 
@@ -164,7 +166,9 @@ uint8_t simple_read (target_addr_t addr)
 {
 	switch (addr)
 	{
+#ifdef OLDSYS
 		case SIMPLE_CONSOLE_READ: return console_read ();
+#endif
 		default: 
 			if (vdisk_addr_match (0, addr)) return vdisk_read (0, addr);
 			else if (vdisk_addr_match (1, addr)) return vdisk_read (1, addr);
@@ -180,7 +184,9 @@ simple_write (target_addr_t addr, uint8_t val)
 {
 	switch (addr)
 	{
+#ifdef OLDSYS
 		case SIMPLE_CONSOLE_WRITE: console_write (val); break;
+#endif
 		case SIMPLE_SYSTEM_EXIT: sim_exit (val); break;
 		case VDISK_ADDR0: vdisk_map_high (0, val); break;
 		case VDISK_ADDR0+1: vdisk_map_low (0, val); break;

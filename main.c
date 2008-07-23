@@ -148,6 +148,7 @@ main (int argc, char *argv[])
       argn++;
     }
 
+#ifdef OLDSYS
 	/* Allocate memory for the processor memory map. */
 #ifdef CONFIG_WPC
   memory = (UINT8 *) calloc (0x100000, 1);
@@ -156,6 +157,8 @@ main (int argc, char *argv[])
 #endif
   if (memory == NULL)
     usage ();
+#endif
+
 
   switch (type)
     {
@@ -164,19 +167,29 @@ main (int argc, char *argv[])
 	usage ();
       break;
     case S19:
+#ifndef OLDSYS
+		machine_init (NULL);
+#endif
       if (load_s19 (name))
-	usage ();
+			usage ();
       break;
     case BIN:
+#ifdef OLDSYS
       if (load_bin (name, off & 0xffff))
-	usage ();
+			usage ();
+#else
+		machine_init (name);
+#endif
       break;
     }
+
 
 	/* Initialize all of the simulator pieces. */
 	monitor_init ();
 	load_map_file (load_tmp_map ? "tmp" : name);
+#ifdef OLDSYS
 	TARGET_INIT ();
+#endif
 
 	/* OK, ready to run.  Reset the CPU first. */
 	cpu_reset ();
