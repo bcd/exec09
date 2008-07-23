@@ -20,7 +20,7 @@
 struct cpu_regs {
 	unsigned X, Y, S, U, PC;
 	unsigned A, B, DP;
-	unsigned H, N, Z, V, C;
+	unsigned H, N, Z, OV, C;
 	unsigned EFI;
 #ifdef H6309
 	unsigned E, F, V, MD;
