@@ -155,8 +155,6 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-
-#INCLUDES = -I.
 m6809_run_SOURCES = 6809.c main.c monitor.c simple.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -537,7 +535,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-info-am
 	tags uninstall uninstall-am uninstall-binPROGRAMS \
 	uninstall-info-am
 
-#INCLUDES = -I. -DCONFIG_WPC -g
+#INCLUDES = -DCONFIG_WPC -g
 #wpc_run_SOURCES = 6809.c main.c monitor.c simple.c wpc.c
 #bin_PROGRAMS = wpc-run
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
