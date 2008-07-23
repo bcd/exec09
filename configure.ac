@@ -44,6 +44,14 @@ if test $wpc = yes; then
    AC_DEFINE(CONFIG_WPC, 1, [Use WPC address map])
 fi
 
+AC_ARG_ENABLE([6309],
+   AC_HELP_STRING([--enable-6309], [Enable 6309 extensions]),
+   [h6309=$enableval], [h6309=no])
+if test $h6309 = yes; then
+   AC_DEFINE(H6309, 1, [Use 6309 extensions])
+fi
+
+
 # Template for --with options
 #AC_ARG_WITH([name],
 #   AC_HELP_STRING([--with-name=<parameter-name>], [doc string]),
