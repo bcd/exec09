@@ -3,6 +3,9 @@
 /* Use WPC address map */
 #undef CONFIG_WPC
 
+/* Use 6309 instructions */
+#undef H6309
+
 /* Define to 1 if you have the <fcntl.h> header file. */
 #undef HAVE_FCNTL_H
 

@@ -22,7 +22,19 @@
 #include <sys/select.h>
 #include "6809.h"
 #include "monitor.h"
+#if 0
 #include "simple-mmap.h"
+#else
+#define SIMPLE_CONSOLE_WRITE 0xff00
+#define SIMPLE_SYSTEM_EXIT 0xff01
+#define SIMPLE_CONSOLE_READ 0xff02
+#define VDISK_ADDR0 0xe010
+#define VDISK_ADDR1 0xe012
+#define VDISK_ADDR2 0xe014
+#define VDISK_NUM_REGIONS 8
+#define VDISK_REGION_SIZE 0x100
+#define VDISK_REGION0 0xe800
+#endif
 
 // #define static_inline static inline
 #define static_inline
@@ -45,6 +57,7 @@ static_inline int console_read_ready (void)
 	return 0;
 }
 
+#ifdef OLDSYS
 static_inline uint8_t console_read (void)
 {
 	return getchar ();
@@ -55,6 +68,7 @@ static_inline void console_write (uint8_t val)
 	putchar (val);
 	fflush (stdout);
 }
+#endif
 
 /**************** Virtual disk driver ***************************/
 
@@ -152,7 +166,9 @@ uint8_t simple_read (target_addr_t addr)
 {
 	switch (addr)
 	{
+#ifdef OLDSYS
 		case SIMPLE_CONSOLE_READ: return console_read ();
+#endif
 		default: 
 			if (vdisk_addr_match (0, addr)) return vdisk_read (0, addr);
 			else if (vdisk_addr_match (1, addr)) return vdisk_read (1, addr);
@@ -168,7 +184,9 @@ simple_write (target_addr_t addr, uint8_t val)
 {
 	switch (addr)
 	{
+#ifdef OLDSYS
 		case SIMPLE_CONSOLE_WRITE: console_write (val); break;
+#endif
 		case SIMPLE_SYSTEM_EXIT: sim_exit (val); break;
 		case VDISK_ADDR0: vdisk_map_high (0, val); break;
 		case VDISK_ADDR0+1: vdisk_map_low (0, val); break;

@@ -42,7 +42,7 @@
 
 unsigned X, Y, S, U, PC;
 unsigned A, B, DP;
-unsigned H, N, Z, V, C;
+unsigned H, N, Z, OV, C;
 unsigned EFI;
 
 #ifdef H6309
@@ -62,8 +62,10 @@ unsigned iPC;
 UINT8 *regions[4] = { NULL, NULL, NULL, NULL };
 #endif
 
+#ifdef OLDSYS
 /** A pointer to the flat address space */
 UINT8 *memory = NULL;
+#endif
 
 unsigned ea = 0;
 int cpu_clk = 0;
@@ -623,7 +625,7 @@ get_cc (void)
     res |= N_FLAG;
   if (Z == 0)
     res |= Z_FLAG;
-  if (V & 0x80)
+  if (OV & 0x80)
     res |= V_FLAG;
   if (C != 0)
     res |= C_FLAG;
@@ -638,7 +640,7 @@ set_cc (unsigned arg)
   H = (arg & H_FLAG ? 0x10 : 0);
   N = (arg & N_FLAG ? 0x80 : 0);
   Z = (~arg) & Z_FLAG;
-  V = (arg & V_FLAG ? 0x80 : 0);
+  OV = (arg & V_FLAG ? 0x80 : 0);
   C = arg & C_FLAG;
 }
 
@@ -766,7 +768,7 @@ adc (unsigned arg, unsigned val)
 
   C = (res >> 1) & 0x80;
   N = Z = res &= 0xff;
-  V = H = arg ^ val ^ res ^ C;
+  OV = H = arg ^ val ^ res ^ C;
 
   return res;
 }
@@ -778,7 +780,7 @@ add (unsigned arg, unsigned val)
 
   C = (res >> 1) & 0x80;
   N = Z = res &= 0xff;
-  V = H = arg ^ val ^ res ^ C;
+  OV = H = arg ^ val ^ res ^ C;
 
   return res;
 }
@@ -789,7 +791,7 @@ and (unsigned arg, unsigned val)
   unsigned res = arg & val;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
 
   return res;
 }
@@ -801,7 +803,7 @@ asl (unsigned arg)		/* same as lsl */
 
   C = res & 0x100;
   N = Z = res &= 0xff;
-  V = arg ^ res;
+  OV = arg ^ res;
   cpu_clk -= 2;
 
   return res;
@@ -825,13 +827,13 @@ bit (unsigned arg, unsigned val)
   unsigned res = arg & val;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
 }
 
 static unsigned
 clr (unsigned arg)
 {
-  C = N = Z = V = arg = 0;
+  C = N = Z = OV = arg = 0;
   cpu_clk -= 2;
 
   return arg;
@@ -844,7 +846,7 @@ cmp (unsigned arg, unsigned val)
 
   C = res & 0x100;
   N = Z = res &= 0xff;
-  V = (arg ^ val) & (arg ^ res);
+  OV = (arg ^ val) & (arg ^ res);
 }
 
 static unsigned
@@ -853,7 +855,7 @@ com (unsigned arg)
   unsigned res = arg ^ 0xff;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
   C = 1;
   cpu_clk -= 2;
 
@@ -876,7 +878,7 @@ daa (void)
 
   C |= (res & 0x100);
   A = N = Z = res &= 0xff;
-  V = 0;			/* fix this */
+  OV = 0;			/* fix this */
 
   cpu_clk -= 2;
 }
@@ -887,7 +889,7 @@ dec (unsigned arg)
   unsigned res = (arg - 1) & 0xff;
 
   N = Z = res;
-  V = arg & ~res;
+  OV = arg & ~res;
   cpu_clk -= 2;
 
   return res;
@@ -899,7 +901,7 @@ eor (unsigned arg, unsigned val)
   unsigned res = arg ^ val;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
 
   return res;
 }
@@ -929,7 +931,7 @@ inc (unsigned arg)
   unsigned res = (arg + 1) & 0xff;
 
   N = Z = res;
-  V = ~arg & res;
+  OV = ~arg & res;
   cpu_clk -= 2;
 
   return res;
@@ -941,7 +943,7 @@ ld (unsigned arg)
   unsigned res = arg;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
 
   return res;
 }
@@ -977,7 +979,7 @@ neg (int arg)
   unsigned res = (-arg) & 0xff;
 
   C = N = Z = res;
-  V = res & arg;
+  OV = res & arg;
   cpu_clk -= 2;
 
   return res;
@@ -989,7 +991,7 @@ or (unsigned arg, unsigned val)
   unsigned res = arg | val;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
 
   return res;
 }
@@ -1001,7 +1003,7 @@ rol (unsigned arg)
 
   C = res & 0x100;
   N = Z = res &= 0xff;
-  V = arg ^ res;
+  OV = arg ^ res;
   cpu_clk -= 2;
 
   return res;
@@ -1028,7 +1030,7 @@ sbc (unsigned arg, unsigned val)
 
   C = res & 0x100;
   N = Z = res &= 0xff;
-  V = (arg ^ val) & (arg ^ res);
+  OV = (arg ^ val) & (arg ^ res);
 
   return res;
 }
@@ -1039,7 +1041,7 @@ st (unsigned arg)
   unsigned res = arg;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
 
   WRMEM (ea, res);
 }
@@ -1051,7 +1053,7 @@ sub (unsigned arg, unsigned val)
 
   C = res & 0x100;
   N = Z = res &= 0xff;
-  V = (arg ^ val) & (arg ^ res);
+  OV = (arg ^ val) & (arg ^ res);
 
   return res;
 }
@@ -1062,7 +1064,7 @@ tst (unsigned arg)
   unsigned res = arg;
 
   N = Z = res;
-  V = 0;
+  OV = 0;
   cpu_clk -= 2;
 }
 
@@ -1098,7 +1100,7 @@ addd (unsigned val)
 
   C = res & 0x10000;
   Z = res &= 0xffff;
-  V = ((arg ^ res) & (val ^ res)) >> 8;
+  OV = ((arg ^ res) & (val ^ res)) >> 8;
   A = N = res >> 8;
   B = res & 0xff;
 }
@@ -1111,7 +1113,7 @@ cmp16 (unsigned arg, unsigned val)
   C = res & 0x10000;
   Z = res &= 0xffff;
   N = res >> 8;
-  V = ((arg ^ val) & (arg ^ res)) >> 8;
+  OV = ((arg ^ val) & (arg ^ res)) >> 8;
 }
 
 static void
@@ -1122,7 +1124,7 @@ ldd (unsigned arg)
   Z = res;
   A = N = res >> 8;
   B = res & 0xff;
-  V = 0;
+  OV = 0;
 }
 
 static unsigned
@@ -1132,7 +1134,7 @@ ld16 (unsigned arg)
 
   Z = res;
   N = res >> 8;
-  V = 0;
+  OV = 0;
 
   return res;
 }
@@ -1157,7 +1159,7 @@ std (void)
 
   Z = res;
   N = A;
-  V = 0;
+  OV = 0;
   WRMEM16 (ea, res);
 }
 
@@ -1168,7 +1170,7 @@ st16 (unsigned arg)
 
   Z = res;
   N = res >> 8;
-  V = 0;
+  OV = 0;
   WRMEM16 (ea, res);
 }
 
@@ -1180,7 +1182,7 @@ subd (unsigned val)
 
   C = res & 0x10000;
   Z = res &= 0xffff;
-  V = ((arg ^ val) & (arg ^ res)) >> 8;
+  OV = ((arg ^ val) & (arg ^ res)) >> 8;
   A = N = res >> 8;
   B = res & 0xff;
 }
@@ -1617,14 +1619,14 @@ andcc (void)
 #define cond_LO() (C != 0)
 #define cond_NE() (Z != 0)
 #define cond_EQ() (Z == 0)
-#define cond_VC() ((V & 0x80) == 0)
-#define cond_VS() ((V & 0x80) != 0)
+#define cond_VC() ((OV & 0x80) == 0)
+#define cond_VS() ((OV & 0x80) != 0)
 #define cond_PL() ((N & 0x80) == 0)
 #define cond_MI() ((N & 0x80) != 0)
-#define cond_GE() (((N^V) & 0x80) == 0)
-#define cond_LT() (((N^V) & 0x80) != 0)
-#define cond_GT() ((((N^V) & 0x80) == 0) && (Z != 0))
-#define cond_LE() ((((N^V) & 0x80) != 0) || (Z == 0))
+#define cond_GE() (((N^OV) & 0x80) == 0)
+#define cond_LT() (((N^OV) & 0x80) != 0)
+#define cond_GT() ((((N^OV) & 0x80) == 0) && (Z != 0))
+#define cond_LE() ((((N^OV) & 0x80) != 0) || (Z == 0))
 
 static void
 bra (void)
@@ -3052,7 +3054,7 @@ void
 cpu_reset (void)
 {
   X = Y = S = U = A = B = DP = 0;
-  H = N = V = C = 0;
+  H = N = OV = C = 0;
   Z = 1;
   EFI = F_FLAG | I_FLAG;
 #ifdef H6309

@@ -5166,7 +5166,6 @@ _ACEOF
 
 fi
 
-
 # Template for --with options
 #AC_ARG_WITH([name],
 #   AC_HELP_STRING([--with-name=<parameter-name>], [doc string]),

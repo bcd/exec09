@@ -71,11 +71,13 @@ extern int dump_cycles_on_success;
 #ifdef CONFIG_WPC
 extern UINT8 *regions[4];
 #endif
+#ifdef OLDSYS
 extern UINT8 *memory;
+#endif
 
 /* Primitive read/write macros */
-#define read8(addr)        memory[addr]
-#define write8(addr,val)   do { memory[addr] = val; } while (0)
+#define read8(addr)        cpu_read8 (addr)
+#define write8(addr,val)   do { cpu_write8 (addr, val); } while (0)
 
 /* 16-bit versions */
 #define read16(addr)       (read8(addr) << 8 | read8(addr+1))
