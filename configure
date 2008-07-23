@@ -1282,6 +1282,7 @@ Optional Features:
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
   --enable-wpc            Enable WPC address map
+  --enable-6309           Enable 6309 instructions
 
 Some influential environment variables:
   CC          C compiler command
@@ -5146,6 +5147,21 @@ if test $wpc = yes; then
 
 cat >>confdefs.h <<\_ACEOF
 #define CONFIG_WPC 1
+_ACEOF
+
+fi
+
+# Check whether --enable-h6309 was given.
+if test "${enable_h6309+set}" = set; then
+  enableval=$enable_h6309; h6309=$enableval
+else
+  h6309=no
+fi
+
+if test $h6309 = yes; then
+
+cat >>confdefs.h <<\_ACEOF
+#define H6309 1
 _ACEOF
 
 fi
