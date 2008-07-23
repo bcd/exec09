@@ -1284,7 +1284,7 @@ load_s19 (char *name)
 
   if (fp == NULL)
     {
-      printf ("failed to open S record file %s.\n", name);
+      printf ("failed to open S-record file %s.\n", name);
       return 1;
     }
 
@@ -1303,6 +1303,13 @@ load_s19 (char *name)
       switch (type)
 	{
 	case 1:
+		/* Validate the address. */
+		if (addr < 0x1000)
+		{
+		  printf ("invalid address 0x%04X\n", addr);
+		  return 1;
+		}
+
 	  for (count -= 3; count != 0; count--, addr++, checksum += data)
 	    {
 	      fscanf (fp, "%2x", &data);
@@ -1372,18 +1379,21 @@ load_bin (char *name, int addr)
 void
 monitor_call (unsigned int flags)
 {
+#ifdef CALL_STACK
 	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1])
 	{
 		current_function_call++;
 		current_function_call->entry_point = get_pc ();
 		current_function_call->flags = flags;
 	}
+#endif
 }
 
 
 void
 monitor_return (void)
 {
+#ifdef CALL_STACK
 	if (current_function_call > &fctab[MAX_FUNCTION_CALLS-1])
 	{
 		current_function_call--;
@@ -1398,6 +1408,7 @@ monitor_return (void)
 
 	if (current_function_call > fctab)
 		current_function_call--;
+#endif
 }
 
 
