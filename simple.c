@@ -22,7 +22,19 @@
 #include <sys/select.h>
 #include "6809.h"
 #include "monitor.h"
+#if 0
 #include "simple-mmap.h"
+#else
+#define SIMPLE_CONSOLE_WRITE 0xff00
+#define SIMPLE_SYSTEM_EXIT 0xff01
+#define SIMPLE_CONSOLE_READ 0xff02
+#define VDISK_ADDR0 0xe010
+#define VDISK_ADDR1 0xe012
+#define VDISK_ADDR2 0xe014
+#define VDISK_NUM_REGIONS 8
+#define VDISK_REGION_SIZE 0x100
+#define VDISK_REGION0 0xe800
+#endif
 
 // #define static_inline static inline
 #define static_inline

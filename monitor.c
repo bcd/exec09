@@ -72,7 +72,11 @@ enum opcode
   _orcc, _pshs, _pshu, _puls, _pulu, _rola, _rolb, _rol, _rora,
   _rorb, _ror, _rti, _rts, _sbca, _sbcb, _sex, _sta, _stb,
   _std, _sts, _stu, _stx, _sty, _suba, _subb, _subd, _swi,
-  _swi2, _swi3, _sync, _tfr, _tsta, _tstb, _tst, _reset
+  _swi2, _swi3, _sync, _tfr, _tsta, _tstb, _tst, _reset,
+#ifdef H6309
+  _negd, _comd, _lsrd, _rord, _asrd, _rold, _decd, _incd, _tstd,
+  _clrd
+#endif
 };
 
 char *mne[] = {
@@ -90,7 +94,11 @@ char *mne[] = {
   "ORCC", "PSHS", "PSHU", "PULS", "PULU", "ROLA", "ROLB", "ROL", "RORA",
   "RORB", "ROR", "RTI", "RTS", "SBCA", "SBCB", "SEX", "STA", "STB",
   "STD", "STS", "STU", "STX", "STY", "SUBA", "SUBB", "SUBD", "SWI",
-  "SWI2", "SWI3", "SYNC", "TFR", "TSTA", "TSTB", "TST", "RESET"
+  "SWI2", "SWI3", "SYNC", "TFR", "TSTA", "TSTB", "TST", "RESET",
+#ifdef H6309
+  "NEGD", "COMD", "LSRD", "RORD", "ASRD", "ROLD", "DECD",
+  "INCD", "TSTD", "CLRD",
+#endif
 };
 
 typedef struct
@@ -423,7 +431,7 @@ opcode_t codes10[256] = {
   {_undoc, _illegal},
   {_undoc, _illegal},
   {_swi2, _implied},
-  {_undoc, _illegal},
+  {_undoc, _illegal}, /* 10 40 */
   {_undoc, _illegal},
   {_undoc, _illegal},
   {_undoc, _illegal},
@@ -682,7 +690,7 @@ opcode_t codes11[256] = {
   {_undoc, _illegal},
   {_undoc, _illegal},
   {_swi3, _implied},
-  {_undoc, _illegal},
+  {_undoc, _illegal}, /* 11 40 */
   {_undoc, _illegal},
   {_undoc, _illegal},
   {_undoc, _illegal},
