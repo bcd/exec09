@@ -44,6 +44,7 @@ unsigned X, Y, S, U, PC;
 unsigned A, B, DP;
 unsigned H, N, Z, V, C;
 unsigned EFI;
+
 #ifdef H6309
 unsigned E, F, V, MD;
 
@@ -51,7 +52,7 @@ unsigned E, F, V, MD;
 #define MD_FIRQ_LIKE_IRQ 0x2	/* if 1, FIRQ acts like IRQ */
 #define MD_ILL 0x40		/* illegal instruction */
 #define MD_DBZ 0x80		/* divide by zero */
-#endif
+#endif /* H6309 */
 
 unsigned iPC;
 
