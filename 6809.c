@@ -82,11 +82,13 @@ extern int trace_enabled;
 static inline void
 check_pc (void)
 {
+#ifdef OLDSYS
   if (!CODE_ADDR_P (PC) && !STACK_ADDR_P (PC))
     {
       fprintf (stderr, "m6809-run: invalid PC = %04X\n", PC);
       exit (2);
     }
+#endif
 }
 
 

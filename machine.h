@@ -74,9 +74,9 @@ struct hw_device
 
 	#define MMU_DEVID      0
 	#define MMU_ADDR       DEVICE_BASE(MMU_DEVID)
-		#define MMU_DEV(p)      (MMU_ADDR + (p * 8) + 0)
-		#define MMU_OFF(p)      (MMU_ADDR + (p * 8) + 1)
-		#define MMU_FLG(p)      (MMU_ADDR + (p * 8) + 2)
+		#define MMU_DEV(p)      (MMU_ADDR + (p * 8) + 0) /* device select */
+		#define MMU_OFF(p)      (MMU_ADDR + (p * 8) + 1) /* 8KB region to map in */
+		#define MMU_FLG(p)      (MMU_ADDR + (p * 8) + 2) /* permissions */
 
 	#define POWERMGR_DEVID 1
 	#define POWERMGR_ADDR  DEVICE_BASE(POWERMGR_DEVID)

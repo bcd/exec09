@@ -1311,12 +1311,14 @@ load_s19 (char *name)
       switch (type)
 	{
 	case 1:
+#if 0
 		/* Validate the address. */
 		if (addr < 0x1000)
 		{
 		  printf ("invalid address 0x%04X\n", addr);
 		  return 1;
 		}
+#endif
 
 	  for (count -= 3; count != 0; count--, addr++, checksum += data)
 	    {

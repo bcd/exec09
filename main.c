@@ -60,8 +60,7 @@ int max_cycles = 100000000;
 
 char *exename;
 
-static void
-usage (void)
+static void usage (void)
 {
   printf ("Usage: %s <options> filename\n", exename);
   printf ("Options are:\n");

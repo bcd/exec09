@@ -250,6 +250,7 @@ void mmu_write (struct hw_device *dev, unsigned long addr, U8 val)
 	unsigned int page = (addr / PAGE_REGS) % PAGE_COUNT;
 	unsigned int reg = addr % PAGE_REGS;
 	mmu_regs[page][reg] = val;
+	bus_map (page * PAGE_SIZE, mmu_regs[page][0], mmu_regs[page][1] * PAGE_SIZE, PAGE_SIZE);
 }
 
 void mmu_reset (struct hw_device *dev)
@@ -278,6 +279,149 @@ void mmu_init (void)
 
 /**********************************************************/
 
+/* The disk drive is emulated as follows:
+ * The disk is capable of "bus-mastering" and is able to dump data directly
+ * into the RAM, without CPU-involvement.  (The pages do not even need to
+ * be mapped.)  A transaction is initiated with the following parameters:
+ *
+ * - address of RAM, aligned to 512 bytes, must reside in lower 32KB.
+ *   Thus there are 64 possible sector locations.
+ * - address of disk sector, given as a 16-bit value.  This allows for up to
+ *   a 32MB disk.
+ * - direction, either to disk or from disk.
+ *
+ * Emulation is synchronous with respect to the CPU.
+ */
+
+#define SECTOR_SIZE 512
+
+#define DSK_CTRL 0
+	#define DSK_READ 0x1
+	#define DSK_WRITE 0x2
+	#define DSK_FLUSH 0x4
+	#define DSK_ERASE 0x8
+#define DSK_ADDR 1
+#define DSK_SECTOR 2 /* and 3 */
+
+struct disk_priv
+{
+	FILE *fp;
+	struct hw_device *dev;
+	unsigned long offset;
+	struct hw_device *ramdev;
+	unsigned int sectors;
+	char *ram;
+};
+
+
+U8 disk_read (struct hw_device *dev, unsigned long addr)
+{
+	struct disk_priv *disk = (struct disk_priv *)dev->priv;
+}
+
+void disk_write (struct hw_device *dev, unsigned long addr, U8 val)
+{
+	struct disk_priv *disk = (struct disk_priv *)dev->priv;
+
+	switch (addr)
+	{
+		case DSK_ADDR:
+			disk->ram = disk->ramdev->priv + val * SECTOR_SIZE;
+			break;
+		case DSK_SECTOR:
+			disk->offset = val; /* high byte */
+			break;
+		case DSK_SECTOR+1:
+			disk->offset = (disk->offset << 8) | val;
+			disk->offset *= SECTOR_SIZE;
+			fseek (disk->fp, disk->offset, SEEK_SET);
+			break;
+		case DSK_CTRL:
+			if (val & DSK_READ)
+			{
+				fread (disk->ram, SECTOR_SIZE, 1, disk->fp);
+			}
+			else if (val & DSK_WRITE)
+			{
+				fwrite (disk->ram, SECTOR_SIZE, 1, disk->fp);
+			}
+			else if (val & DSK_ERASE)
+			{
+				char empty_sector[SECTOR_SIZE];
+				memset (empty_sector, 0xff, SECTOR_SIZE);
+				fwrite (empty_sector, SECTOR_SIZE, 1, disk->fp);
+			}
+
+			if (val & DSK_FLUSH)
+			{
+				fflush (disk->fp);
+			}
+			break;
+	}
+}
+
+void disk_reset (struct hw_device *dev)
+{
+	struct disk_priv *disk = (struct disk_priv *)dev->priv;
+	disk_write (dev, DSK_ADDR, 0);
+	disk_write (dev, DSK_SECTOR, 0);
+	disk_write (dev, DSK_SECTOR+1, 0);
+	disk_write (dev, DSK_CTRL, DSK_FLUSH);
+}
+
+void disk_format (struct hw_device *dev)
+{
+	unsigned int sector;
+	struct disk_priv *disk = (struct disk_priv *)dev->priv;
+
+	for (sector = 0; sector < disk->sectors; sector++)
+	{
+		disk_write (dev, DSK_SECTOR, sector >> 8);
+		disk_write (dev, DSK_SECTOR+1, sector & 0xFF);
+		disk_write (dev, DSK_CTRL, DSK_ERASE);
+	}
+	disk_write (dev, DSK_CTRL, DSK_FLUSH);
+}
+
+struct hw_class disk_class =
+{
+	.reset = disk_reset,
+	.read = disk_read,
+	.write = disk_write,
+};
+
+void disk_init (const char *backing_file)
+{
+	struct disk_priv *disk = malloc (sizeof (struct disk_priv));
+	int newdisk = 0;
+
+	disk->fp = fopen (backing_file, "r+b");
+	if (disk->fp == NULL)
+	{
+		printf ("warning: disk does not exist, creating\n");
+		disk->fp = fopen (backing_file, "w+b");
+		newdisk = 1;
+		if (disk->fp == NULL)
+		{
+			printf ("warning: disk not created\n");
+		}
+	}
+
+	disk->ram = 0;
+	disk->ramdev = device_table[1];
+	disk->dev = device_attach (&disk_class, BUS_MAP_SIZE, disk);
+	disk->sectors = 65536;
+
+	bus_map (DISK_ADDR(0), disk->dev->devid, 0, BUS_MAP_SIZE);
+
+	if (newdisk)
+	{
+		disk_format (disk->dev);
+	}
+}
+
+/**********************************************************/
+
 void machine_init (const char *boot_rom_file)
 {
 	/* The MMU must be initialized first, as all other devices
@@ -289,7 +433,8 @@ void machine_init (const char *boot_rom_file)
 		rom_init (boot_rom_file);
 
 	console_init ();
+	disk_init ("disk.bin");
 
-	dump_machine ();
+	//dump_machine ();
 }
 

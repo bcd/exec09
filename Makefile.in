@@ -34,7 +34,6 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-LIBOBJDIR =
 bin_PROGRAMS = m6809-run$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
@@ -156,7 +155,6 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-#INCLUDES = -I.
 m6809_run_SOURCES = 6809.c main.c monitor.c simple.c machine.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
