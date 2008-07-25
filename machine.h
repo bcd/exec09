@@ -37,10 +37,19 @@ A single bus map defines 128 bytes of address space; for a 64KB CPU,
 that requires a total of 512 such structures. */
 #define BUS_MAP_SIZE 128
 
+#define MAP_ANY 0x0
+#define MAP_READONLY 0x1
+
+#define FAULT_NONE 0
+#define FAULT_NOT_WRITABLE 1
+#define FAULT_NO_RESPONSE 2
+
+
 struct bus_map
 {
 	unsigned int devid; /* The devid mapped here */
 	unsigned long offset; /* The offset within the device */
+	unsigned char flags;
 };
 
 #define NUM_BUS_MAPS (MAX_CPU_ADDR / BUS_MAP_SIZE)
@@ -74,9 +83,12 @@ struct hw_device
 
 	#define MMU_DEVID      0
 	#define MMU_ADDR       DEVICE_BASE(MMU_DEVID)
-		#define MMU_DEV(p)      (MMU_ADDR + (p * 8) + 0) /* device select */
-		#define MMU_OFF(p)      (MMU_ADDR + (p * 8) + 1) /* 8KB region to map in */
-		#define MMU_FLG(p)      (MMU_ADDR + (p * 8) + 2) /* permissions */
+		#define MMU_DEV(p)      (MMU_ADDR + (p * 4) + 0) /* device select */
+		#define MMU_OFF(p)      (MMU_ADDR + (p * 4) + 1) /* 8KB region to map in */
+		#define MMU_FLG(p)      (MMU_ADDR + (p * 4) + 2) /* permissions */
+
+	#define MMU_FAULT_ADDR (MMU_ADDR + 0x60)
+	#define MMU_FAULT_TYPE (MMU_ADDR + 0x62)
 
 	#define POWERMGR_DEVID 1
 	#define POWERMGR_ADDR  DEVICE_BASE(POWERMGR_DEVID)

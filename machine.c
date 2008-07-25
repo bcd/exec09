@@ -11,6 +11,10 @@ struct hw_device *device_table[MAX_BUS_DEVICES];
 
 struct bus_map busmaps[NUM_BUS_MAPS];
 
+U16 fault_addr;
+
+U8 fault_type;
+
 
 /**
  * Attach a new device to the bus.  Only called during init.
@@ -37,7 +41,8 @@ struct hw_device *device_attach (struct hw_class *class_ptr, unsigned int size, 
 void bus_map (unsigned int addr,
 	unsigned int devid,
 	unsigned long offset,
-	unsigned int len)
+	unsigned int len,
+	unsigned int flags)
 {
 	struct bus_map *map;
 	unsigned int start, count;
@@ -57,10 +62,18 @@ void bus_map (unsigned int addr,
 	{
 		map->devid = devid;
 		map->offset = offset;
+		map->flags = flags;
 		count--;
 		map++;
 		offset += BUS_MAP_SIZE;
 	}
+}
+
+void page_fault (unsigned int addr, unsigned char type)
+{
+	fault_addr = addr;
+	fault_type = type;
+	irq ();
 }
 
 
@@ -69,6 +82,12 @@ static struct bus_map *find_map (unsigned int addr)
 	return &busmaps[addr / BUS_MAP_SIZE];
 }
 
+static struct hw_device *find_device (unsigned int addr, unsigned char id)
+{
+	if (id == 0xFF)
+		page_fault (addr, FAULT_NO_RESPONSE);
+	return device_table[id];
+}
 
 void dump_machine (void)
 {
@@ -90,7 +109,7 @@ void dump_machine (void)
 U8 cpu_read8 (unsigned int addr)
 {
 	struct bus_map *map = find_map (addr);
-	struct hw_device *dev = device_table[map->devid];
+	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 	return (*class_ptr->read) (dev, phy_addr);
@@ -103,9 +122,15 @@ U8 cpu_read8 (unsigned int addr)
 void cpu_write8 (unsigned int addr, U8 val)
 {
 	struct bus_map *map = find_map (addr);
-	struct hw_device *dev = device_table[map->devid];
+	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
+
+	if (map->flags & MAP_READONLY)
+	{
+		page_fault (addr, FAULT_NOT_WRITABLE);
+	}
+
 	(*class_ptr->write) (dev, phy_addr, val);
 }
 
@@ -156,7 +181,7 @@ void ram_init (unsigned long size)
 	struct hw_device *dev = device_attach (&ram_class, size, buf);
 	/* Map the RAM into the entire address space of the 6809.
 	Other devices that get attached may override this. */
-	bus_map (0x0000, dev->devid, 0, 0x10000);
+	bus_map (0x0000, dev->devid, 0, 0x10000, MAP_ANY);
 }
 
 /**********************************************************/
@@ -177,7 +202,7 @@ void rom_init (const char *filename)
 		char *buf = malloc (size);
 		fread (buf, size, 1, fp);
 		struct hw_device *dev = device_attach (&rom_class, size, buf);
-		bus_map (BOOT_ROM_ADDR, dev->devid, 0, 0x2000);
+		bus_map (BOOT_ROM_ADDR, dev->devid, 0, 0x2000, MAP_READONLY);
 	}
 	fclose (fp);
 }
@@ -224,10 +249,10 @@ struct hw_class console_class =
 void console_init (void)
 {
 	struct hw_device *dev = device_attach (&console_class, BUS_MAP_SIZE, NULL);
-	bus_map (CONSOLE_ADDR, dev->devid, 0, BUS_MAP_SIZE);
+	bus_map (CONSOLE_ADDR, dev->devid, 0, BUS_MAP_SIZE, MAP_ANY);
 
 	/* For legacy code */
-	bus_map (0xff00, dev->devid, 0, BUS_MAP_SIZE);
+	bus_map (0xff00, dev->devid, 0, BUS_MAP_SIZE, MAP_ANY);
 }
 
 /**********************************************************/
@@ -240,9 +265,21 @@ U8 mmu_regs[PAGE_COUNT][PAGE_REGS];
 
 U8 mmu_read (struct hw_device *dev, unsigned long addr)
 {
-	unsigned int page = (addr / PAGE_REGS) % PAGE_COUNT;
-	unsigned int reg = addr % PAGE_REGS;
-	return mmu_regs[page][reg];
+	switch (addr)
+	{
+		case 0x60:
+			return fault_addr >> 8;
+		case 0x61:
+			return fault_addr & 0xFF;
+		case 0x62:
+			return fault_type;
+		default:
+		{
+			unsigned int page = (addr / PAGE_REGS) % PAGE_COUNT;
+			unsigned int reg = addr % PAGE_REGS;
+			return mmu_regs[page][reg];
+		}
+	}
 }
 
 void mmu_write (struct hw_device *dev, unsigned long addr, U8 val)
@@ -250,7 +287,7 @@ void mmu_write (struct hw_device *dev, unsigned long addr, U8 val)
 	unsigned int page = (addr / PAGE_REGS) % PAGE_COUNT;
 	unsigned int reg = addr % PAGE_REGS;
 	mmu_regs[page][reg] = val;
-	bus_map (page * PAGE_SIZE, mmu_regs[page][0], mmu_regs[page][1] * PAGE_SIZE, PAGE_SIZE);
+	bus_map (page * PAGE_SIZE, mmu_regs[page][0], mmu_regs[page][1] * PAGE_SIZE, PAGE_SIZE, MAP_ANY);
 }
 
 void mmu_reset (struct hw_device *dev)
@@ -274,7 +311,7 @@ struct hw_class mmu_class =
 void mmu_init (void)
 {
 	struct hw_device *dev = device_attach (&mmu_class, BUS_MAP_SIZE, NULL);
-	bus_map (MMU_ADDR, dev->devid, 0, BUS_MAP_SIZE);
+	bus_map (MMU_ADDR, dev->devid, 0, BUS_MAP_SIZE, MAP_ANY);
 }
 
 /**********************************************************/
@@ -412,7 +449,7 @@ void disk_init (const char *backing_file)
 	disk->dev = device_attach (&disk_class, BUS_MAP_SIZE, disk);
 	disk->sectors = 65536;
 
-	bus_map (DISK_ADDR(0), disk->dev->devid, 0, BUS_MAP_SIZE);
+	bus_map (DISK_ADDR(0), disk->dev->devid, 0, BUS_MAP_SIZE, MAP_ANY);
 
 	if (newdisk)
 	{
