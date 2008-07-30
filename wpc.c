@@ -22,8 +22,11 @@
 
 
 /* The register set of the WPC ASIC */
+#define WPC_ASIC_BASE               0x3800
+
 #define WPC_DMD_LOW_BASE 				0x3800
 #define WPC_DMD_HIGH_BASE 				0x3A00
+
 #define WPC_DEBUG_DATA_PORT			0x3D60
 #define WPC_DEBUG_CONTROL_PORT		0x3D61
 #define WPC_PINMAME_CYCLE_COUNT		0x3D62
@@ -33,6 +36,7 @@
 #define WPC_PINMAME_FUNC_EXIT_LO		0x3D66
 #define WPC_SERIAL_CONTROL_PORT 		0x3E66
 #define WPC_SERIAL_DATA_PORT 			0x3E67
+
 #define WPC_DMD_3200_PAGE				0x3FB8
 #define WPC_DMD_3000_PAGE				0x3FB9
 #define WPC_DMD_3600_PAGE				0x3FBA
@@ -103,27 +107,36 @@
 #define WPC_ZEROCROSS_IRQ_CLEAR 		0x3FFF
 
 
-uint8_t wpc_read (target_addr_t addr)
+void wpc_asic_reset (struct hw_device *dev)
 {
-	switch (addr)
-		{
-		default:
-			return read8 (addr);
-		}
+}
+
+U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
+{
+	return 0;
+}
+
+void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
+{
 }
 
 
-void wpc_write (target_addr_t addr, uint8_t val)
+struct hw_class wpc_asic_class =
 {
-	switch (addr)
-		{
-		default:
-			write8 (addr, val);
-		}
+	.reset = wpc_asic_reset,
+	.read = wpc_asic_read,
+	.write = wpc_asic_write,
+};
+
+struct hw_class *wpc_asic_create (void)
+{
 }
 
-
-void wpc_init (void)
+void wpc_init (const char *boot_rom_file)
 {
+	ram_create (0x2000);
+	if (boot_rom_file)
+		rom_create (boot_rom_file);
+	wpc_asic_create ();
 }
 
