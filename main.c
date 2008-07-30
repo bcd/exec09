@@ -60,6 +60,9 @@ int max_cycles = 100000000;
 
 char *exename;
 
+const char *machine_name = "eon";
+
+
 static void usage (void)
 {
   printf ("Usage: %s <options> filename\n", exename);
@@ -130,6 +133,9 @@ main (int argc, char *argv[])
        case 'm':
 		   max_cycles = strtoul (argv[++argn], NULL, 16);
 			break;
+		case 's':
+			machine_name = argv[++argn];
+			break;
 	    case '\0':
 	      break;
 	    default:
@@ -155,18 +161,15 @@ main (int argc, char *argv[])
       break;
     case S19:
 #ifndef OLDSYS
-		machine_init (NULL);
+		machine_init (machine_name, NULL);
 #endif
       if (load_s19 (name))
 			usage ();
       break;
     case BIN:
-#ifdef OLDSYS
-      if (load_bin (name, off & 0xffff))
-			usage ();
-#else
-		machine_init (name);
-#endif
+		machine_init (machine_name, name);
+      //if (load_bin (name, off & 0xffff))
+			//usage ();
       break;
     }
 

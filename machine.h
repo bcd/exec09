@@ -1,5 +1,5 @@
 /*
- * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006, 2007, 2008 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -18,9 +18,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
 #ifndef M6809_MACHINE_H
 #define M6809_MACHINE_H
+
+/* This file defines structures used to build generic machines on a 6809. */
 
 typedef unsigned char U8;
 typedef unsigned short U16;
@@ -32,18 +33,34 @@ typedef unsigned short U16;
 /* Up to 32 devices may be connected.  Each device is addressed by a 32-bit physical address */
 #define MAX_BUS_DEVICES 32
 
-/* A bus map says how to convert a CPU address into a bus address.
-A single bus map defines 128 bytes of address space; for a 64KB CPU,
-that requires a total of 512 such structures. */
-#define BUS_MAP_SIZE 128
+#define INVALID_DEVID 0xff
 
-#define MAP_ANY 0x0
+/* Say whether or not the mapping is RO or RW. */
+#define MAP_READWRITE 0x0
 #define MAP_READONLY 0x1
+
+/* A fixed map cannot be reprogrammed.  Attempts to
+bus_map something differently will silently be
+ignored. */
+#define MAP_FIXED 0x2
 
 #define FAULT_NONE 0
 #define FAULT_NOT_WRITABLE 1
 #define FAULT_NO_RESPONSE 2
 
+/* A bus map is assocated with part of the 6809 address space
+and says what device and which part of it is mapped into that
+area.  It also has associated flags which say how it is allowed
+to be accessed.
+
+A single bus map defines 128 bytes of address space; for a 64KB CPU,
+that requires a total of 512 such structures.
+
+Note that the bus map need not correspond to the page size that can
+be configured by the MMU.  It allows for more granularity and is
+needed in some *hardcoded* mapping cases. */
+
+#define BUS_MAP_SIZE 128
 
 struct bus_map
 {
@@ -60,66 +77,42 @@ in the machine */
 
 struct hw_device;
 
+/* A hardware class structure exists for each type of device.
+It defines the operations that are allowed on that device.
+For example, if there are multiple ROM chips, then there is
+a single "ROM" class and multiple ROM device objects. */
+
 struct hw_class
 {
+	/* Nonzero if the device is readonly */
+	int readonly;
+
+	/* Resets the device */
 	void (*reset) (struct hw_device *dev);
+
+	/* Reads a byte at a given offset from the beginning of the device. */
 	U8 (*read) (struct hw_device *dev, unsigned long phy_addr);
+
+	/* Writes a byte at a given offset from the beginning of the device. */
 	void (*write) (struct hw_device *dev, unsigned long phy_addr, U8 val);
 };
 
+
 struct hw_device
 {
+	/* A pointer to the class object.  This says what kind of device it is. */
 	struct hw_class *class_ptr;
+
+	/* The device ID assigned to it.  This is filled in automatically
+	by the simulator. */
 	unsigned int devid;
+
+	/* The total size of the device in bytes. */
 	unsigned long size;
+
+	/* The private pointer, which is interpreted differently for each type
+	(hw_class) of device. */
 	void *priv;
 };
 
-/* Predefine address regions, needed at boot time */
-
-/* I/O regions (1KB) */
-#define BOOT_IO_ADDR 0xE000
-#define DEVICE_BASE(n)  (BOOT_IO_ADDR + (BUS_MAP_SIZE * (n)))
-
-	#define MMU_DEVID      0
-	#define MMU_ADDR       DEVICE_BASE(MMU_DEVID)
-		#define MMU_DEV(p)      (MMU_ADDR + (p * 4) + 0) /* device select */
-		#define MMU_OFF(p)      (MMU_ADDR + (p * 4) + 1) /* 8KB region to map in */
-		#define MMU_FLG(p)      (MMU_ADDR + (p * 4) + 2) /* permissions */
-
-	#define MMU_FAULT_ADDR (MMU_ADDR + 0x60)
-	#define MMU_FAULT_TYPE (MMU_ADDR + 0x62)
-
-	#define POWERMGR_DEVID 1
-	#define POWERMGR_ADDR  DEVICE_BASE(POWERMGR_DEVID)
-		#define POWER_CTRL      (POWERMGR_ADDR + 0)
-
-	#define CONSOLE_DEVID 2
-	#define CONSOLE_ADDR   DEVICE_BASE(CONSOLE_DEVID)
-		#define CONSOLE_OUT    (CONSOLE_ADDR + 0)
-		#define LEGACY_EXIT    (CONSOLE_ADDR + 1)
-		#define CONSOLE_IN     (CONSOLE_ADDR + 2)
-
-	#define DISPLAY_ADDR   DEVICE_BASE(3)
-
-	#define DISK_ADDR(n)   DEVICE_BASE(4 + (n))
-
-/* Boot ROM region (7KB) */
-#define BOOT_ROM_ADDR 0xE400
-
-/* Define TARGET_MACHINE to the correct machine_config structure */
-#ifdef CONFIG_WPC
-#define TARGET_MACHINE_NAME "WPC"
-#define TARGET_INIT wpc_init
-#define TARGET_READ wpc_read
-#define TARGET_WRITE wpc_write
-#endif
-
-#ifndef TARGET_MACHINE
-#define TARGET_MACHINE_NAME "SIMPLE"
-#define TARGET_INIT simple_init
-#define TARGET_READ simple_read
-#define TARGET_WRITE simple_write
-#endif
-
-#endif /* M6809_MACHINE_H */
+#endif /* _M6809_MACHINE_H */
