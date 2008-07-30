@@ -30,7 +30,6 @@ struct hw_device *device_attach (struct hw_class *class_ptr, unsigned int size, 
 
 	/* Attach implies reset */
 	class_ptr->reset (dev);
-
 	return dev;
 };
 

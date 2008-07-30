@@ -56,12 +56,6 @@ unsigned E, F, V, MD;
 
 unsigned iPC;
 
-#ifdef CONFIG_WPC
-/** Pointers to each 16KB portion of the 6809 address space,
- * which may change due to bank registers */
-UINT8 *regions[4] = { NULL, NULL, NULL, NULL };
-#endif
-
 #ifdef OLDSYS
 /** A pointer to the flat address space */
 UINT8 *memory = NULL;
@@ -177,19 +171,7 @@ imm_word (void)
   return val;
 }
 
-#define WRMEM(addr, data) TARGET_WRITE (addr, data)
-#if 0
-static inline void
-WRMEM (unsigned addr, unsigned data)
-{
-	if (!WRITABLE_P (addr))
-		sim_error ("write to read-only location %04X from %s\n", 
-			addr, monitor_addr_name (PC));
-
-	if (!IO_ADDR_P (addr) || TARGET_MACHINE.write_byte (addr, data))
-      write8 (addr, (UINT8) data);
-}
-#endif
+#define WRMEM(addr, data) write8 (addr, data)
 
 static void
 WRMEM16 (unsigned addr, unsigned data)
@@ -199,17 +181,7 @@ WRMEM16 (unsigned addr, unsigned data)
   WRMEM ((addr + 1) & 0xffff, data & 0xff);
 }
 
-#define RDMEM(addr) TARGET_READ (addr)
-#if 0
-static inline unsigned
-RDMEM (unsigned addr)
-{
-	uint8_t data;
-	if (!IO_ADDR_P (addr) || TARGET_MACHINE.read_byte (addr, &data))
-		data = read8 (addr);
-	return data;
-}
-#endif
+#define RDMEM(addr) read8 (addr)
 
 static unsigned
 RDMEM16 (unsigned addr)

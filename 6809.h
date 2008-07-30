@@ -68,9 +68,6 @@ extern int need_flush;
 extern int total;
 extern int dump_cycles_on_success;
 
-#ifdef CONFIG_WPC
-extern UINT8 *regions[4];
-#endif
 #ifdef OLDSYS
 extern UINT8 *memory;
 #endif

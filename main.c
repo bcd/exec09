@@ -147,18 +147,6 @@ main (int argc, char *argv[])
       argn++;
     }
 
-#ifdef OLDSYS
-	/* Allocate memory for the processor memory map. */
-#ifdef CONFIG_WPC
-  memory = (UINT8 *) calloc (0x100000, 1);
-#else
-  memory = (UINT8 *) calloc (0x10000, 1);
-#endif
-  if (memory == NULL)
-    usage ();
-#endif
-
-
   switch (type)
     {
     case HEX:
