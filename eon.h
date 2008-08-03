@@ -21,6 +21,9 @@
 #ifndef _MACHINE_EON_H
 #define _MACHINE_EON_H
 
+/* RAM */
+#define RAM_SIZE 0x100000
+
 /* I/O regions (1KB) */
 #define BOOT_IO_ADDR 0xE000
 #define DEVICE_BASE(n)  (BOOT_IO_ADDR + (BUS_MAP_SIZE * (n)))

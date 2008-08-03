@@ -1519,6 +1519,7 @@ enum cmd_numbers
   CMD_QUIT,
   CMD_BACKTRACE,
   CMD_NEXT,
+  CMD_RESET,
 
   REG_PC,
   REG_X,
@@ -1557,6 +1558,7 @@ command_t cmd_table[] = {
   {CMD_STEP, "s"},
   {CMD_NEXT, "n"},
   {CMD_BACKTRACE, "bt" },
+  {CMD_RESET, "reset" },
   {-1, NULL}
 };
 
@@ -2159,6 +2161,11 @@ monitor6809 (void)
 	  return 1;
 	case CMD_CONTINUE:
 	  return 0;
+
+	case CMD_RESET:
+		cpu_reset ();
+		continue;
+
 	default:
 	case -1:
 	  puts ("invalid command");

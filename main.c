@@ -60,7 +60,7 @@ int max_cycles = 100000000;
 
 char *exename;
 
-const char *machine_name = "eon";
+const char *machine_name = "simple";
 
 
 static void usage (void)

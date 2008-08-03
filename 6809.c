@@ -25,21 +25,6 @@
 #include "monitor.h"
 #include <stdarg.h>
 
-/* TODO - all of these are properties of the machine */
-#define STACK_MIN 0x1800
-#define STACK_MAX 0x2000
-#define CODE_MIN 0x8000
-#define CODE_MAX 0xFEFF
-#define IO_MIN 0xFF00
-#define IO_MAX 0xFF7F
-
-#define ADDR_RANGE_P(a,min,max)   (((a) >= (min)) && ((a) <= (max)))
-#define STACK_ADDR_P(a)           ADDR_RANGE_P (a, STACK_MIN, STACK_MAX)
-#define CODE_ADDR_P(a)            ADDR_RANGE_P (a, CODE_MIN, CODE_MAX)
-#define IO_ADDR_P(a)              ADDR_RANGE_P (a, IO_MIN, IO_MAX)
-
-#define WRITABLE_P(a)             (!CODE_ADDR_P (a))
-
 unsigned X, Y, S, U, PC;
 unsigned A, B, DP;
 unsigned H, N, Z, OV, C;
@@ -56,15 +41,12 @@ unsigned E, F, V, MD;
 
 unsigned iPC;
 
-#ifdef OLDSYS
-/** A pointer to the flat address space */
-UINT8 *memory = NULL;
-#endif
-
 unsigned ea = 0;
 int cpu_clk = 0;
 int cpu_period = 0;
 int cpu_quit = 1;
+unsigned int irqs_pending = 0;
+unsigned int firqs_pending = 0;
 
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
@@ -72,29 +54,37 @@ extern int dump_cycles_on_success;
 
 extern int trace_enabled;
 
+extern void irq (void);
+
+
+void request_irq (unsigned int source)
+{
+	/* If the interrupt is not masked, generate
+	 * IRQ immediately.  Else, mark it pending and
+	 * we'll check it later when the flags change.
+	 */
+	irqs_pending |= (1 << source);
+	if (!(EFI & I_FLAG))
+		irq ();
+}
+
+void release_irq (unsigned int source)
+{
+	irqs_pending &= ~(1 << source);
+}
+
 
 static inline void
 check_pc (void)
 {
-#ifdef OLDSYS
-  if (!CODE_ADDR_P (PC) && !STACK_ADDR_P (PC))
-    {
-      fprintf (stderr, "m6809-run: invalid PC = %04X\n", PC);
-      exit (2);
-    }
-#endif
+	/* TODO */
 }
 
 
 static inline void
 check_stack (void)
 {
-	if (!STACK_ADDR_P (S))
-    {
-      fprintf (stderr, "m6809-run: invalid stack pointer = %04X\n", S);
-      exit (2);
-    }
-
+	/* TODO */
 }
 
 
@@ -616,6 +606,10 @@ set_cc (unsigned arg)
   Z = (~arg) & Z_FLAG;
   OV = (arg & V_FLAG ? 0x80 : 0);
   C = arg & C_FLAG;
+
+  /* Check for pending interrupts */
+	if (irqs_pending && !(EFI & I_FLAG))
+		irq ();
 }
 
 unsigned
@@ -3036,4 +3030,5 @@ cpu_reset (void)
 #endif
 
   change_pc (read16 (0xfffe));
+  cpu_is_running ();
 }

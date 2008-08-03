@@ -20,6 +20,13 @@
 
 #include "6809.h"
 
+#define WPC_RAM_BASE                0x0000
+#define WPC_RAM_SIZE                0x2000
+#define WPC_ROM_SIZE                0x100000
+#define WPC_PAGED_REGION            0x4000
+#define WPC_PAGED_SIZE              0x4000
+#define WPC_FIXED_REGION            0x8000
+#define WPC_FIXED_SIZE              0x8000
 
 /* The register set of the WPC ASIC */
 #define WPC_ASIC_BASE               0x3800
@@ -107,17 +114,74 @@
 #define WPC_ZEROCROSS_IRQ_CLEAR 		0x3FFF
 
 
+struct wpc_asic
+{
+	U8 led;
+	U8 rombank;
+};
+
+
 void wpc_asic_reset (struct hw_device *dev)
 {
 }
 
 U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 {
-	return 0;
+	struct wpc_asic *wpc = dev->priv;
+	U8 val;
+
+	switch (addr + WPC_ASIC_BASE)
+	{
+		case WPC_LEDS:
+			val = wpc->led;
+			break;
+
+		case WPC_ROM_BANK:
+			val = wpc->rombank;
+			break;
+
+		case WPC_DEBUG_CONTROL_PORT:
+			val = 3;
+			break;
+
+		case WPC_DEBUG_DATA_PORT:
+			val = 0xFF;
+			break;
+
+		default:
+			val = 0;
+			break;
+	}
+	printf (">>> ASIC read %04X -> %02X\n", addr + WPC_ASIC_BASE, val);
+	return val;
 }
 
 void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
+	struct wpc_asic *wpc = dev->priv;
+	switch (addr + WPC_ASIC_BASE)
+	{
+		case WPC_LEDS:
+			wpc->led = val;
+			break;
+
+		case WPC_ZEROCROSS_IRQ_CLEAR:
+			/* ignore for now */
+			break;
+
+		case WPC_ROM_BANK:
+			wpc->rombank = val;
+			bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READONLY);
+			break;
+
+		case WPC_DEBUG_DATA_PORT:
+			putchar (val);
+			break;
+
+		default:
+			break;
+	}
+	printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
 }
 
 
@@ -130,13 +194,27 @@ struct hw_class wpc_asic_class =
 
 struct hw_class *wpc_asic_create (void)
 {
+	struct wpc_asic *wpc = calloc (sizeof (struct wpc_asic), 1);
+	return device_attach (&wpc_asic_class, 0x800, wpc);
 }
+
 
 void wpc_init (const char *boot_rom_file)
 {
-	ram_create (0x2000);
-	if (boot_rom_file)
-		rom_create (boot_rom_file);
+	struct hw_device *rom_dev;
+
+	device_define ( wpc_asic_create (), 0,
+		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);
+
+	device_define ( ram_create (WPC_RAM_SIZE), 0,
+		WPC_RAM_BASE, WPC_RAM_SIZE, MAP_READWRITE );
+
+	rom_dev = rom_create (boot_rom_file, WPC_ROM_SIZE);
+	device_define ( rom_dev, 0,
+		WPC_PAGED_REGION, WPC_PAGED_SIZE, MAP_READONLY);
+	device_define ( rom_dev, WPC_ROM_SIZE - WPC_FIXED_SIZE,
+		WPC_FIXED_REGION, WPC_FIXED_SIZE, MAP_READONLY);
+		
 	wpc_asic_create ();
 }
 

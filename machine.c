@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "machine.h"
 #include "eon.h"
 
@@ -42,6 +43,12 @@ U16 fault_addr;
 
 U8 fault_type;
 
+static int system_running = 0;
+
+void cpu_is_running (void)
+{
+	system_running = 1;
+}
 
 /**
  * Attach a new device to the bus.  Only called during init.
@@ -105,6 +112,15 @@ void bus_map (unsigned int addr,
 	}
 }
 
+void device_define (struct hw_device *dev,
+	unsigned long offset,
+	unsigned int addr,
+	unsigned int len,
+	unsigned int flags)
+{
+	bus_map (addr, dev->devid, offset, len, flags);
+}
+
 
 void bus_unmap (unsigned int addr, unsigned int len)
 {
@@ -131,9 +147,15 @@ void bus_unmap (unsigned int addr, unsigned int len)
  */
 void page_fault (unsigned int addr, unsigned char type)
 {
-	fault_addr = addr;
-	fault_type = type;
-	irq ();
+	if (system_running)
+	{
+		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
+#if 0
+		fault_addr = addr;
+		fault_type = type;
+		irq ();
+#endif
+	}
 }
 
 
@@ -149,21 +171,6 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 		page_fault (addr, FAULT_NO_RESPONSE);
 	return device_table[id];
 }
-
-#ifdef DEBUG
-void dump_machine (void)
-{
-	unsigned int mapno;
-
-	for (mapno = 0; mapno < NUM_BUS_MAPS; mapno++)
-	{
-		struct bus_map *map = &busmaps[mapno];
-		printf ("Map %d  addr=%04X  dev=%d  offset=%04X  size=%06X\n",
-			mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
-			device_table[map->devid]->size);
-	}
-}
-#endif
 
 
 /**
@@ -195,6 +202,28 @@ void cpu_write8 (unsigned int addr, U8 val)
 
 	(*class_ptr->write) (dev, phy_addr, val);
 }
+
+
+void dump_machine (void)
+{
+	unsigned int mapno;
+	unsigned int n;
+
+	for (mapno = 0; mapno < NUM_BUS_MAPS; mapno++)
+	{
+		struct bus_map *map = &busmaps[mapno];
+		printf ("Map %d  addr=%04X  dev=%d  offset=%04X  size=%06X\n",
+			mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
+			0 /* device_table[map->devid]->size */);
+
+#if 0
+		for (n = 0; n < BUS_MAP_SIZE; n++)
+			printf ("%02X ", cpu_read8 (mapno * BUS_MAP_SIZE + n));
+		printf ("\n");
+#endif
+	}
+}
+
 
 /**********************************************************/
 
@@ -241,11 +270,7 @@ struct hw_class ram_class =
 struct hw_device *ram_create (unsigned long size)
 {
 	void *buf = malloc (size);
-	struct hw_device *dev = device_attach (&ram_class, size, buf);
-	/* Map the RAM into the entire address space of the 6809.
-	Other devices that get attached may override this. */
-	bus_map (0x0000, dev->devid, 0, MAX_CPU_ADDR, MAP_READWRITE);
-	return dev;
+	return device_attach (&ram_class, size, buf);
 }
 
 /**********************************************************/
@@ -255,24 +280,40 @@ struct hw_class rom_class =
 	.readonly = 1,
 	.reset = null_reset,
 	.read = ram_read,
-	.write = null_write,
+	.write = ram_write,
 };
 
-struct hw_device *rom_create (const char *filename)
+
+struct hw_device *rom_create (const char *filename, unsigned int maxsize)
 {
 	FILE *fp;
-	struct hw_device *dev = NULL;
+	struct hw_device *dev;
+	unsigned int image_size;
+	char *buf;
 
-	fp = fopen (filename, "rb");
-	if (fp)
-	{
-		unsigned int size = sizeof_file (fp);
-		char *buf = malloc (size);
-		fread (buf, size, 1, fp);
-		dev = device_attach (&rom_class, size, buf);
-		bus_map (BOOT_ROM_ADDR, dev->devid, 0, BOOT_ROM_SIZE, MAP_READONLY);
-		fclose (fp);
+	if (filename)
+	{	
+		fp = fopen (filename, "rb");
+		if (!fp)
+			return NULL;
+		image_size = sizeof_file (fp);
 	}
+
+	buf = malloc (maxsize);
+	dev = device_attach (&rom_class, maxsize, buf);
+	if (filename)
+	{
+		fread (buf, image_size, 1, fp);
+		fclose (fp);
+		maxsize -= image_size;
+		while (maxsize > 0)
+		{
+			memcpy (buf + image_size, buf, image_size);
+			buf += image_size;
+			maxsize -= image_size;
+		}
+	}
+
 	return dev;
 }
 
@@ -312,16 +353,9 @@ struct hw_class console_class =
 	.write = console_write,
 };
 
-void console_init (void)
+struct hw_device *console_create (void)
 {
-	struct hw_device *dev = device_attach (&console_class, BUS_MAP_SIZE, NULL);
-	bus_map (CONSOLE_ADDR, dev->devid, 0, BUS_MAP_SIZE, MAP_READWRITE);
-
-#ifdef CONFIG_LEGACY
-	/* For legacy code, which still thinks the console I/O is
-	mapped elsewhere... */
-	bus_map (0xff00, dev->devid, 0, BUS_MAP_SIZE, MAP_READWRITE);
-#endif
+	return device_attach (&console_class, BUS_MAP_SIZE, NULL);
 }
 
 /**********************************************************/
@@ -383,7 +417,7 @@ void mmu_reset_complete (struct hw_device *dev)
 	sync with the MMU registers. */
 	for (page = 0; page < MMU_PAGECOUNT; page++)
 	{
-		map = &busmaps[page * (MMU_PAGESIZE / BUS_MAP_SIZE)];
+		map = &busmaps[4 + page * (MMU_PAGESIZE / BUS_MAP_SIZE)];
 		mmu_regs[page][0] = map->devid;
 		mmu_regs[page][1] = map->offset / MMU_PAGESIZE;
 		mmu_regs[page][2] = map->flags & 0x1;
@@ -402,10 +436,9 @@ struct hw_class mmu_class =
 	.write = mmu_write,
 };
 
-void mmu_init (void)
+struct hw_device *mmu_create (void)
 {
-	struct hw_device *dev = device_attach (&mmu_class, BUS_MAP_SIZE, NULL);
-	bus_map (MMU_ADDR, dev->devid, 0, BUS_MAP_SIZE, MAP_READWRITE+MAP_FIXED);
+	return device_attach (&mmu_class, BUS_MAP_SIZE, NULL);
 }
 
 /**********************************************************/
@@ -512,7 +545,7 @@ struct hw_class disk_class =
 	.write = disk_write,
 };
 
-void disk_init (const char *backing_file)
+struct hw_device *disk_create (const char *backing_file)
 {
 	struct disk_priv *disk = malloc (sizeof (struct disk_priv));
 	int newdisk = 0;
@@ -534,12 +567,10 @@ void disk_init (const char *backing_file)
 	disk->dev = device_attach (&disk_class, BUS_MAP_SIZE, disk);
 	disk->sectors = DISK_SECTOR_COUNT;
 
-	bus_map (DISK_ADDR(0), disk->dev->devid, 0, BUS_MAP_SIZE, MAP_READWRITE);
-
 	if (newdisk)
-	{
 		disk_format (disk->dev);
-	}
+
+	return disk->dev;
 }
 
 /**********************************************************/
@@ -548,7 +579,9 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 {
 	memset (busmaps, 0, sizeof (busmaps));
 
-	if (!strcmp (machine_name, "eon"))
+	if (!strcmp (machine_name, "simple"))
+		simple_init (boot_rom_file);
+	else if (!strcmp (machine_name, "eon"))
 		eon_init (boot_rom_file);
 	else if (!strcmp (machine_name, "wpc"))
 		wpc_init (boot_rom_file);
@@ -560,6 +593,8 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 	necessary. */
 	memcpy (default_busmaps, busmaps, sizeof (busmaps));
 
-	mmu_reset_complete (mmu_device);
+	if (!strcmp (machine_name, "eon"))
+		mmu_reset_complete (mmu_device);
+	//dump_machine ();
 }
 
