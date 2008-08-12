@@ -32,6 +32,8 @@
 extern void eon_init (const char *);
 extern void wpc_init (const char *);
 
+struct machine *machine;
+
 unsigned int device_count = 0;
 struct hw_device *device_table[MAX_BUS_DEVICES];
 
@@ -43,7 +45,7 @@ U16 fault_addr;
 
 U8 fault_type;
 
-static int system_running = 0;
+int system_running = 0;
 
 void cpu_is_running (void)
 {
@@ -145,19 +147,6 @@ void bus_unmap (unsigned int addr, unsigned int len)
  * Generate a page fault.  ADDR says which address was accessed
  * incorrectly.  TYPE says what kind of violation occurred.
  */
-void page_fault (unsigned int addr, unsigned char type)
-{
-	if (system_running)
-	{
-		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
-#if 0
-		fault_addr = addr;
-		fault_type = type;
-		irq ();
-#endif
-	}
-}
-
 
 static struct bus_map *find_map (unsigned int addr)
 {
@@ -168,7 +157,7 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 {
 	/* Fault if any invalid device is accessed */
 	if ((id == INVALID_DEVID) || (id >= device_count))
-		page_fault (addr, FAULT_NO_RESPONSE);
+		machine->fault (addr, FAULT_NO_RESPONSE);
 	return device_table[id];
 }
 
@@ -198,9 +187,9 @@ void cpu_write8 (unsigned int addr, U8 val)
 
 	/* This can fail if the area is read-only */
 	if (map->flags & MAP_READONLY)
-		page_fault (addr, FAULT_NOT_WRITABLE);
-
-	(*class_ptr->write) (dev, phy_addr, val);
+		machine->fault (addr, FAULT_NOT_WRITABLE);
+	else
+		(*class_ptr->write) (dev, phy_addr, val);
 }
 
 

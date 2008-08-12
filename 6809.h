@@ -65,7 +65,7 @@ typedef uint16_t target_addr_t;
 
 extern int debug_enabled;
 extern int need_flush;
-extern int total;
+extern unsigned int total;
 extern int dump_cycles_on_success;
 
 #ifdef OLDSYS
@@ -121,5 +121,15 @@ extern int dasm (char *, int);
 extern int load_hex (char *);
 extern int load_s19 (char *);
 extern int load_bin (char *,int);
+
+#define MAX_STRINGSPACE 32000
+#define MAX_SYMBOL_HASH 1009
+
+#define SYM_KEYWORD 0
+#define SYM_COMMAND 1
+#define SYM_REGISTER 2
+#define SYM_MEM 3
+#define SYM_INT 4
+
 
 #endif /* M6809_H */

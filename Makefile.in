@@ -34,7 +34,6 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-LIBOBJDIR =
 bin_PROGRAMS = m6809-run$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
@@ -53,7 +52,8 @@ am__installdirs = "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_m6809_run_OBJECTS = 6809.$(OBJEXT) main.$(OBJEXT) monitor.$(OBJEXT) \
-	machine.$(OBJEXT) eon.$(OBJEXT) wpc.$(OBJEXT)
+	machine.$(OBJEXT) eon.$(OBJEXT) wpc.$(OBJEXT) symtab.$(OBJEXT) \
+	command.$(OBJEXT)
 m6809_run_OBJECTS = $(am_m6809_run_OBJECTS)
 m6809_run_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
@@ -156,7 +156,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-m6809_run_SOURCES = 6809.c main.c monitor.c machine.c eon.c wpc.c
+m6809_run_SOURCES = 6809.c main.c monitor.c machine.c eon.c wpc.c symtab.c command.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -246,10 +246,12 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/6809.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/command.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/machine.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symtab.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wpc.Po@am__quote@
 
 .c.o:

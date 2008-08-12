@@ -2,12 +2,36 @@
 #include "machine.h"
 #include "eon.h"
 
+extern int system_running;
+
+
+void eon_fault (unsigned int addr, unsigned char type)
+{
+	if (system_running)
+	{
+		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
+#if 0
+		fault_addr = addr;
+		fault_type = type;
+		irq ();
+#endif
+	}
+}
+
+struct machine eon_machine =
+{
+	.fault = eon_fault,
+};
+
+
 /**
  * Initialize the EON machine.
  */
 void eon_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
+
+	machine = &eon_machine;
 
 	/* The MMU must be defined first, as all other devices
 	that are attached can try to hook into the MMU. */
@@ -38,6 +62,7 @@ void eon_init (const char *boot_rom_file)
  */
 void simple_init (const char *boot_rom_file)
 {
+	machine = &eon_machine;
 	device_define ( ram_create (RAM_SIZE), 0,
 		0x0000, MAX_CPU_ADDR, MAP_READWRITE );
 	device_define ( console_create (), 0,

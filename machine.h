@@ -115,4 +115,11 @@ struct hw_device
 	void *priv;
 };
 
+extern struct machine *machine;
+
+struct machine
+{
+	void (*fault) (unsigned int addr, unsigned char type);
+};
+
 #endif /* _M6809_MACHINE_H */

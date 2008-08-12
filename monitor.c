@@ -29,17 +29,11 @@
 /* A container for all symbol table information */
 struct symbol_table symtab;
 
-/* An array of breakpoint objects */
-struct breakpoint bptab[MAX_BREAKPOINTS];
-
 /* The function call stack */
 struct function_call fctab[MAX_FUNCTION_CALLS];
 
 /* The top of the function call stack */
 struct function_call *current_function_call;
-
-/* A bitmask of things to show at the monitor prompt */
-unsigned int prompt_flags;
 
 /* Automatically break after executing this many instructions */
 int auto_break_insn_count = 0;
@@ -931,6 +925,10 @@ find_symbol (target_addr_t value)
 {
 	struct symbol *sym = NULL;
 
+#if 1
+	return NULL;
+#endif
+
 	while (value > 0)
 	{
 		sym = symtab.addr_to_symbol[value];
@@ -1611,6 +1609,7 @@ static void
 monitor_signal (int sigtype)
 {
   (void) sigtype;
+  putchar ('\n');
   monitor_on = 1;
 }
 
@@ -1630,105 +1629,25 @@ monitor_init (void)
 		symtab.addr_to_symbol[a] = NULL;
 	} while (++a != 0);
 
-	for (bp = 0; bp < MAX_BREAKPOINTS; bp++) {
-		bptab[bp].flags = BP_FREE;
-	}
-
 	fctab[0].entry_point = read16 (0xfffe);
 	memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
 	current_function_call = &fctab[0];
-
-	prompt_flags = PROMPT_REGS | PROMPT_INSN;
 
   auto_break_insn_count = do_break = 0;
   monitor_on = debug_enabled;
   signal (SIGINT, monitor_signal);
 }
 
+
 int
 check_break (unsigned break_pc)
 {
-  int temp_pc = break_pc & 0xffff;
-
-  if (do_break != 0)
-    {
-      int tmp;
-
-      for (tmp = 0; tmp < MAX_BREAKPOINTS; tmp++)
-	{
-	if ((bptab[tmp].flags & BP_USED) && (bptab[tmp].addr == temp_pc))
-		{
-		printf ("Breakpoint %d at %s reached\n", tmp, monitor_addr_name (temp_pc));
-	    	return 1;
-		}
-	}
-    }
-
-  if (auto_break_insn_count > 0)
-    if (--auto_break_insn_count == 0)
-      return 1;
-
-  return 0;
+	if (auto_break_insn_count > 0)
+		if (--auto_break_insn_count == 0)
+			return 1;
+	return 0;
 }
 
-void
-add_breakpoint (int break_pc)
-{
-  int tmp;
-  int clear = -1;
-
-  for (tmp = 0; tmp < MAX_BREAKPOINTS; tmp++)
-    {
-      if (bptab[tmp].addr == break_pc)
-	break;
-      else if ((bptab[tmp].flags & BP_USED) == 0)
-	{
-	  clear = tmp;
-	  break;
-	}
-    }
-
-  if (clear == -1)
-    {
-      printf ("failed to add breakpoint\n");
-      return;
-    }
-
-  bptab[clear].count = 1;
-  bptab[clear].flags = BP_USED;
-  bptab[clear].addr = break_pc;
-  do_break++;
-  printf ("Breakpoint %d set at %s\n", clear, monitor_addr_name (break_pc));
-}
-
-void
-clear_breakpoint (int break_pc)
-{
-  int tmp;
-
-  for (tmp = 0; tmp < MAX_BREAKPOINTS; tmp++)
-    {
-      if (bptab[tmp].addr == break_pc)
-	{
-	  bptab[tmp].addr = 0; /* invalid address */
-	  bptab[tmp].flags = BP_FREE;
-	  do_break--;
-	}
-    }
-}
-
-
-void
-show_breakpoints (void)
-{
-  int tmp;
-
-  for (tmp = 0; tmp < MAX_BREAKPOINTS; tmp++)
-    {
-      if (bptab[tmp].flags & BP_USED) 
-	printf ("%d : %s\n", tmp, monitor_addr_name (bptab[tmp].addr));
-    }
-}
 
 void
 cmd_dump (int start, int end)
@@ -1799,7 +1718,6 @@ cmd_show (void)
   int pc = get_pc ();
   char inst[50];
   int offset, moffset;
-  extern int total;
 
   moffset = dasm (inst, pc);
 
@@ -1826,7 +1744,7 @@ monitor_prompt (void)
 	target_addr_t pc = get_pc ();
 	dasm (inst, pc);
 
-	printf ("      S:%04X U:%04X X:%04X Y:%04X D:%04X\n", 
+	printf ("S:%04X U:%04X X:%04X Y:%04X D:%04X\n", 
 		get_s (), get_u (), get_x (), get_y (), get_d ());
 
 	printf ("%30.30s   %s\n", monitor_addr_name (pc), inst);
@@ -1846,73 +1764,28 @@ monitor_backtrace (void)
 int
 monitor6809 (void)
 {
-  char cmd_str[50];
-  char *arg[10];
-  int arg_count;
+	signal (SIGINT, monitor_signal);
+	monitor_on = 0;
+	return command_loop ();
 
-  signal (SIGINT, monitor_signal);
-  monitor_on = 0;
-
-  /* cmd_show (); */
-  monitor_prompt ();
-
-  for (;;)
-    {
-
-      printf ("(m6809-run) ");
-      fflush (stdout);
-      fflush (stdin);
-
-      fgets (cmd_str, sizeof (cmd_str), stdin);
-
-      arg_count = str_scan (cmd_str, arg, 5);
-
-      if (arg_count == 0)
-	{
-	  auto_break_insn_count = 1;
-	  return 0;
-	}
-
-      switch (get_command (arg[0], cmd_table))
-	{
-	case CMD_NEXT:
-	case CMD_STEP:
-	  auto_break_insn_count = 1;
-	  return 0;
-
+#if 0
 	case CMD_HELP:
 	  puts ("\n6809 monitor commands:                         ");
 	  puts ("HELP                  - shows this text          ");
-	  puts ("DUMP   start end      - dump memory start to end ");
 	  puts ("DASM   start end      - disassemble start to end ");
-	  puts ("RUN    n              - run n instructions       ");
-	  puts ("GO     addr           - start executing at addr  ");
 	  puts ("SET    register value - put value to register    ");
 	  puts ("SET    flag           - set CC flag              ");
 	  puts ("CLR    register       - clear register           ");
 	  puts ("CLR    flag           - clear CC flag            ");
 	  puts ("SHOW   register       - show register hex value  ");
 	  puts ("SHOW   flag           - show CC flag             ");
-	  puts ("SETBRK addr           - set breakpoint to addr   ");
-	  puts ("CLRBRK addr           - clear breakpoint at addr ");
-	  puts ("bl                    - list breakpoints         ");
 	  puts ("boff                  - disable all breakpoints  ");
 	  puts ("bon                   - enable all breakpoints   ");
-	  puts ("q                     - quit simulator           ");
-	  puts ("g                     - go!                      ");
-	  puts ("number formats $hex, @oct, %bin, dec           \n");
 	  continue;
 
 	case CMD_BACKTRACE:
 		monitor_backtrace ();
 		continue;
-
-	case CMD_DUMP:
-	  if (arg_count != 3)
-	    break;
-	  cmd_dump (str_getnumber (arg[1]) & 0xffff,
-		    str_getnumber (arg[2]) & 0xffff);
-	  continue;
 
 	case CMD_DASM:
 	  if (arg_count != 3)
@@ -1920,14 +1793,6 @@ monitor6809 (void)
 	  cmd_dasm (str_getnumber (arg[1]) & 0xffff,
 		    str_getnumber (arg[2]) & 0xffff);
 	  continue;
-
-	case CMD_RUN:
-	  if (arg_count != 2)
-	    break;
-	  auto_break_insn_count = str_getnumber (arg[1]) & 0xffff;
-	  if (auto_break_insn_count != 0)
-	    return 0;
-	  break;
 
 	case CMD_JUMP:
 	  if (arg_count != 2)
@@ -2140,28 +2005,6 @@ monitor6809 (void)
 	    }
 	  break;		/* invalid argument */
 
-	case CMD_SETBRK:
-	  if (arg_count != 2)
-	    break;
-	  add_breakpoint (str_getnumber (arg[1]) & 0xffff);
-	  continue;
-
-	case CMD_CLRBRK:
-	  if (arg_count != 2)
-	    break;
-	  clear_breakpoint (str_getnumber (arg[1]) & 0xffff);
-	  continue;
-
-	case CMD_BRKSHOW:
-	  show_breakpoints ();
-	  continue;
-
-	case CMD_QUIT:
-	  cpu_quit = 0;
-	  return 1;
-	case CMD_CONTINUE:
-	  return 0;
-
 	case CMD_RESET:
 		cpu_reset ();
 		continue;
@@ -2174,4 +2017,5 @@ monitor6809 (void)
 
       puts ("invalid argument or number of arguments");
     }
+#endif
 }

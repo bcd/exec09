@@ -63,6 +63,7 @@ void request_irq (unsigned int source)
 	 * IRQ immediately.  Else, mark it pending and
 	 * we'll check it later when the flags change.
 	 */
+	//printf ("request IRQ : pending=%02X flags=%02X\n", irqs_pending, EFI);
 	irqs_pending |= (1 << source);
 	if (!(EFI & I_FLAG))
 		irq ();
@@ -94,7 +95,7 @@ sim_error (const char *format, ...)
 	va_list ap;
 
 	va_start (ap, format);
-	fprintf (stderr, "m6809-run: (at PC=%04X) ", PC);
+	fprintf (stderr, "m6809-run: (at PC=%04X) ", iPC);
 	vfprintf (stderr, format, ap);
 	va_end (ap);
 
@@ -102,6 +103,13 @@ sim_error (const char *format, ...)
 		monitor_on = 1;
 	else
 		exit (2);
+}
+
+
+unsigned long
+get_cycles (void)
+{
+	return total + cpu_period - cpu_clk;
 }
 
 
@@ -119,7 +127,7 @@ sim_exit (uint8_t exit_code)
 
 	/* If a cycle count should be printed, do that last. */
 	if (dump_cycles_on_success)
-		printf ("Finished in %d cycles\n", total + cpu_period - cpu_clk);
+		printf ("Finished in %d cycles\n", get_cycles ());
 
 	exit (exit_code);
 }
@@ -1448,6 +1456,9 @@ rts (void)
 void
 irq (void)
 {
+	static unsigned int irq_count = 0;
+	//printf (">>> IRQ #%d\n", ++irq_count);
+
   EFI |= E_FLAG;
   S = (S - 2) & 0xffff;
   write_stack16 (S, PC & 0xffff);
@@ -1468,6 +1479,9 @@ irq (void)
   EFI |= (I_FLAG | F_FLAG);
 
   change_pc (read16 (0xfff8));
+#if 1
+  irqs_pending = 0;
+#endif
 }
 
 void
@@ -1671,6 +1685,7 @@ cpu_execute (int cycles)
 
   do
     {
+	 	command_insn_hook ();
       if (check_break (PC) != 0)
 	monitor_on = 1;
       if (monitor_on != 0)
@@ -2022,7 +2037,7 @@ cpu_execute (int cycles)
 		st16 (S);
 		break;
 	      default:
-	        sim_error ("invalid opcode at %s\n", monitor_addr_name (iPC));
+	        sim_error ("invalid opcode (1) at %s\n", monitor_addr_name (iPC));
 		break;
 	      }
 	  }
@@ -2082,7 +2097,7 @@ cpu_execute (int cycles)
 		cpu_clk--;
 		break;
 	      default:
-	        sim_error ("invalid opcode at %s\n", monitor_addr_name (iPC));
+	        sim_error ("invalid opcode (2) at %s\n", monitor_addr_name (iPC));
 		break;
 	      }
 	  }
@@ -3009,7 +3024,8 @@ cpu_execute (int cycles)
 
 	default:
 	  cpu_clk -= 2;
-          sim_error ("invalid opcode at %s\n", monitor_addr_name (iPC));
+     sim_error ("invalid opcode '%02X'\n", opcode);
+     PC = iPC;
 	  break;
 	}
     }

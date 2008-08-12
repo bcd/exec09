@@ -36,6 +36,8 @@
 
 #define WPC_DEBUG_DATA_PORT			0x3D60
 #define WPC_DEBUG_CONTROL_PORT		0x3D61
+#define WPC_DEBUG_WRITE_READY   0x1
+#define WPC_DEBUG_READ_READY    0x2
 #define WPC_PINMAME_CYCLE_COUNT		0x3D62
 #define WPC_PINMAME_FUNC_ENTRY_HI	0x3D63
 #define WPC_PINMAME_FUNC_ENTRY_LO	0x3D64
@@ -116,14 +118,68 @@
 
 struct wpc_asic
 {
+	struct hw_device *rom_dev;
+	struct hw_device *ram_dev;
+
 	U8 led;
 	U8 rombank;
+	U8 ram_unlocked;
+	U8 ram_lock_size;
 };
 
 
 void wpc_asic_reset (struct hw_device *dev)
 {
 }
+
+static int wpc_console_inited = 0;
+
+static U8 wpc_get_console_state (void)
+{
+	fd_set fds;
+	struct timeval timeout;
+	U8 rc = WPC_DEBUG_WRITE_READY;
+
+	if (!wpc_console_inited)
+		rc |= WPC_DEBUG_READ_READY;
+
+	FD_ZERO (&fds);
+	FD_SET (0, &fds);
+
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
+	if (select (1, &fds, NULL, NULL, &timeout))
+	{
+		rc |= WPC_DEBUG_READ_READY;
+		printf ("read ready!\n");
+	}
+
+	return rc;
+}
+
+
+static U8 wpc_console_read (void)
+{
+	int rc;
+	U8 c = 0;
+
+	if (!wpc_console_inited)
+	{
+		wpc_console_inited = 1;
+		return 0;
+	}
+
+	rc = read (0, &c, 1);
+	return c;
+}
+
+
+static void wpc_console_write (U8 val)
+{
+	putchar (val);
+	fflush (stdout);
+}
+
 
 U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 {
@@ -141,20 +197,58 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 			break;
 
 		case WPC_DEBUG_CONTROL_PORT:
-			val = 3;
+			val = wpc_get_console_state ();
 			break;
 
 		case WPC_DEBUG_DATA_PORT:
-			val = 0xFF;
+			val = wpc_console_read ();
 			break;
 
 		default:
 			val = 0;
 			break;
 	}
-	printf (">>> ASIC read %04X -> %02X\n", addr + WPC_ASIC_BASE, val);
+	//printf (">>> ASIC read %04X -> %02X\n", addr + WPC_ASIC_BASE, val);
 	return val;
 }
+
+
+/**
+ * Enforce the current read-only area of RAM.
+ */
+void wpc_update_ram (struct wpc_asic *wpc)
+{
+	unsigned int size_writable = WPC_RAM_SIZE;
+
+	if (!wpc->ram_unlocked)
+	{
+		switch (wpc->ram_lock_size)
+		{
+			default:
+				break;
+			case 0xF:
+				size_writable -= 256;
+				break;
+			case 0x7:
+				size_writable -= 512;
+			case 0x3:
+				size_writable -= 1024;
+				break;
+			case 0x1:
+				size_writable -= 2048;
+				break;
+			case 0:
+				size_writable -= 4096;
+				break;
+		}
+	}
+
+	bus_map (WPC_RAM_BASE, wpc->ram_dev->devid, 0, size_writable, MAP_READWRITE);
+	if (size_writable < WPC_RAM_SIZE)
+		bus_map (WPC_RAM_BASE + size_writable, wpc->ram_dev->devid, size_writable,
+			WPC_RAM_SIZE - size_writable, MAP_READONLY);
+}
+
 
 void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
@@ -175,13 +269,23 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 			break;
 
 		case WPC_DEBUG_DATA_PORT:
-			putchar (val);
+			wpc_console_write (val);
+			break;
+
+		case WPC_RAM_LOCK:
+			wpc->ram_unlocked = val;
+			wpc_update_ram (wpc);
+			break;
+
+		case WPC_RAM_LOCKSIZE:
+			wpc->ram_lock_size = val;
+			wpc_update_ram (wpc);
 			break;
 
 		default:
 			break;
 	}
-	printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
+	//printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
 }
 
 
@@ -192,29 +296,44 @@ struct hw_class wpc_asic_class =
 	.write = wpc_asic_write,
 };
 
-struct hw_class *wpc_asic_create (void)
+struct hw_device *wpc_asic_create (void)
 {
 	struct wpc_asic *wpc = calloc (sizeof (struct wpc_asic), 1);
 	return device_attach (&wpc_asic_class, 0x800, wpc);
 }
 
 
+void wpc_fault (unsigned int addr, unsigned char type)
+{
+}
+
+struct machine wpc_machine =
+{
+	.fault = wpc_fault,
+};
+
+
 void wpc_init (const char *boot_rom_file)
 {
-	struct hw_device *rom_dev;
+	struct hw_device *dev;
+	struct wpc_asic *wpc;
 
-	device_define ( wpc_asic_create (), 0,
+	machine = &wpc_machine;
+
+	device_define ( dev = wpc_asic_create (), 0,
 		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);
+	wpc = dev->priv;
 
-	device_define ( ram_create (WPC_RAM_SIZE), 0,
+	device_define ( dev = ram_create (WPC_RAM_SIZE), 0,
 		WPC_RAM_BASE, WPC_RAM_SIZE, MAP_READWRITE );
+	wpc->ram_dev = dev;
 
-	rom_dev = rom_create (boot_rom_file, WPC_ROM_SIZE);
-	device_define ( rom_dev, 0,
+	dev = rom_create (boot_rom_file, WPC_ROM_SIZE);
+	device_define ( dev, 0,
 		WPC_PAGED_REGION, WPC_PAGED_SIZE, MAP_READONLY);
-	device_define ( rom_dev, WPC_ROM_SIZE - WPC_FIXED_SIZE,
+	device_define ( dev, WPC_ROM_SIZE - WPC_FIXED_SIZE,
 		WPC_FIXED_REGION, WPC_FIXED_SIZE, MAP_READONLY);
-		
-	wpc_asic_create ();
+	wpc->rom_dev = dev;
+	wpc_update_ram (wpc);
 }
 

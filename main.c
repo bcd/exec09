@@ -27,18 +27,18 @@ enum
 
 
 /* The total number of cycles that have executed */
-int total = 0;
+unsigned int total = 0;
 
 /* The frequency of the emulated CPU, in megahertz */
-int mhz = 1;
+unsigned int mhz = 1;
 
 /* When nonzero, indicates that the IRQ should be triggered periodically,
 every so many cycles.  By default no periodic IRQ is generated. */
-int cycles_per_irq = 0;
+unsigned int cycles_per_irq = 0;
 
 /* When nonzero, indicates that the FIRQ should be triggered periodically,
 every so many cycles.  By default no periodic FIRQ is generated. */
-int cycles_per_firq = 0;
+unsigned int cycles_per_firq = 0;
 
 /* Nonzero if debugging support is turned on */
 int debug_enabled = 0;
@@ -116,10 +116,10 @@ main (int argc, char *argv[])
 	      type = BIN;
 	      break;
 	    case 'I':
-	      cycles_per_irq = strtoul (argv[++argn], NULL, 16);
+	      cycles_per_irq = strtoul (argv[++argn], NULL, 0);
 	      break;
 	    case 'F':
-	      cycles_per_firq = strtoul (argv[++argn], NULL, 16);
+	      cycles_per_firq = strtoul (argv[++argn], NULL, 0);
 	      break;
 	    case 'C':
 	      dump_cycles_on_success = 1;
@@ -175,7 +175,10 @@ main (int argc, char *argv[])
 
 
 	/* Initialize all of the simulator pieces. */
+	sym_init ();
 	monitor_init ();
+	command_init ();
+
 	load_map_file (load_tmp_map ? "tmp" : name);
 #ifdef OLDSYS
 	TARGET_INIT ();
@@ -198,7 +201,7 @@ main (int argc, char *argv[])
 		{
 			/* TODO - FIRQ not handled yet */
 			total += cpu_execute (cycles_per_irq);
-			irq ();
+			request_irq (0);
 		}
 
 		/* Check for a rogue program that won't end */
