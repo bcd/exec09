@@ -160,9 +160,7 @@ main (int argc, char *argv[])
 	usage ();
       break;
     case S19:
-#ifndef OLDSYS
 		machine_init (machine_name, NULL);
-#endif
       if (load_s19 (name))
 			usage ();
       break;

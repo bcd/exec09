@@ -186,7 +186,7 @@ void cpu_write8 (unsigned int addr, U8 val)
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 
 	/* This can fail if the area is read-only */
-	if (map->flags & MAP_READONLY)
+	if (system_running && (map->flags & MAP_READONLY))
 		machine->fault (addr, FAULT_NOT_WRITABLE);
 	else
 		(*class_ptr->write) (dev, phy_addr, val);
@@ -584,6 +584,5 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 
 	if (!strcmp (machine_name, "eon"))
 		mmu_reset_complete (mmu_device);
-	//dump_machine ();
 }
 

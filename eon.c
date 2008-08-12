@@ -63,7 +63,7 @@ void eon_init (const char *boot_rom_file)
 void simple_init (const char *boot_rom_file)
 {
 	machine = &eon_machine;
-	device_define ( ram_create (RAM_SIZE), 0,
+	device_define ( ram_create (MAX_CPU_ADDR), 0,
 		0x0000, MAX_CPU_ADDR, MAP_READWRITE );
 	device_define ( console_create (), 0,
 		0xFF00, BUS_MAP_SIZE, MAP_READWRITE );
