@@ -41,9 +41,10 @@ unsigned E, F, V, MD;
 
 unsigned iPC;
 
+unsigned long irq_start_time;
 unsigned ea = 0;
-int cpu_clk = 0;
-int cpu_period = 0;
+long cpu_clk = 0;
+long cpu_period = 0;
 int cpu_quit = 1;
 unsigned int irqs_pending = 0;
 unsigned int firqs_pending = 0;
@@ -1419,6 +1420,7 @@ rti (void)
 {
   monitor_return ();
   cpu_clk -= 6;
+  command_irq_hook (get_cycles () - irq_start_time);
   set_cc (read_stack (S));
   S = (S + 1) & 0xffff;
 
@@ -1475,6 +1477,7 @@ irq (void)
   write_stack (S, get_cc ());
   EFI |= (I_FLAG | F_FLAG);
 
+  irq_start_time = get_cycles ();
   change_pc (read16 (0xfff8));
 #if 1
   irqs_pending = 0;
@@ -1687,7 +1690,7 @@ cpu_execute (int cycles)
 	monitor_on = 1;
       if (monitor_on != 0)
 	if (monitor6809 () != 0)
-	  return cpu_period - cpu_clk;
+      goto cpu_exit;
 
       iPC = PC;
       opcode = imm_byte ();
@@ -3028,7 +3031,10 @@ cpu_execute (int cycles)
     }
   while (cpu_clk > 0);
 
-  return cpu_period - cpu_clk;
+cpu_exit:
+   cpu_period -= cpu_clk;
+   cpu_clk = cpu_period;
+   return cpu_period;
 }
 
 void

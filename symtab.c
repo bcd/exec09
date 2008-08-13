@@ -26,10 +26,9 @@
 
 struct stringspace *current_stringspace;
 
-struct symtab default_symtab;
+struct symtab program_symtab;
 
-struct symtab *current_symtab = &default_symtab;
-
+struct symtab internal_symtab;
 
 struct stringspace *stringspace_create (void)
 {
@@ -74,10 +73,15 @@ unsigned int sym_hash_value (unsigned long value)
 }
 
 
-int sym_find (const char *name, unsigned long *value, unsigned int type)
+/**
+ * Lookup the symbol 'name'.
+ * Returns 0 if the symbol exists (and optionally stores its value
+ * in *value if not NULL), or -1 if it does not exist.
+ */
+int sym_find (struct symtab *symtab,
+              const char *name, unsigned long *value, unsigned int type)
 {
 	unsigned int hash = sym_hash_name (name);
-   struct symtab *symtab = current_symtab;
 
    /* Search starting in the current symbol table, and if that fails,
     * try its parent tables. */
@@ -93,7 +97,8 @@ int sym_find (const char *name, unsigned long *value, unsigned int type)
    		{
    			if (type && (chain->type != type))
    				return -1;
-   			*value = chain->value;
+            if (value)
+			*value = chain->value;
    			return 0;
    		}
    		chain = chain->chain;
@@ -123,7 +128,8 @@ const char *sym_lookup (struct symtab *symtab, unsigned long value)
 }
 
 
-void sym_add (const char *name, unsigned long value, unsigned int type)
+void sym_add (struct symtab *symtab,
+              const char *name, unsigned long value, unsigned int type)
 {
 	unsigned int hash;
 	struct symbol *s, *chain;
@@ -134,20 +140,21 @@ void sym_add (const char *name, unsigned long value, unsigned int type)
 	s->type = type;
    
    hash = sym_hash_name (name);
-	chain = current_symtab->syms_by_name[hash];
+	chain = symtab->syms_by_name[hash];
 	s->chain = chain;
-	current_symtab->syms_by_name[hash] = s;
+	symtab->syms_by_name[hash] = s;
 
    hash = sym_hash_value (value);
-	chain = current_symtab->syms_by_value[hash];
+	chain = symtab->syms_by_value[hash];
 	s->chain = chain;
-	current_symtab->syms_by_value[hash] = s;
+	symtab->syms_by_value[hash] = s;
 }
 
 
 void sym_init (void)
 {
 	current_stringspace = stringspace_create ();
-	memset (&default_symtab, 0, sizeof (default_symtab));
+	memset (&program_symtab, 0, sizeof (program_symtab));
+	memset (&internal_symtab, 0, sizeof (internal_symtab));
 }
 

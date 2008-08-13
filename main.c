@@ -27,7 +27,7 @@ enum
 
 
 /* The total number of cycles that have executed */
-unsigned int total = 0;
+unsigned long total = 0;
 
 /* The frequency of the emulated CPU, in megahertz */
 unsigned int mhz = 1;
@@ -150,6 +150,8 @@ main (int argc, char *argv[])
       argn++;
     }
 
+	sym_init ();
+
 	switch (type)
 	{
 		case HEX:
@@ -167,9 +169,6 @@ main (int argc, char *argv[])
 			machine_init (machine_name, name);
 			break;
 	}
-
-	/* Initialize all of the simulator pieces. */
-	sym_init ();
 
 	/* Try to load a map file */
 	if (load_tmp_map)

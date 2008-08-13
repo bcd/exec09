@@ -9,6 +9,8 @@
 #include <sys/time.h>
 #include <sys/errno.h>
 
+#define PERIODIC_INTERVAL 50  /* in ms */
+
 /**********************************************************/
 /********************* Global Data ************************/
 /**********************************************************/
@@ -43,10 +45,13 @@ extern int auto_break_insn_count;
 /******************** 6809 Functions **********************/
 /**********************************************************/
 
+
 void
 print_addr (absolute_address_t addr)
 {
-   printf ("%02X:%04X", addr >> 28, addr & 0xFFFFFF);
+   print_device_name (addr >> 28);
+   putchar (':');
+   printf ("%04X", addr & 0xFFFFFF);
 }
 
 
@@ -93,14 +98,26 @@ assign_virtual (const char *name, unsigned long val)
 {
    virtual_handler_t virtual;
    unsigned long v_val;
-   if (sym_find (name, &v_val, 0))
-   {
-      syntax_error ("???");
-      return;
-   }
+
+   if (sym_find (&internal_symtab, name, &v_val, 0))
+      sym_add (&internal_symtab, name, 0, 0);
 
 	virtual = (virtual_handler_t)v_val;
 	virtual (&val, 1);
+}
+
+
+/**
+ * Returns $name if name is defined as a symbol.
+ * Returns NULL otherwise.
+ */
+const char *
+virtual_defined (const char *name)
+{
+	if (sym_find (&internal_symtab, name, NULL, 0))
+      return name;
+   else
+      return NULL;
 }
 
 
@@ -114,7 +131,7 @@ eval_virtual (const char *name)
     * symbol table, which holds the pointer to a
     * variable in simulator memory, or to a function
     * that can compute the value on-the-fly. */
-	if (sym_find (name, &val, 0))
+	if (sym_find (&internal_symtab, name, &val, 0))
 	{
 		syntax_error ("???");
 		return 0;
@@ -125,13 +142,6 @@ eval_virtual (const char *name)
 	return val;
 }
 
-unsigned long
-eval_absolute (const char *page, const char *addr)
-{
-	unsigned long pageval = eval (page);
-	unsigned long cpuaddr = eval (addr);
-	/* ... */
-}
 
 void
 eval_assign (const char *expr, unsigned long val)
@@ -151,8 +161,7 @@ target_read (absolute_address_t addr, unsigned int size)
 		case 1:
 			return abs_read8 (addr);
 		case 2:
-			return abs_read8 (addr) << 8 +
-            abs_read8 (addr+1);
+			return abs_read16 (addr);
 	}
 }
 
@@ -167,6 +176,8 @@ parse_format_flag (const char *flags, unsigned char *formatp)
          case 'x':
          case 'd':
          case 'u':
+         case 'o':
+         case 'a':
             *formatp = *flags;
             break;
       }
@@ -271,11 +282,16 @@ eval (const char *expr)
    else if (*expr == '*')
    {
       absolute_address_t addr = eval_mem (expr+1);
-      return target_read (addr, 1);
+      return abs_read8 (addr);
    }
    else if (*expr == '@')
    {
       val = eval_mem (expr+1);
+   }
+   else if (isalpha (*expr))
+   {
+      if (sym_find (&program_symtab, expr, &val, 0))
+         val = 0;
    }
    else
    {
@@ -311,6 +327,7 @@ brkalloc (void)
          br->id = n;
          br->conditional = 0;
          br->threaded = 0;
+         br->keep_running = 0;
          brk_enable (br, 1);
          return br;
       }
@@ -366,6 +383,8 @@ brkprint (breakpoint_t *brkpt)
       printf (" if %s", brkpt->condition);
    if (brkpt->threaded)
       printf (" on thread %d", brkpt->tid);
+   if (brkpt->keep_running)
+      printf (", print-only");
    putchar ('\n');
 }
 
@@ -393,13 +412,26 @@ print_value (unsigned long val, datatype_t *typep)
 {
    char f[8];
 
-	if (typep->format == 'x')
-		printf ("0x");
-	else if (typep->format == 'o')
-		printf ("0");
+   switch (typep->format)
+   {
+      case 'a':
+         print_addr (val);
+         return;
+   }
 
-   sprintf (f, "%%0*%c", typep->format);
-   printf (f, typep->size, val);
+	if (typep->format == 'x')
+   {
+		printf ("0x");
+      sprintf (f, "%%0%d%c", typep->size * 2, typep->format);
+   }
+	else if (typep->format == 'o')
+   {
+		printf ("0");
+      sprintf (f, "%%%c", typep->format);
+   }
+   else
+      sprintf (f, "%%%c", typep->format);
+   printf (f, val);
 }
 
 
@@ -428,8 +460,16 @@ do_examine (void)
       parse_format_flag (command_flags, &examine_type.format);
    parse_size_flag (command_flags, &examine_type.size);
 
-	if (examine_type.format == 'i')
-		objs_per_line = 1;
+	switch (examine_type.format)
+   {
+      case 'i':
+		   objs_per_line = 1;
+         break;
+
+      case 'w':
+		   objs_per_line = 8;
+         break;
+   }
 
    for (n = 0; n < examine_repeat; n++)
    {
@@ -530,12 +570,21 @@ void cmd_break (void)
 
 void cmd_watch1 (int on_read, int on_write)
 {
-   const char *arg = getarg ();
+   const char *arg;
+
+   arg = getarg ();
    absolute_address_t addr = eval_mem (arg);
    breakpoint_t *br = brkalloc ();
    br->addr = addr;
    br->on_read = on_read;
    br->on_write = on_write;
+
+   arg = getarg ();
+   if (!arg)
+      return;
+   if (!strcmp (arg, "print"))
+      br->keep_running = 1;
+
    brkprint (br);
 }
 
@@ -593,6 +642,37 @@ void cmd_delete (void)
    }
 }
 
+void cmd_list (void)
+{
+   char *arg;
+   static absolute_address_t lastpc = 0;
+   static absolute_address_t lastaddr = 0;
+   absolute_address_t addr;
+   int n;
+
+   arg = getarg ();
+   if (arg)
+      addr = eval_mem (arg);
+   else
+   {
+      addr = to_absolute (get_pc ());
+      if (addr == lastpc)
+         addr = lastaddr;
+      else
+         lastaddr = lastpc = addr;
+   }
+
+   for (n = 0; n < 10; n++)
+   {
+      print_addr (addr);
+      printf (" : ");
+      addr += print_insn (addr);
+      putchar ('\n');
+   }
+
+   lastaddr = addr;
+}
+
 /****************** Parser ************************/
 
 void cmd_help (void);
@@ -628,10 +708,14 @@ struct command_name
       "Reset the CPU" },
    { "h", "help", cmd_help,
       "Display this help" },
-   { "wa", "watch", cmd_watch },
-   { "rwa", "rwatch", cmd_rwatch },
-   { "awa", "awatch", cmd_awatch },
+   { "wa", "watch", cmd_watch,
+      "Add a watchpoint on write" },
+   { "rwa", "rwatch", cmd_rwatch,
+      "Add a watchpoint on read" },
+   { "awa", "awatch", cmd_awatch,
+      "Add a watchpoint on read/write" },
    { "?", "?", cmd_help },
+   { "l", "list", cmd_list },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -639,7 +723,12 @@ struct command_name
    { "tr", "trace", cmd_trace },
    { "di", "disable", cmd_disable },
    { "en", "enable", cmd_enable },
-   { "l", "list", cmd_list },
+   { "f", "file", cmd_file,
+      "Choose the program to be debugged" },
+   { "exe", "exec-file", cmd_exec_file,
+      "Open an executable" },
+   { "sym", "symbol-file", cmd_symbol_file,
+      "Open a symbol table file" },
 #endif
    { NULL, NULL },
 };
@@ -678,6 +767,8 @@ command_lookup (const char *cmd)
          return cn->handler;
       if (!strcmp (cmd, cn->name))
          return cn->handler;
+      /* TODO - look for a match anywhere between
+       * the minimum prefix and the full name */
       cn++;
    }
    return NULL;
@@ -721,10 +812,10 @@ command_loop (void)
    command_handler_t handler;
    int rc;
 
+   print_current_insn ();
    exit_command_loop = -1;
    while (exit_command_loop < 0)
    {
-      print_current_insn ();
       command_prompt ();
 
       do {
@@ -781,20 +872,25 @@ command_read_hook (absolute_address_t addr)
 	breakpoint_t *br = brkfind_by_addr (addr);
 	if (br && br->enabled && br->on_read)
    {
-      printf ("Watchpoint %d triggered.\n", br->id);
-      monitor_on = 1;
+      printf ("Watchpoint %d triggered. [", br->id);
+      print_addr (addr);
+      printf ("]\n");
+      monitor_on = !br->keep_running;
    }
 }
 
 
 void
-command_write_hook (absolute_address_t addr)
+command_write_hook (absolute_address_t addr, U8 val)
 {
 	breakpoint_t *br = brkfind_by_addr (addr);
 	if (br && br->enabled && br->on_write)
    {
-      printf ("Watchpoint %d triggered.\n", br->id);
-      monitor_on = 1;
+      printf ("Watchpoint %d triggered. [", br->id);
+      print_addr (addr);
+      printf (" = 0x%02X", val);
+      printf ("]\n");
+      monitor_on = !br->keep_running;
    }
 }
 
@@ -832,13 +928,28 @@ void cycles_virtual (unsigned long *val, int writep)
 }
 
 
+
 void
 command_periodic (int signo)
 {
+   static unsigned long last_cycles = 0;
+
    if (!monitor_on && signo == SIGALRM)
    {
       /* TODO */
+#if 0
+      unsigned long diff = get_cycles () - last_cycles;
+      printf ("%d cycles in 50ms\n");
+      last_cycles += diff;
+#endif
    }
+}
+
+
+void
+command_irq_hook (unsigned long cycles)
+{
+   //printf ("IRQ took %lu cycles\n", cycles);
 }
 
 
@@ -849,15 +960,15 @@ command_init (void)
    struct sigaction sact;
    int rc;
 
-   sym_add ("pc", (unsigned long)pc_virtual, SYM_REGISTER);
-   sym_add ("x", (unsigned long)x_virtual, SYM_REGISTER);
-   sym_add ("y", (unsigned long)y_virtual, SYM_REGISTER);
-   sym_add ("u", (unsigned long)u_virtual, SYM_REGISTER);
-   sym_add ("s", (unsigned long)s_virtual, SYM_REGISTER);
-   sym_add ("d", (unsigned long)d_virtual, SYM_REGISTER);
-   sym_add ("dp", (unsigned long)dp_virtual, SYM_REGISTER);
-   sym_add ("cc", (unsigned long)cc_virtual, SYM_REGISTER);
-   sym_add ("cycles", (unsigned long)cycles_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "pc", (unsigned long)pc_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "x", (unsigned long)x_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "y", (unsigned long)y_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "u", (unsigned long)u_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "s", (unsigned long)s_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "d", (unsigned long)d_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "dp", (unsigned long)dp_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "cc", (unsigned long)cc_virtual, SYM_REGISTER);
+   sym_add (&internal_symtab, "cycles", (unsigned long)cycles_virtual, SYM_REGISTER);
 
    examine_type.format = 'x';
    examine_type.size = 1;
@@ -870,10 +981,10 @@ command_init (void)
    sact.sa_handler = command_periodic;
    sigaction (SIGALRM, &sact, NULL);
 
-   itimer.it_interval.tv_sec = 1;
-   itimer.it_interval.tv_usec = 0;
-   itimer.it_value.tv_sec = 1;
-   itimer.it_value.tv_usec = 0;
+   itimer.it_interval.tv_sec = 0;
+   itimer.it_interval.tv_usec = PERIODIC_INTERVAL * 1000;
+   itimer.it_value.tv_sec = 0;
+   itimer.it_value.tv_usec = PERIODIC_INTERVAL * 1000;
    rc = setitimer (ITIMER_REAL, &itimer, NULL);
    if (rc < 0)
       fprintf (stderr, "couldn't register interval timer\n");

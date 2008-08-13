@@ -19,6 +19,7 @@
  */
 
 #include "6809.h"
+#include <sys/time.h>
 
 #define WPC_RAM_BASE                0x0000
 #define WPC_RAM_SIZE                0x2000
@@ -127,11 +128,18 @@ struct wpc_asic
 	U8 ram_lock_size;
 	U16 shiftaddr;
 	U16 shiftbit;
+   U8 lamp_strobe;
+   U8 lamp_mx[8];
+   U8 sols[6];
+   U8 switch_strobe;
+   U8 switch_mx[8];
+   U8 directsw;
 };
 
 
 void wpc_asic_reset (struct hw_device *dev)
 {
+   struct wpc_asic *wpc = dev->priv;
 }
 
 static int wpc_console_inited = 0;
@@ -180,6 +188,20 @@ static void wpc_console_write (U8 val)
 {
 	putchar (val);
 	fflush (stdout);
+}
+
+
+static int scanbit (U8 val)
+{
+   if (val & 0x80) return 7;
+   else if (val & 0x40) return 6;
+   else if (val & 0x20) return 5;
+   else if (val & 0x10) return 4;
+   else if (val & 0x08) return 3;
+   else if (val & 0x04) return 2;
+   else if (val & 0x02) return 1;
+   else if (val & 0x01) return 0;
+   else return -1;
 }
 
 
@@ -310,12 +332,24 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 			wpc->shiftbit = val;
 			break;
 
+      case WPC_LAMP_ROW_OUTPUT:
+         wpc->lamp_mx[scanbit (wpc->lamp_strobe)] = val;
+         break;
+
+      case WPC_LAMP_COL_STROBE:
+         wpc->lamp_strobe = val;
+         break;
+
 		default:
 			break;
 	}
 	//printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
 }
 
+
+void wpc_periodic (void)
+{
+}
 
 struct hw_class wpc_asic_class =
 {
@@ -363,5 +397,7 @@ void wpc_init (const char *boot_rom_file)
 		WPC_FIXED_REGION, WPC_FIXED_SIZE, MAP_READONLY);
 	wpc->rom_dev = dev;
 	wpc_update_ram (wpc);
+
+   sym_add (&program_symtab, "WPC_ROM_BANK", to_absolute (WPC_ROM_BANK), 0);
 }
 

@@ -162,6 +162,14 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 }
 
 
+void
+print_device_name (unsigned int devno)
+{
+   struct hw_device *dev = device_table[devno];
+   printf ("%02X", devno);
+}
+
+
 absolute_address_t
 absolute_from_reladdr (unsigned int device, unsigned long reladdr)
 {
@@ -207,10 +215,8 @@ void cpu_write8 (unsigned int addr, U8 val)
 	if (system_running && (map->flags & MAP_READONLY))
 		machine->fault (addr, FAULT_NOT_WRITABLE);
 	else
-	{
-		command_write_hook (absolute_from_reladdr (map->devid, phy_addr));
 		(*class_ptr->write) (dev, phy_addr, val);
-	}
+	command_write_hook (absolute_from_reladdr (map->devid, phy_addr), val);
 }
 
 

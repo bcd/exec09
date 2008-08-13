@@ -65,7 +65,7 @@ typedef uint16_t target_addr_t;
 
 extern int debug_enabled;
 extern int need_flush;
-extern unsigned int total;
+extern unsigned long total;
 extern int dump_cycles_on_success;
 
 #ifdef OLDSYS
@@ -82,8 +82,10 @@ extern UINT8 *memory;
 
 /* Fetch macros */
 
-#define fetch8()           read8(pc++)
-#define fetch16()          (pc += 2, read16(pc-2))
+#define abs_read16(addr)   ((abs_read8(addr) << 8) | abs_read8(addr+1))
+
+#define fetch8()           abs_read8 (pc++)
+#define fetch16()          (pc += 2, abs_read16(pc-2))
 
 /* 6809.c */
 extern int cpu_quit;
@@ -116,7 +118,7 @@ extern int monitor_on;
 extern int check_break (unsigned);
 extern void monitor_init (void); 
 extern int monitor6809 (void);
-extern int dasm (char *, int);
+extern int dasm (char *, absolute_address_t);
 
 extern int load_hex (char *);
 extern int load_s19 (char *);
@@ -131,6 +133,15 @@ extern int load_bin (char *,int);
 #define SYM_MEM 3
 #define SYM_INT 4
 
+
+
+typedef struct
+{
+   unsigned char format;
+   unsigned int size;
+} datatype_t;
+
+
 /* symtab.c */
 struct stringspace
 {
@@ -143,6 +154,7 @@ struct symbol
 {
 	char *name;
 	unsigned long value;
+   datatype_t ty;
 	unsigned int type;
 	struct symbol *chain;
 };
@@ -155,8 +167,11 @@ struct symtab
    struct symtab *parent;
 };
 
-void sym_add (const char *name, unsigned long value, unsigned int type);
-int sym_find (const char *name, unsigned long *value, unsigned int type);
+extern struct symtab program_symtab;
+extern struct symtab internal_symtab;
+
+void sym_add (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
+int sym_find (struct symtab *symtab, const char *name, unsigned long *value, unsigned int type);
 const char *sym_lookup (struct symtab *symtab, unsigned long value);
 
 typedef void (*command_handler_t) (void);
@@ -167,15 +182,16 @@ typedef unsigned int thread_id_t;
 
 typedef struct
 {
-   int id : 8;
-   int used : 1;
-   int enabled : 1;
-   int conditional : 1;
-   int threaded : 1;
-   int on_read : 1;
-   int on_write : 1;
-   int on_execute : 1;
-   int size : 4;
+   unsigned int id : 8;
+   unsigned int used : 1;
+   unsigned int enabled : 1;
+   unsigned int conditional : 1;
+   unsigned int threaded : 1;
+   unsigned int on_read : 1;
+   unsigned int on_write : 1;
+   unsigned int on_execute : 1;
+   unsigned int size : 4;
+   unsigned int keep_running : 1;
    absolute_address_t addr;
    char condition[128];
    thread_id_t tid;
@@ -183,12 +199,6 @@ typedef struct
    unsigned int ignore_count;
 } breakpoint_t;
 
-
-typedef struct
-{
-   unsigned char format;
-   unsigned int size;
-} datatype_t;
 
 
 typedef struct
@@ -211,5 +221,6 @@ typedef struct
 #define MAX_HISTORY 10
 #define MAX_THREADS 64
 
+void command_irq_hook (unsigned long cycles);
 
 #endif /* M6809_H */
