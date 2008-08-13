@@ -162,6 +162,23 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 }
 
 
+absolute_address_t
+absolute_from_reladdr (unsigned int device, unsigned long reladdr)
+{
+   return (device * 0x10000000L) + reladdr;
+}
+
+
+U8 abs_read8 (absolute_address_t addr)
+{
+   unsigned int id = addr >> 28;
+   unsigned long phy_addr = addr & 0xFFFFFFF;
+	struct hw_device *dev = device_table[id];
+	struct hw_class *class_ptr = dev->class_ptr;
+	return (*class_ptr->read) (dev, phy_addr);
+}
+
+
 /**
  * Called by the CPU to read a byte.
  */
@@ -171,6 +188,7 @@ U8 cpu_read8 (unsigned int addr)
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
+	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
 	return (*class_ptr->read) (dev, phy_addr);
 }
 
@@ -189,7 +207,20 @@ void cpu_write8 (unsigned int addr, U8 val)
 	if (system_running && (map->flags & MAP_READONLY))
 		machine->fault (addr, FAULT_NOT_WRITABLE);
 	else
+	{
+		command_write_hook (absolute_from_reladdr (map->devid, phy_addr));
 		(*class_ptr->write) (dev, phy_addr, val);
+	}
+}
+
+
+absolute_address_t
+to_absolute (unsigned long cpuaddr)
+{
+	struct bus_map *map = find_map (cpuaddr);
+	struct hw_device *dev = find_device (cpuaddr, map->devid);
+	unsigned long phy_addr = map->offset + cpuaddr % BUS_MAP_SIZE;
+	return absolute_from_reladdr (map->devid, phy_addr);
 }
 
 

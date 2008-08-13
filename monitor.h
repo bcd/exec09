@@ -28,7 +28,7 @@ struct cpu_regs {
 };
 
 
-struct symbol {
+struct x_symbol {
 	int flags;
 	union {
 		struct named_symbol {
@@ -71,7 +71,7 @@ struct function_call {
 };
 
 void add_named_symbol (const char *id, target_addr_t value, const char *filename);
-struct symbol * find_symbol (target_addr_t value);
+struct x_symbol * find_symbol (target_addr_t value);
 void monitor_branch (void);
 void monitor_call (unsigned int flags);
 void monitor_return (void);

@@ -1456,9 +1456,6 @@ rts (void)
 void
 irq (void)
 {
-	static unsigned int irq_count = 0;
-	//printf (">>> IRQ #%d\n", ++irq_count);
-
   EFI |= E_FLAG;
   S = (S - 2) & 0xffff;
   write_stack16 (S, PC & 0xffff);
@@ -1563,14 +1560,14 @@ swi3 (void)
 void
 cwai (void)
 {
-  puts ("CWAI - not suported yet!");
+  puts ("CWAI - not supported yet!");
   exit (100);
 }
 
 void
 sync (void)
 {
-  puts ("SYNC - not suported yet!");
+  puts ("SYNC - not supported yet!");
   exit (100);
   cpu_clk -= 4;
 }

@@ -131,5 +131,85 @@ extern int load_bin (char *,int);
 #define SYM_MEM 3
 #define SYM_INT 4
 
+/* symtab.c */
+struct stringspace
+{
+	char space[32000];
+	unsigned int used;
+};
+
+
+struct symbol
+{
+	char *name;
+	unsigned long value;
+	unsigned int type;
+	struct symbol *chain;
+};
+
+
+struct symtab
+{
+   struct symbol *syms_by_name[MAX_SYMBOL_HASH];
+   struct symbol *syms_by_value[MAX_SYMBOL_HASH];
+   struct symtab *parent;
+};
+
+void sym_add (const char *name, unsigned long value, unsigned int type);
+int sym_find (const char *name, unsigned long *value, unsigned int type);
+const char *sym_lookup (struct symtab *symtab, unsigned long value);
+
+typedef void (*command_handler_t) (void);
+
+typedef void (*virtual_handler_t) (unsigned long *val, int writep);
+
+typedef unsigned int thread_id_t;
+
+typedef struct
+{
+   int id : 8;
+   int used : 1;
+   int enabled : 1;
+   int conditional : 1;
+   int threaded : 1;
+   int on_read : 1;
+   int on_write : 1;
+   int on_execute : 1;
+   int size : 4;
+   absolute_address_t addr;
+   char condition[128];
+   thread_id_t tid;
+   unsigned int pass_count;
+   unsigned int ignore_count;
+} breakpoint_t;
+
+
+typedef struct
+{
+   unsigned char format;
+   unsigned int size;
+} datatype_t;
+
+
+typedef struct
+{
+   int used : 1;
+   datatype_t type;
+   char expr[128];
+} display_t;
+
+
+typedef struct
+{
+   int id : 8;
+   thread_id_t tid;
+} thread_t;
+
+
+#define MAX_BREAKS 32
+#define MAX_DISPLAYS 32
+#define MAX_HISTORY 10
+#define MAX_THREADS 64
+
 
 #endif /* M6809_H */

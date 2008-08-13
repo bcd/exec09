@@ -88,9 +88,6 @@ main (int argc, char *argv[])
 
   exename = argv[0];
 
-  if (argc == 1)
-    usage ();
-
   while (argn < argc)
     {
       if (argv[argn][0] == '-')
@@ -153,37 +150,42 @@ main (int argc, char *argv[])
       argn++;
     }
 
-  switch (type)
-    {
-    case HEX:
-      if (load_hex (name))
-	usage ();
-      break;
-    case S19:
-		machine_init (machine_name, NULL);
-      if (load_s19 (name))
-			usage ();
-      break;
-    case BIN:
-		machine_init (machine_name, name);
-      //if (load_bin (name, off & 0xffff))
-			//usage ();
-      break;
-    }
+	switch (type)
+	{
+		case HEX:
+			if (name && load_hex (name))
+				usage ();
+			break;
 
+		case S19:
+			machine_init (machine_name, NULL);
+			if (name && load_s19 (name))
+				usage ();
+			break;
+
+		default:
+			machine_init (machine_name, name);
+			break;
+	}
 
 	/* Initialize all of the simulator pieces. */
 	sym_init ();
+
+	/* Try to load a map file */
+	if (load_tmp_map)
+		load_map_file ("tmp");
+	else if (name)
+		load_map_file (name);
+
+	/* Enable debugging if no executable given yet. */
+	if (!name)
+		debug_enabled = 1;
+	else
+		/* OK, ready to run.  Reset the CPU first. */
+		cpu_reset ();
+
 	monitor_init ();
 	command_init ();
-
-	load_map_file (load_tmp_map ? "tmp" : name);
-#ifdef OLDSYS
-	TARGET_INIT ();
-#endif
-
-	/* OK, ready to run.  Reset the CPU first. */
-	cpu_reset ();
 
 	/* Now, iterate through the instructions.
 	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()

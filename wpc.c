@@ -125,6 +125,8 @@ struct wpc_asic
 	U8 rombank;
 	U8 ram_unlocked;
 	U8 ram_lock_size;
+	U16 shiftaddr;
+	U16 shiftbit;
 };
 
 
@@ -204,6 +206,18 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 			val = wpc_console_read ();
 			break;
 
+		case WPC_SHIFTADDR:
+			val = wpc->shiftaddr >> 8;
+			break;
+
+		case WPC_SHIFTADDR+1:
+			val = (wpc->shiftaddr & 0xFF) + (wpc->shiftbit % 8);
+			break;
+
+		case WPC_SHIFTBIT:
+			val = 1 << (wpc->shiftbit % 8);
+			break;
+
 		default:
 			val = 0;
 			break;
@@ -280,6 +294,20 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 		case WPC_RAM_LOCKSIZE:
 			wpc->ram_lock_size = val;
 			wpc_update_ram (wpc);
+			break;
+
+		case WPC_SHIFTADDR:
+			wpc->shiftaddr &= 0x00FF;
+			wpc->shiftaddr |= val << 8;
+			break;
+
+		case WPC_SHIFTADDR+1:
+			wpc->shiftaddr &= 0xFF00;
+			wpc->shiftaddr |= val;
+			break;
+
+		case WPC_SHIFTBIT:
+			wpc->shiftbit = val;
 			break;
 
 		default:

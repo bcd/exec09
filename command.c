@@ -1,49 +1,13 @@
 
 #include "6809.h"
 #include "monitor.h"
+#include "machine.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-typedef void (*command_handler_t) (void);
-
-typedef void (*virtual_handler_t) (unsigned long *val, int writep);
-
-typedef unsigned long absolute_address_t;
-
-typedef unsigned int thread_id_t;
-
-typedef struct
-{
-   int id : 8;
-   int used : 1;
-   int enabled : 1;
-   int conditional : 1;
-   int threaded : 1;
-   int on_read : 1;
-   int on_write : 1;
-   int on_execute : 1;
-   int size : 4;
-   absolute_address_t addr;
-   char condition[128];
-   thread_id_t tid;
-   unsigned int pass_count;
-   unsigned int ignore_count;
-} breakpoint_t;
-
-
-typedef struct
-{
-	int used : 1;
-	unsigned int format;
-	unsigned int size;
-   char expr[128];
-} display_t;
-
-
-#define MAX_BREAKS 32
-#define MAX_DISPLAYS 32
-#define MAX_HISTORY 10
+#include <signal.h>
+#include <sys/time.h>
+#include <sys/errno.h>
 
 /**********************************************************/
 /********************* Global Data ************************/
@@ -61,11 +25,11 @@ unsigned long historytab[MAX_HISTORY];
 
 absolute_address_t examine_addr = 0;
 unsigned int examine_repeat = 1;
-unsigned char examine_format = 'x';
-unsigned int examine_size = 1;
+datatype_t examine_type;
 
-unsigned char print_format = 'x';
-unsigned int print_size = 1;
+thread_t threadtab[MAX_THREADS];
+
+datatype_t print_type;
 
 char *command_flags;
 
@@ -82,15 +46,9 @@ extern int auto_break_insn_count;
 void
 print_addr (absolute_address_t addr)
 {
-	printf ("%04X", addr);
+   printf ("%02X:%04X", addr >> 28, addr & 0xFFFFFF);
 }
 
-
-absolute_address_t
-to_absolute (unsigned long cpuaddr)
-{
-	return cpuaddr;
-}
 
 unsigned long
 compute_inirq (void)
@@ -102,6 +60,7 @@ unsigned long
 compute_infirq (void)
 {
 }
+
 
 
 /**********************************************************/
@@ -132,13 +91,13 @@ eval_historical (unsigned int id)
 void
 assign_virtual (const char *name, unsigned long val)
 {
-	virtual_handler_t virtual;
-	unsigned long v_val;
-	if (sym_find (name, &v_val, 0))
-	{
-		syntax_error ("???");
-		return;
-	}
+   virtual_handler_t virtual;
+   unsigned long v_val;
+   if (sym_find (name, &v_val, 0))
+   {
+      syntax_error ("???");
+      return;
+   }
 
 	virtual = (virtual_handler_t)v_val;
 	virtual (&val, 1);
@@ -190,9 +149,10 @@ target_read (absolute_address_t addr, unsigned int size)
 	switch (size)
 	{
 		case 1:
-			return read8 (addr);
+			return abs_read8 (addr);
 		case 2:
-			return read16 (addr);
+			return abs_read8 (addr) << 8 +
+            abs_read8 (addr+1);
 	}
 }
 
@@ -233,19 +193,6 @@ parse_size_flag (const char *flags, unsigned int *sizep)
 }
 
 
-unsigned long
-eval_indirect (const char *target_addr, const char *flags)
-{
-   absolute_address_t addr;
-   unsigned int size = 1;
-
-   addr = strtoul (target_addr, NULL, 0);
-
-
-   return target_read (addr, size);
-}
-
-
 int
 fold_binary (const char *expr, const char op, unsigned long *valp)
 {
@@ -254,6 +201,11 @@ fold_binary (const char *expr, const char op, unsigned long *valp)
 
 	if ((p = strchr (expr, op)) == NULL)
 		return 0;
+
+   /* If the operator is the first character of the expression,
+    * then it's really a unary and shouldn't match here. */
+   if (p == expr)
+      return 0;
 
    *p++ = '\0';
 	val1 = eval (expr);
@@ -267,6 +219,25 @@ fold_binary (const char *expr, const char op, unsigned long *valp)
 		case '/': *valp = val1 / val2; break;
 	}
 	return 1;
+}
+
+
+unsigned long
+eval_mem (const char *expr)
+{
+   char *p;
+   unsigned long val;
+
+   if ((p = strchr (expr, ':')) != NULL)
+   {
+      *p++ = '\0';
+      val = eval (expr) * 0x10000000L + eval (p);
+   }
+   else
+   {
+      val = to_absolute (eval (expr));
+   }
+   return val;
 }
 
 
@@ -297,14 +268,14 @@ eval (const char *expr)
       else
          val = eval_virtual (expr+1);
    }
-   else if ((p = strchr (expr, '?')) != NULL)
-   {
-      *p++ = '\0';
-      val = eval_absolute (expr, p);
-   }
    else if (*expr == '*')
    {
-      val = eval_indirect (expr+1, "");
+      absolute_address_t addr = eval_mem (expr+1);
+      return target_read (addr, 1);
+   }
+   else if (*expr == '@')
+   {
+      val = eval_mem (expr+1);
    }
    else
    {
@@ -377,7 +348,18 @@ brkprint (breakpoint_t *brkpt)
 {
    if (!brkpt->used)
       return;
-   printf ("Breakpoint %d at %08lX", brkpt->id, brkpt->addr);
+
+   if (brkpt->on_execute)
+      printf ("Breakpoint");
+   else
+   {
+      printf ("Watchpoint");
+      if (brkpt->on_read)
+         printf ("(%s)", brkpt->on_write ? "RW" : "RO");
+   }
+
+   printf (" %d at ", brkpt->id);
+   print_addr (brkpt->addr);
    if (!brkpt->enabled)
       printf (" (disabled)");
    if (brkpt->conditional)
@@ -387,18 +369,37 @@ brkprint (breakpoint_t *brkpt)
    putchar ('\n');
 }
 
+
+display_t *
+display_alloc (void)
+{
+}
+
+
 void
-print_value (unsigned long val, const char format, unsigned int size)
+display_free (display_t *ds)
+{
+}
+
+
+void
+display_print (void)
+{
+}
+
+
+void
+print_value (unsigned long val, datatype_t *typep)
 {
    char f[8];
 
-	if (format == 'x')
+	if (typep->format == 'x')
 		printf ("0x");
-	else if (format == 'o')
+	else if (typep->format == 'o')
 		printf ("0");
 
-   sprintf (f, "%%0*%c", format);
-   printf (f, size, val);
+   sprintf (f, "%%0*%c", typep->format);
+   printf (f, typep->size, val);
 }
 
 
@@ -422,12 +423,12 @@ do_examine (void)
       examine_repeat = strtoul (command_flags, &command_flags, 0);
 
 	if (*command_flags == 's' || *command_flags == 'i')
-		examine_format = *command_flags;
+		examine_type.format = *command_flags;
 	else
-   	parse_format_flag (command_flags, &examine_format);
-   parse_size_flag (command_flags, &examine_size);
+      parse_format_flag (command_flags, &examine_type.format);
+   parse_size_flag (command_flags, &examine_type.size);
 
-	if (examine_format == 'i')
+	if (examine_type.format == 'i')
 		objs_per_line = 1;
 
    for (n = 0; n < examine_repeat; n++)
@@ -439,7 +440,7 @@ do_examine (void)
 			printf (": ");
 		}
 
-      switch (examine_format)
+      switch (examine_type.format)
       {
          case 's': /* string */
             break;
@@ -449,10 +450,10 @@ do_examine (void)
             break;
 
          default:
-            print_value (target_read (examine_addr, examine_size),
-                         examine_format, examine_size);
+            print_value (target_read (examine_addr, examine_type.size),
+                         &examine_type);
             putchar (' ');
-      		examine_addr += examine_size;
+      		examine_addr += examine_type.size;
       }
    }
    putchar ('\n');
@@ -464,9 +465,9 @@ do_print (const char *expr)
    unsigned long val = eval (expr);
    printf ("$%d = ", history_count);
 
-   parse_format_flag (command_flags, &print_format);
-   parse_size_flag (command_flags, &print_size);
-   print_value (val, print_format, print_size);
+   parse_format_flag (command_flags, &print_type.format);
+   parse_size_flag (command_flags, &print_type.size);
+   print_value (val, &print_type);
    putchar ('\n');
    save_value (val);
 }
@@ -512,18 +513,49 @@ void cmd_examine (void)
 {
    const char *arg = getarg ();
    if (arg)
-      examine_addr = eval (arg);
+      examine_addr = eval_mem (arg);
    do_examine ();
 }
 
 void cmd_break (void)
 {
    const char *arg = getarg ();
-   unsigned long val = eval (arg);
+   unsigned long val = eval_mem (arg);
    breakpoint_t *br = brkalloc ();
    br->addr = val;
+   br->on_execute = 1;
    brkprint (br);
 }
+
+
+void cmd_watch1 (int on_read, int on_write)
+{
+   const char *arg = getarg ();
+   absolute_address_t addr = eval_mem (arg);
+   breakpoint_t *br = brkalloc ();
+   br->addr = addr;
+   br->on_read = on_read;
+   br->on_write = on_write;
+   brkprint (br);
+}
+
+
+void cmd_watch (void)
+{
+   cmd_watch1 (0, 1);
+}
+
+
+void cmd_rwatch (void)
+{
+   cmd_watch1 (1, 0);
+}
+
+void cmd_awatch (void)
+{
+   cmd_watch1 (1, 1);
+}
+
 
 void cmd_break_list (void)
 {
@@ -534,59 +566,75 @@ void cmd_break_list (void)
 
 void cmd_step_next (void)
 {
-	auto_break_insn_count = 1;
-	exit_command_loop = 0;
+   auto_break_insn_count = 1;
+   exit_command_loop = 0;
 }
 
 void cmd_continue (void)
 {
-	exit_command_loop = 0;
+   exit_command_loop = 0;
 }
 
 void cmd_quit (void)
 {
-	cpu_quit = 0;
-	exit_command_loop = 1;
+   cpu_quit = 0;
+   exit_command_loop = 1;
 }
 
-void cmd_clear (void)
+void cmd_delete (void)
 {
-	const char *arg = getarg ();
-	unsigned int id = atoi (arg);
-	breakpoint_t *br = brkfind_by_id (id);
-	if (br->used)
-	{
-		printf ("Clearing breakpoint %d\n", id);
-		brkfree (br);
-	}
+   const char *arg = getarg ();
+   unsigned int id = atoi (arg);
+   breakpoint_t *br = brkfind_by_id (id);
+   if (br->used)
+   {
+      printf ("Deleting breakpoint %d\n", id);
+      brkfree (br);
+   }
 }
-
 
 /****************** Parser ************************/
+
+void cmd_help (void);
 
 struct command_name
 {
    const char *prefix;
    const char *name;
    command_handler_t handler;
+   const char *help;
 } cmdtab[] = {
-   { "p", "print", cmd_print },
-   { "x", "examine", cmd_examine },
-	{ "set", "set", cmd_set },
-   { "b", "break", cmd_break },
-   { "bl", "blist", cmd_break_list },
-   { "cl", "clear", cmd_clear },
-   { "s", "step", cmd_step_next },
-   { "n", "next", cmd_step_next },
-   { "c", "continue", cmd_continue },
-	{ "q", "quit", cmd_quit },
-	{ "re", "reset", cpu_reset },
+   { "p", "print", cmd_print,
+      "Print the value of an expression" },
+   { "set", "set", cmd_set,
+      "Set an internal variable/target memory" },
+   { "x", "examine", cmd_examine,
+      "Examine raw memory" },
+   { "b", "break", cmd_break,
+      "Set a breakpoint" },
+   { "bl", "blist", cmd_break_list,
+      "List all breakpoints" },
+   { "d", "delete", cmd_delete,
+      "Delete a breakpoint" },
+   { "s", "step", cmd_step_next,
+      "Step to the next instruction" },
+   { "n", "next", cmd_step_next,
+      "Continue up to the next instruction" },
+   { "c", "continue", cmd_continue,
+      "Continue the program" },
+   { "q", "quit", cmd_quit,
+      "Quit the simulator" },
+   { "re", "reset", cpu_reset,
+      "Reset the CPU" },
+   { "h", "help", cmd_help,
+      "Display this help" },
+   { "wa", "watch", cmd_watch },
+   { "rwa", "rwatch", cmd_rwatch },
+   { "awa", "awatch", cmd_awatch },
+   { "?", "?", cmd_help },
 #if 0
+   { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
-   { "watch", cmd_watch },
-   { "rwatch", cmd_rwatch },
-   { "awatch", cmd_awatch },
-   { "d", "delete", cmd_delete },
    { "co", "condition", cmd_condition },
    { "tr", "trace", cmd_trace },
    { "di", "disable", cmd_disable },
@@ -595,6 +643,18 @@ struct command_name
 #endif
    { NULL, NULL },
 };
+
+void cmd_help (void)
+{
+   struct command_name *cn = cmdtab;
+   while (cn->prefix != NULL)
+   {
+      if (cn->help)
+         printf ("%s (%s) - %s\n",
+            cn->name, cn->prefix, cn->help);
+      cn++;
+   }
+}
 
 command_handler_t
 command_lookup (const char *cmd)
@@ -661,12 +721,17 @@ command_loop (void)
    command_handler_t handler;
    int rc;
 
-	exit_command_loop = -1;
+   exit_command_loop = -1;
    while (exit_command_loop < 0)
    {
-		print_current_insn ();
+      print_current_insn ();
       command_prompt ();
-      fgets (buffer, 255, stdin);
+
+      do {
+         errno = 0;
+         fgets (buffer, 255, stdin);
+      } while (errno != 0);
+
       if (feof (stdin))
          break;
 
@@ -676,7 +741,7 @@ command_loop (void)
       cmd = strtok (buffer, " \t\n");
       if (!cmd)
          continue;
-     	strcpy (prev_buffer, cmd);
+      strcpy (prev_buffer, cmd);
 
       handler = command_lookup (cmd);
       if (!handler)
@@ -687,26 +752,50 @@ command_loop (void)
 
       (*handler) ();
    }
-	return (exit_command_loop);
+   return (exit_command_loop);
 }
 
 
 void
 command_insn_hook (void)
 {
-	unsigned long abspc;
-	breakpoint_t *br;	
+   absolute_address_t abspc;
+	breakpoint_t *br;
 
 	if (active_break_count == 0)
 		return;
 
 	abspc = to_absolute (get_pc ());
 	br = brkfind_by_addr (abspc);
-	if (br && br->enabled)
+	if (br && br->enabled && br->on_execute)
 	{
 		printf ("Breakpoint %d reached.\n", br->id);
 		monitor_on = 1;
 	}
+}
+
+
+void
+command_read_hook (absolute_address_t addr)
+{
+	breakpoint_t *br = brkfind_by_addr (addr);
+	if (br && br->enabled && br->on_read)
+   {
+      printf ("Watchpoint %d triggered.\n", br->id);
+      monitor_on = 1;
+   }
+}
+
+
+void
+command_write_hook (absolute_address_t addr)
+{
+	breakpoint_t *br = brkfind_by_addr (addr);
+	if (br && br->enabled && br->on_write)
+   {
+      printf ("Watchpoint %d triggered.\n", br->id);
+      monitor_on = 1;
+   }
 }
 
 
@@ -738,23 +827,57 @@ void cc_virtual (unsigned long *val, int writep) {
 
 void cycles_virtual (unsigned long *val, int writep)
 {
-	if (!writep)
-		*val = get_cycles ();
+   if (!writep)
+      *val = get_cycles ();
+}
+
+
+void
+command_periodic (int signo)
+{
+   if (!monitor_on && signo == SIGALRM)
+   {
+      /* TODO */
+   }
 }
 
 
 void
 command_init (void)
 {
-	sym_add ("pc", pc_virtual, SYM_REGISTER);
-	sym_add ("x", x_virtual, SYM_REGISTER);
-	sym_add ("y", y_virtual, SYM_REGISTER);
-	sym_add ("u", u_virtual, SYM_REGISTER);
-	sym_add ("s", s_virtual, SYM_REGISTER);
-	sym_add ("d", d_virtual, SYM_REGISTER);
-	sym_add ("dp", dp_virtual, SYM_REGISTER);
-	sym_add ("cc", cc_virtual, SYM_REGISTER);
-	sym_add ("cycles", cycles_virtual, SYM_REGISTER);
+   struct itimerval itimer;
+   struct sigaction sact;
+   int rc;
+
+   sym_add ("pc", (unsigned long)pc_virtual, SYM_REGISTER);
+   sym_add ("x", (unsigned long)x_virtual, SYM_REGISTER);
+   sym_add ("y", (unsigned long)y_virtual, SYM_REGISTER);
+   sym_add ("u", (unsigned long)u_virtual, SYM_REGISTER);
+   sym_add ("s", (unsigned long)s_virtual, SYM_REGISTER);
+   sym_add ("d", (unsigned long)d_virtual, SYM_REGISTER);
+   sym_add ("dp", (unsigned long)dp_virtual, SYM_REGISTER);
+   sym_add ("cc", (unsigned long)cc_virtual, SYM_REGISTER);
+   sym_add ("cycles", (unsigned long)cycles_virtual, SYM_REGISTER);
+
+   examine_type.format = 'x';
+   examine_type.size = 1;
+
+   print_type.format = 'x';
+   print_type.size = 1;
+
+   sigemptyset (&sact.sa_mask);
+   sact.sa_flags = 0;
+   sact.sa_handler = command_periodic;
+   sigaction (SIGALRM, &sact, NULL);
+
+   itimer.it_interval.tv_sec = 1;
+   itimer.it_interval.tv_usec = 0;
+   itimer.it_value.tv_sec = 1;
+   itimer.it_value.tv_usec = 0;
+   rc = setitimer (ITIMER_REAL, &itimer, NULL);
+   if (rc < 0)
+      fprintf (stderr, "couldn't register interval timer\n");
 }
 
-
+/* vim: set ts=3: */
+/* vim: set expandtab: */

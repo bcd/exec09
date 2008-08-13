@@ -1,6 +1,6 @@
 /*
  * Copyright 2001 by Arto Salmi and Joze Fabcic
- * Copyright 2006 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006-2008 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -37,8 +37,6 @@ struct function_call *current_function_call;
 
 /* Automatically break after executing this many instructions */
 int auto_break_insn_count = 0;
-
-int do_break = 0;
 
 int monitor_on = 0;
 
@@ -896,10 +894,10 @@ char *off4[] = {
 void
 add_named_symbol (const char *id, target_addr_t value, const char *filename)
 {
-	struct symbol *sym;
+	struct x_symbol *sym;
 	static char *last_filename = "";
 	
-	symtab.addr_to_symbol[value] = sym = malloc (sizeof (struct symbol));
+	symtab.addr_to_symbol[value] = sym = malloc (sizeof (struct x_symbol));
 	sym->flags = S_NAMED;
 	sym->u.named.id = symtab.name_area_next;
 	sym->u.named.addr = value;
@@ -920,10 +918,10 @@ add_named_symbol (const char *id, target_addr_t value, const char *filename)
 }
 
 
-struct symbol *
+struct x_symbol *
 find_symbol (target_addr_t value)
 {
-	struct symbol *sym = NULL;
+	struct x_symbol *sym = NULL;
 
 #if 1
 	return NULL;
@@ -941,11 +939,11 @@ find_symbol (target_addr_t value)
 }
 
 
-struct symbol *
+struct x_symbol *
 find_symbol_by_name (const char *id)
 {
 	unsigned int addr;
-	struct symbol *sym;
+	struct x_symbol *sym;
 
 	for (addr = 0; addr < 0x10000; addr++)
 	{
@@ -1309,15 +1307,6 @@ load_s19 (char *name)
       switch (type)
 	{
 	case 1:
-#if 0
-		/* Validate the address. */
-		if (addr < 0x1000)
-		{
-		  printf ("invalid address 0x%04X\n", addr);
-		  return 1;
-		}
-#endif
-
 	  for (count -= 3; count != 0; count--, addr++, checksum += data)
 	    {
 	      fscanf (fp, "%2x", &data);
@@ -1354,36 +1343,6 @@ load_s19 (char *name)
   return 0;
 }
 
-#ifdef OLDSYS
-int
-load_bin (char *name, int addr)
-{
-  FILE *fp;
-  int size;
-
-  fp = fopen (name, "rb");
-
-  if (fp == NULL)
-    {
-      printf ("failed to open binary file %s.\n", name);
-      return 1;
-    }
-
-  size = sizeof_file (fp);
-
-  if ((addr + size) > 0x10000)
-    {
-      printf ("file %s size problems\n", name);
-      fclose (fp);
-      return 1;
-    }
-
-  fread (memory + addr, size, 1, fp);
-
-  fclose (fp);
-  return 0;
-}
-#endif
 
 
 void
@@ -1426,7 +1385,7 @@ const char *
 monitor_addr_name (target_addr_t addr)
 {
 	static char addr_name[256];
-	struct symbol *sym;
+	struct x_symbol *sym;
 
 	sym = find_symbol (addr);
 	if (sym)
@@ -1441,9 +1400,6 @@ monitor_addr_name (target_addr_t addr)
 		sprintf (addr_name, "$%04X", addr);
 	return addr_name;
 }
-
-
-#define CLEAR_BREAK		0xffffffff
 
 
 void
@@ -1462,7 +1418,7 @@ str_toupper (char *str)
 int
 str_getnumber (char *str)
 {
-	struct symbol *sym = find_symbol_by_name (str);
+	struct x_symbol *sym = find_symbol_by_name (str);
 	if (sym)
 		return sym->u.named.addr;
 
@@ -1583,26 +1539,6 @@ command_t arg_table[] = {
   {-1, NULL}
 };
 
-int
-get_command (char *str, command_t * table)
-{
-  int index;
-  int nro = -1;
-
-  if (*str == '\0' || str == NULL)
-    return -1;
-
-  for (index = 0; table[index].cmd_string != NULL; index++)
-    {
-      if (strcmp (str, table[index].cmd_string) == 0)
-	{
-	  nro = table[index].cmd_nro;
-	  break;
-	}
-    }
-
-  return nro;
-}
 
 
 static void
@@ -1620,7 +1556,6 @@ monitor_init (void)
 	int tmp;
 	extern int debug_enabled;
 	target_addr_t a;
-	int bp;
 
 	symtab.name_area = symtab.name_area_next = 
 		malloc (symtab.name_area_free = 0x100000);
@@ -1633,7 +1568,7 @@ monitor_init (void)
 	memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
 	current_function_call = &fctab[0];
 
-  auto_break_insn_count = do_break = 0;
+  auto_break_insn_count = 0;
   monitor_on = debug_enabled;
   signal (SIGINT, monitor_signal);
 }
@@ -1649,67 +1584,6 @@ check_break (unsigned break_pc)
 }
 
 
-void
-cmd_dump (int start, int end)
-{
-  int addr = start;
-  int lsize;
-  char abuf[17];
-
-  if (start >= end)
-    {
-      printf ("invalid arguments\n");
-      return;
-    }
-
-  printf ("memory dump $%04x to $%04x\n", start, end);
-
-  for (;;)
-    {
-      printf ("%04x: ", addr);
-
-      for (lsize = 0; (addr < (end + 1)) && (lsize < 16); addr++, lsize++)
-	{
-	  int mb = read8 (addr);
-	  printf ("%02x ", mb);
-	  abuf[lsize] = isprint (mb) ? mb : '.';
-	}
-      abuf[lsize] = '\0';
-      while (lsize++ < 16)
-	printf ("   ");
-
-      puts (abuf);
-
-      if (addr > end)
-	break;
-    }
-
-}
-
-void
-cmd_dasm (int start, int end)
-{
-  char buf[50];
-  int addr = start;
-  int size;
-
-  if (start >= end)
-    {
-      printf ("invalid arguments\n");
-      return;
-    }
-
-  do
-    {
-      size = dasm (buf, addr);
-      printf ("%04x: %-15s ;", addr, buf);
-
-      for (; size; size--)
-	      printf ("%02x ", read8 (addr++));
-      printf ("\n");
-    }
-  while (addr < (end + 1));
-}
 
 void
 cmd_show (void)
@@ -1764,35 +1638,17 @@ monitor_backtrace (void)
 int
 monitor6809 (void)
 {
+	int rc;
+
 	signal (SIGINT, monitor_signal);
+	rc = command_loop ();
 	monitor_on = 0;
-	return command_loop ();
+	return rc;
 
 #if 0
-	case CMD_HELP:
-	  puts ("\n6809 monitor commands:                         ");
-	  puts ("HELP                  - shows this text          ");
-	  puts ("DASM   start end      - disassemble start to end ");
-	  puts ("SET    register value - put value to register    ");
-	  puts ("SET    flag           - set CC flag              ");
-	  puts ("CLR    register       - clear register           ");
-	  puts ("CLR    flag           - clear CC flag            ");
-	  puts ("SHOW   register       - show register hex value  ");
-	  puts ("SHOW   flag           - show CC flag             ");
-	  puts ("boff                  - disable all breakpoints  ");
-	  puts ("bon                   - enable all breakpoints   ");
-	  continue;
-
 	case CMD_BACKTRACE:
 		monitor_backtrace ();
 		continue;
-
-	case CMD_DASM:
-	  if (arg_count != 3)
-	    break;
-	  cmd_dasm (str_getnumber (arg[1]) & 0xffff,
-		    str_getnumber (arg[2]) & 0xffff);
-	  continue;
 
 	case CMD_JUMP:
 	  if (arg_count != 2)
@@ -2008,14 +1864,5 @@ monitor6809 (void)
 	case CMD_RESET:
 		cpu_reset ();
 		continue;
-
-	default:
-	case -1:
-	  puts ("invalid command");
-	  continue;
-	}
-
-      puts ("invalid argument or number of arguments");
-    }
 #endif
 }
