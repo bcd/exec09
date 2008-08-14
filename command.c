@@ -29,6 +29,9 @@ absolute_address_t examine_addr = 0;
 unsigned int examine_repeat = 1;
 datatype_t examine_type;
 
+unsigned int thread_id_size = 2;
+absolute_address_t thread_current;
+absolute_address_t thread_id = 0;
 thread_t threadtab[MAX_THREADS];
 
 datatype_t print_type;
@@ -49,9 +52,15 @@ extern int auto_break_insn_count;
 void
 print_addr (absolute_address_t addr)
 {
+   const char *name;
+
    print_device_name (addr >> 28);
    putchar (':');
-   printf ("%04X", addr & 0xFFFFFF);
+   printf ("0x%X", addr & 0xFFFFFF);
+
+   name = sym_lookup (&program_symtab, addr);
+   if (name)
+      printf ("  <%s>", name);
 }
 
 
@@ -96,49 +105,49 @@ eval_historical (unsigned int id)
 void
 assign_virtual (const char *name, unsigned long val)
 {
-   virtual_handler_t virtual;
    unsigned long v_val;
 
-   if (sym_find (&internal_symtab, name, &v_val, 0))
-      sym_add (&internal_symtab, name, 0, 0);
+   if (!sym_find (&auto_symtab, name, &v_val, 0))
+   {
+      virtual_handler_t virtual = (virtual_handler_t)v_val;
+	   virtual (&val, 1);
+      return;
+   }
+   sym_set (&internal_symtab, name, val, 0);
 
-	virtual = (virtual_handler_t)v_val;
-	virtual (&val, 1);
-}
-
-
-/**
- * Returns $name if name is defined as a symbol.
- * Returns NULL otherwise.
- */
-const char *
-virtual_defined (const char *name)
-{
-	if (sym_find (&internal_symtab, name, NULL, 0))
-      return name;
-   else
-      return NULL;
+   if (!strcmp (name, "thread_current"))
+   {
+      printf ("Thread pointer initialized to ");
+      print_addr (val);
+      putchar ('\n');
+      thread_current = val;
+   }
 }
 
 
 unsigned long
 eval_virtual (const char *name)
 {
-	virtual_handler_t virtual;
 	unsigned long val;
 
    /* The name of the virtual is looked up in the global
     * symbol table, which holds the pointer to a
     * variable in simulator memory, or to a function
     * that can compute the value on-the-fly. */
-	if (sym_find (&internal_symtab, name, &val, 0))
+	if (!sym_find (&auto_symtab, name, &val, 0))
 	{
+	   virtual_handler_t virtual = (virtual_handler_t)val;
+	   virtual (&val, 0);
+	}
+	else if (!sym_find (&internal_symtab, name, &val, 0))
+   {
+   }
+   else
+   {
 		syntax_error ("???");
 		return 0;
-	}
+   }
 
-	virtual = (virtual_handler_t)val;
-	virtual (&val, 0);
 	return val;
 }
 
@@ -244,6 +253,11 @@ eval_mem (const char *expr)
       *p++ = '\0';
       val = eval (expr) * 0x10000000L + eval (p);
    }
+   else if (isalpha (*expr))
+   {
+      if (sym_find (&program_symtab, expr, &val, 0))
+         val = 0;
+   }
    else
    {
       val = to_absolute (eval (expr));
@@ -328,6 +342,7 @@ brkalloc (void)
          br->conditional = 0;
          br->threaded = 0;
          br->keep_running = 0;
+         br->ignore_count = 0;
          brk_enable (br, 1);
          return br;
       }
@@ -392,17 +407,21 @@ brkprint (breakpoint_t *brkpt)
 display_t *
 display_alloc (void)
 {
+   unsigned int n;
+	for (n = 0; n < MAX_DISPLAYS; n++)
+   {
+		display_t *ds = &displaytab[n];
+		if (!ds->used)
+      {
+         ds->used = 1;
+         return ds;
+      }
+   }
 }
 
 
 void
 display_free (display_t *ds)
-{
-}
-
-
-void
-display_print (void)
 {
 }
 
@@ -433,6 +452,24 @@ print_value (unsigned long val, datatype_t *typep)
       sprintf (f, "%%%c", typep->format);
    printf (f, val);
 }
+
+
+void
+display_print (void)
+{
+   unsigned int n;
+	for (n = 0; n < MAX_DISPLAYS; n++)
+	{
+		display_t *ds = &displaytab[n];
+		if (ds->used)
+		{
+         printf ("%s = ", ds->expr);
+         print_value (eval (ds->expr), &ds->type);
+         putchar ('\n');
+		}
+	}
+}
+
 
 
 int
@@ -519,6 +556,42 @@ do_set (const char *expr)
    save_value (val);
 }
 
+#define THREAD_DATA_PC 3
+#define THREAD_DATA_ROMBANK 9
+
+void
+print_thread_data (absolute_address_t th)
+{
+   U8 b;
+   U16 w;
+   absolute_address_t pc;
+
+   w = abs_read16 (th + THREAD_DATA_PC);
+   b = abs_read8 (th + THREAD_DATA_ROMBANK);
+   printf ("{ PC = %04X, BANK = %02X }", w, b);
+}
+
+
+void
+command_change_thread (void)
+{
+   target_addr_t addr = target_read (thread_current, thread_id_size);
+   absolute_address_t th = to_absolute (addr);
+   if (th == thread_id)
+      return;
+
+   thread_id = th;
+   if (addr)
+   {
+      printf ("[Current thread = ");
+      print_addr (thread_id);
+      print_thread_data (thread_id);
+      printf ("]\n");
+   }
+   else
+      printf ("[ No thread ]\n");
+}
+
 
 char *
 getarg (void)
@@ -560,6 +633,8 @@ void cmd_examine (void)
 void cmd_break (void)
 {
    const char *arg = getarg ();
+   if (!arg)
+      return;
    unsigned long val = eval_mem (arg);
    breakpoint_t *br = brkalloc ();
    br->addr = val;
@@ -573,6 +648,8 @@ void cmd_watch1 (int on_read, int on_write)
    const char *arg;
 
    arg = getarg ();
+   if (!arg)
+      return;
    absolute_address_t addr = eval_mem (arg);
    breakpoint_t *br = brkalloc ();
    br->addr = addr;
@@ -633,7 +710,21 @@ void cmd_quit (void)
 void cmd_delete (void)
 {
    const char *arg = getarg ();
-   unsigned int id = atoi (arg);
+   unsigned int id;
+
+   if (!arg)
+   {
+      int n;
+      printf ("Deleting all breakpoints.\n");
+      for (id = 0; id < MAX_BREAKS; id++)
+      {
+         breakpoint_t *br = brkfind_by_id (id);
+         brkfree (br);
+      }
+      return;
+   }
+
+   id = atoi (arg);
    breakpoint_t *br = brkfind_by_id (id);
    if (br->used)
    {
@@ -672,6 +763,46 @@ void cmd_list (void)
 
    lastaddr = addr;
 }
+
+
+void cmd_symbol_file (void)
+{
+   char *arg = getarg ();
+   if (arg)
+      load_map_file (arg);
+}
+
+
+void cmd_display (void)
+{
+   display_t *ds = display_alloc ();
+   strcpy (ds->expr, getarg ());
+   ds->type = print_type;
+   parse_format_flag (command_flags, &ds->type.format);
+   parse_size_flag (command_flags, &ds->type.size);
+}
+
+
+void cmd_script (void)
+{
+   char *arg = getarg ();
+   FILE *infile;
+   extern int command_exec (FILE *);
+
+   if (!arg)
+      return;
+
+   infile = fopen (arg, "r");
+   if (!infile)
+   {
+      fprintf (stderr, "can't open %s\n", arg);
+      return;
+   }
+
+   while (command_exec (infile) >= 0);
+   fclose (infile);
+}
+
 
 /****************** Parser ************************/
 
@@ -716,6 +847,12 @@ struct command_name
       "Add a watchpoint on read/write" },
    { "?", "?", cmd_help },
    { "l", "list", cmd_list },
+   { "sym", "symbol-file", cmd_symbol_file,
+      "Open a symbol table file" },
+   { "di", "display", cmd_display,
+      "Add a display expression" },
+   { "scr", "script", cmd_script,
+      "Run a command script" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -727,8 +864,6 @@ struct command_name
       "Choose the program to be debugged" },
    { "exe", "exec-file", cmd_exec_file,
       "Open an executable" },
-   { "sym", "symbol-file", cmd_symbol_file,
-      "Open a symbol table file" },
 #endif
    { NULL, NULL },
 };
@@ -778,15 +913,6 @@ command_lookup (const char *cmd)
 void
 command_prompt (void)
 {
-	unsigned int n;
-	for (n = 0; n < MAX_DISPLAYS; n++)
-	{
-		display_t *ds = &displaytab[n];
-		if (ds->used)
-		{
-		}
-	}
-
    fprintf (stderr, "(dbg) ");
    fflush (stderr);
 }
@@ -804,7 +930,7 @@ print_current_insn (void)
 
 
 int
-command_loop (void)
+command_exec (FILE *infile)
 {
    char buffer[256];
    char prev_buffer[256];
@@ -812,38 +938,68 @@ command_loop (void)
    command_handler_t handler;
    int rc;
 
+   do {
+      errno = 0;
+      fgets (buffer, 255, infile);
+      if (feof (infile))
+         return -1;
+   } while (errno != 0);
+
+   if (buffer[0] == '\n')
+      strcpy (buffer, prev_buffer);
+
+   cmd = strtok (buffer, " \t\n");
+   if (!cmd)
+      return 0;
+
+   strcpy (prev_buffer, cmd);
+
+   handler = command_lookup (cmd);
+   if (!handler)
+   {
+      syntax_error ("no such command");
+      return 0;
+   }
+
+   (*handler) ();
+   return 0;
+}
+
+
+int
+command_loop (void)
+{
+   display_print ();
    print_current_insn ();
    exit_command_loop = -1;
    while (exit_command_loop < 0)
    {
       command_prompt ();
-
-      do {
-         errno = 0;
-         fgets (buffer, 255, stdin);
-      } while (errno != 0);
-
-      if (feof (stdin))
+      if (command_exec (stdin) < 0)
          break;
-
-      if (buffer[0] == '\n')
-         strcpy (buffer, prev_buffer);
-
-      cmd = strtok (buffer, " \t\n");
-      if (!cmd)
-         continue;
-      strcpy (prev_buffer, cmd);
-
-      handler = command_lookup (cmd);
-      if (!handler)
-      {
-         syntax_error ("no such command");
-         continue;
-      }
-
-      (*handler) ();
    }
    return (exit_command_loop);
+}
+
+
+void
+breakpoint_hit (breakpoint_t *br)
+{
+   if (br->threaded)
+   {
+   }
+
+   if (br->conditional)
+   {
+   }
+
+   if (br->ignore_count)
+   {
+      --br->ignore_count;
+      return;
+   }
+
+   monitor_on = !br->keep_running;
 }
 
 
@@ -861,7 +1017,7 @@ command_insn_hook (void)
 	if (br && br->enabled && br->on_execute)
 	{
 		printf ("Breakpoint %d reached.\n", br->id);
-		monitor_on = 1;
+      breakpoint_hit (br);
 	}
 }
 
@@ -875,7 +1031,7 @@ command_read_hook (absolute_address_t addr)
       printf ("Watchpoint %d triggered. [", br->id);
       print_addr (addr);
       printf ("]\n");
-      monitor_on = !br->keep_running;
+      breakpoint_hit (br);
    }
 }
 
@@ -883,14 +1039,21 @@ command_read_hook (absolute_address_t addr)
 void
 command_write_hook (absolute_address_t addr, U8 val)
 {
-	breakpoint_t *br = brkfind_by_addr (addr);
+	breakpoint_t *br;
+ 
+   br = brkfind_by_addr (addr);
 	if (br && br->enabled && br->on_write)
    {
       printf ("Watchpoint %d triggered. [", br->id);
       print_addr (addr);
       printf (" = 0x%02X", val);
       printf ("]\n");
-      monitor_on = !br->keep_running;
+      breakpoint_hit (br);
+   }
+
+   if (thread_id_size && (addr == thread_current + thread_id_size - 1))
+   {
+      command_change_thread ();
    }
 }
 
@@ -960,15 +1123,15 @@ command_init (void)
    struct sigaction sact;
    int rc;
 
-   sym_add (&internal_symtab, "pc", (unsigned long)pc_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "x", (unsigned long)x_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "y", (unsigned long)y_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "u", (unsigned long)u_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "s", (unsigned long)s_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "d", (unsigned long)d_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "dp", (unsigned long)dp_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "cc", (unsigned long)cc_virtual, SYM_REGISTER);
-   sym_add (&internal_symtab, "cycles", (unsigned long)cycles_virtual, SYM_REGISTER);
+   sym_add (&auto_symtab, "pc", (unsigned long)pc_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "x", (unsigned long)x_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "y", (unsigned long)y_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "u", (unsigned long)u_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "s", (unsigned long)s_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "d", (unsigned long)d_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "dp", (unsigned long)dp_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "cc", (unsigned long)cc_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "cycles", (unsigned long)cycles_virtual, SYM_AUTO);
 
    examine_type.format = 'x';
    examine_type.size = 1;

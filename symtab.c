@@ -30,6 +30,8 @@ struct symtab program_symtab;
 
 struct symtab internal_symtab;
 
+struct symtab auto_symtab;
+
 struct stringspace *stringspace_create (void)
 {
 	struct stringspace *ss = malloc (sizeof (struct stringspace));
@@ -78,8 +80,9 @@ unsigned int sym_hash_value (unsigned long value)
  * Returns 0 if the symbol exists (and optionally stores its value
  * in *value if not NULL), or -1 if it does not exist.
  */
-int sym_find (struct symtab *symtab,
-              const char *name, unsigned long *value, unsigned int type)
+struct symbol *sym_find1 (struct symtab *symtab,
+                          const char *name, unsigned long *value,
+								  unsigned int type)
 {
 	unsigned int hash = sym_hash_name (name);
 
@@ -96,18 +99,26 @@ int sym_find (struct symtab *symtab,
    		if (!strcmp (name, chain->name))
    		{
    			if (type && (chain->type != type))
-   				return -1;
+   				return NULL;
             if (value)
-			*value = chain->value;
-   			return 0;
+					*value = chain->value;
+   			return chain;
    		}
-   		chain = chain->chain;
+   		chain = chain->name_chain;
    	}
       symtab = symtab->parent;
    }
 
-	return -1;
+	return NULL;
 }
+
+
+int sym_find (struct symtab *symtab,
+              const char *name, unsigned long *value, unsigned int type)
+{
+	return sym_find1 (symtab, name, value, type) ? 0 : -1;
+}
+
 
 const char *sym_lookup (struct symtab *symtab, unsigned long value)
 {
@@ -120,7 +131,7 @@ const char *sym_lookup (struct symtab *symtab, unsigned long value)
    	{
    		if (value == chain->value)
    			return chain->name;
-   		chain = chain->chain;
+   		chain = chain->value_chain;
    	}
       symtab = symtab->parent;
    }
@@ -141,20 +152,46 @@ void sym_add (struct symtab *symtab,
    
    hash = sym_hash_name (name);
 	chain = symtab->syms_by_name[hash];
-	s->chain = chain;
+	s->name_chain = chain;
 	symtab->syms_by_name[hash] = s;
 
    hash = sym_hash_value (value);
 	chain = symtab->syms_by_value[hash];
-	s->chain = chain;
+	s->value_chain = chain;
 	symtab->syms_by_value[hash] = s;
+}
+
+
+void sym_set (struct symtab *symtab,
+              const char *name, unsigned long value, unsigned int type)
+{
+	struct symbol * s = sym_find1 (symtab, name, NULL, type);
+	if (s)
+		s->value = value;
+	else
+		sym_add (symtab, name, value, type);
+}
+
+
+void symtab_init (struct symtab *symtab)
+{
+	memset (symtab, 0, sizeof (struct symtab));
+}
+
+
+void symtab_reset (struct symtab *symtab)
+{
+	/* TODO */
+	symtab_init (symtab);
 }
 
 
 void sym_init (void)
 {
 	current_stringspace = stringspace_create ();
-	memset (&program_symtab, 0, sizeof (program_symtab));
-	memset (&internal_symtab, 0, sizeof (internal_symtab));
+
+	symtab_init (&program_symtab);
+	symtab_init (&internal_symtab);
+	symtab_init (&auto_symtab);
 }
 

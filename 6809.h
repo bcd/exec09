@@ -127,12 +127,8 @@ extern int load_bin (char *,int);
 #define MAX_STRINGSPACE 32000
 #define MAX_SYMBOL_HASH 1009
 
-#define SYM_KEYWORD 0
-#define SYM_COMMAND 1
-#define SYM_REGISTER 2
-#define SYM_MEM 3
-#define SYM_INT 4
-
+#define SYM_DEFAULT 0
+#define SYM_AUTO 1
 
 
 typedef struct
@@ -156,7 +152,8 @@ struct symbol
 	unsigned long value;
    datatype_t ty;
 	unsigned int type;
-	struct symbol *chain;
+	struct symbol *name_chain;
+	struct symbol *value_chain;
 };
 
 
@@ -169,8 +166,10 @@ struct symtab
 
 extern struct symtab program_symtab;
 extern struct symtab internal_symtab;
+extern struct symtab auto_symtab;
 
 void sym_add (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
+void sym_set (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
 int sym_find (struct symtab *symtab, const char *name, unsigned long *value, unsigned int type);
 const char *sym_lookup (struct symtab *symtab, unsigned long value);
 

@@ -26,9 +26,6 @@
 #include <signal.h>
 
 
-/* A container for all symbol table information */
-struct symbol_table symtab;
-
 /* The function call stack */
 struct function_call fctab[MAX_FUNCTION_CALLS];
 
@@ -891,70 +888,6 @@ char *off4[] = {
 };
 
 
-void
-add_named_symbol (const char *id, target_addr_t value, const char *filename)
-{
-	struct x_symbol *sym;
-	static char *last_filename = "";
-	
-	symtab.addr_to_symbol[value] = sym = malloc (sizeof (struct x_symbol));
-	sym->flags = S_NAMED;
-	sym->u.named.id = symtab.name_area_next;
-	sym->u.named.addr = value;
-
-	strcpy (symtab.name_area_next, id);
-	symtab.name_area_next += strlen (symtab.name_area_next) + 1;
-
-	if (!filename)
-		filename = "";
-
-	if (strcmp (filename, last_filename))
-	{
-		last_filename = symtab.name_area_next;
-		strcpy (last_filename, filename);
-		symtab.name_area_next += strlen (symtab.name_area_next) + 1;
-	}
-	sym->u.named.file = last_filename;
-}
-
-
-struct x_symbol *
-find_symbol (target_addr_t value)
-{
-	struct x_symbol *sym = NULL;
-
-#if 1
-	return NULL;
-#endif
-
-	while (value > 0)
-	{
-		sym = symtab.addr_to_symbol[value];
-		if (sym)
-			break;
-		else
-			value--;
-	}
-	return sym;
-}
-
-
-struct x_symbol *
-find_symbol_by_name (const char *id)
-{
-	unsigned int addr;
-	struct x_symbol *sym;
-
-	for (addr = 0; addr < 0x10000; addr++)
-	{
-		sym = symtab.addr_to_symbol[addr];
-		if (sym && !strcmp (sym->u.named.id, id))
-			return sym;
-	}
-	return NULL;
-}
-
-
 /* Disassemble the current instruction.  Returns the number of bytes that 
 compose it. */
 int
@@ -1199,7 +1132,7 @@ load_map_file (const char *name)
 
 		file_ptr = strtok (NULL, " \t\n");
 
-		add_named_symbol (id_ptr, value, file_ptr);
+		sym_add (&program_symtab, id_ptr, to_absolute (value), 0); /* file_ptr? */
 	}
 
 	fclose (fp);
@@ -1382,23 +1315,21 @@ monitor_return (void)
 
 
 const char *
-monitor_addr_name (target_addr_t addr)
+monitor_addr_name (target_addr_t target_addr)
 {
-	static char addr_name[256];
-	struct x_symbol *sym;
+	static char buf[256], *bufptr;
+	const char *name;
+	absolute_address_t addr = to_absolute (target_addr);
 
-	sym = find_symbol (addr);
-	if (sym)
-	{
-		if (sym->u.named.addr == addr)
-			return sym->u.named.id;
-		else
-			sprintf (addr_name, "%s+0x%X", 
-				sym->u.named.id, addr - sym->u.named.addr);
-	}
-	else
-		sprintf (addr_name, "$%04X", addr);
-	return addr_name;
+	bufptr = buf;
+
+   bufptr += sprintf (bufptr, "0x%04X", target_addr);
+
+   name = sym_lookup (&program_symtab, addr);
+   if (name)
+      bufptr += sprintf (bufptr, "  <%s>", name);
+
+	return buf;
 }
 
 
@@ -1417,13 +1348,6 @@ monitor_init (void)
 	int tmp;
 	extern int debug_enabled;
 	target_addr_t a;
-
-	symtab.name_area = symtab.name_area_next = 
-		malloc (symtab.name_area_free = 0x100000);
-	a = 0; 
-	do {
-		symtab.addr_to_symbol[a] = NULL;
-	} while (++a != 0);
 
 	fctab[0].entry_point = read16 (0xfffe);
 	memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));

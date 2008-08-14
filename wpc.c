@@ -159,10 +159,7 @@ static U8 wpc_get_console_state (void)
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 0;
 	if (select (1, &fds, NULL, NULL, &timeout))
-	{
 		rc |= WPC_DEBUG_READ_READY;
-		printf ("read ready!\n");
-	}
 
 	return rc;
 }
