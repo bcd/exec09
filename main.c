@@ -1,6 +1,6 @@
 /*
  * Copyright 2001 by Arto Salmi and Joze Fabcic
- * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006-2008 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -20,6 +20,7 @@
  */
 
 
+#include <sys/time.h>
 #include "6809.h"
 
 enum
@@ -52,11 +53,7 @@ int dump_cycles_on_success = 0;
 
 /* When nonzero, indicates the total number of cycles before an automated
 exit.  This is to help speed through test cases that never finish. */
-#ifdef CONFIG_WPC
-int max_cycles = -1;
-#else
 int max_cycles = 100000000;
-#endif
 
 char *exename;
 
@@ -76,6 +73,153 @@ static void usage (void)
 }
 
 
+void
+idle_loop (void)
+{
+	struct timeval now;
+	static struct timeval last = { 0, 0 };
+	int real_ms;
+	static unsigned long last_cycles = 0;
+	unsigned long cycles;
+	int sim_ms;
+	const int cycles_per_ms = 2000;
+	static int period = 100;
+	static int count = 100;
+	int delay;
+	static int total_ms_elapsed = 0;
+
+	if (--count > 0)
+		return;
+
+	if (last.tv_usec == 0)
+		gettimeofday (&last, NULL);
+
+	gettimeofday (&now, NULL);
+	real_ms = (now.tv_usec - last.tv_usec) / 1000;
+	if (real_ms < 0)
+		real_ms += 1000;
+	last = now;
+
+	cycles = get_cycles ();
+	sim_ms = (cycles - last_cycles) / cycles_per_ms;
+	if (sim_ms < 0)
+		sim_ms += cycles_per_ms;
+	last_cycles = cycles;
+
+
+	/* Minimum sleep time is usually around 10ms. */
+	delay = sim_ms - real_ms;
+	total_ms_elapsed += delay;
+	if (total_ms_elapsed > 100)
+	{
+		total_ms_elapsed -= 100;
+		command_periodic ();
+		wpc_periodic ();
+	}
+
+	if (delay > 0)
+	{
+		if (delay > 60)
+			period -= 5;
+		else if (delay < 20)
+			period += 5;
+		usleep (delay * 1000UL);
+	}
+
+	count = period;
+}
+
+
+
+struct option
+{
+	char o_short;
+	const char *o_long;
+	const char *help;
+	unsigned int can_negate : 1;
+	unsigned int takes_arg : 1;
+	int *int_value;
+	char *string_value;
+} option_table[] = {
+	{ 'd', "debug" },
+	{ 'h', "help" },
+	{ 'b', "binary" },
+	{ 'M', "mhz" },
+	{ '-', "68a09" },
+	{ '-', "68b09" },
+	{ 'R', "realtime" },
+	{ 'I', "irqfreq" },
+	{ 'F', "firqfreq" },
+	{ 'C', "cycledump" },
+	{ 't', "loadmap" },
+	{ 'T', "trace" },
+	{ 'm', "maxcycles" },
+	{ 's', "machine" },
+	{ '\0', NULL },
+};
+
+
+int
+process_option (struct option *opt, const char *arg)
+{
+	return 0;
+}
+
+
+int
+parse_args (int argc, char *argv[])
+{
+	int argn = 1;
+	struct option *opt;
+
+next_arg:
+	while (argn < argc)
+	{
+		char *arg = argv[argn];
+		if (arg[0] == '-')
+		{
+			if (arg[1] == '-')
+			{
+				char *rest = strchr (arg+2, '=');
+				if (rest)
+					*rest++ = '\0';
+
+				opt = option_table;
+				while (opt->o_long != NULL)
+				{
+					if (!strcmp (opt->o_long, arg+2))
+					{
+						if (process_option (opt, rest))
+							argn++;
+						goto next_arg;
+					}
+					opt++;
+				}
+			}
+			else
+			{
+				opt = option_table;
+				while (opt->o_long != NULL)
+				{
+					if (opt->o_short == arg[1])
+					{
+						if (process_option (opt, argv[argn]))
+							argn++;
+						goto next_arg;
+					}
+					opt++;
+				}
+			}
+		}
+		else
+		{
+			return argn;
+		}
+	}
+}
+
+
+
 int
 main (int argc, char *argv[])
 {
@@ -85,8 +229,11 @@ main (int argc, char *argv[])
   int i, j, n;
   int argn = 1;
   int load_tmp_map = 0;
+  unsigned int loops = 0;
 
   exename = argv[0];
+  /* TODO - enable different options by default
+  based on the executable name. */
 
   while (argn < argc)
     {
@@ -185,6 +332,7 @@ main (int argc, char *argv[])
 
 	monitor_init ();
 	command_init ();
+   keybuffering (0);
 
 	/* Now, iterate through the instructions.
 	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()
@@ -202,6 +350,8 @@ main (int argc, char *argv[])
 			total += cpu_execute (cycles_per_irq);
 			request_irq (0);
 		}
+
+		idle_loop ();
 
 		/* Check for a rogue program that won't end */
 		if ((max_cycles > 0) && (total > max_cycles))

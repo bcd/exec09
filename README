@@ -1,19 +1,54 @@
-This is a port of Arto Salmi's 6809 simulator.  Minor changes have been
-made to get it to work in the way that I would like.  This program
-remains licensed under the GNU General Public License.
+This is a rewrite of Arto Salmi's 6809 simulator.  Many changes
+have been made to it.  This program remains licensed under the
+GNU General Public License.
 
-Included are some sample C programs built with the gcc6809 compiler
-to demonstrate how to create a program from scratch.
+Input Files
 
-The simulator includes some memory-mapped registers for I/O; see
-prog/libsim.h for more information.
 
-==========================================================================
+Machines
+
+The simulator now has the notion of different 'machines':
+which says what types of I/O devices are mapped into the 6809's
+address space and how they can be accessed.  Adding support for
+a new machine is fairly easy.
+
+There are 3 builtin machine types at present.  The default,
+called 'simple', assumes that you have a full 64KB of RAM,
+minus some input/output functions mapped at $FF00 (see I/O below).
+If you compile a program with gcc6809 with no special linker
+option, you'll get an S-record file that is suitable for running
+on this machine.  The S-record file will include a vector table
+at $FFF0, with a reset vector that points to a _start function,
+which will call your main() function.  When main returns,
+_start writes to an 'exit register' at $FF01, which the simulator
+interprets and causes it to stop.
+
+gcc6809 also has a builtin notion of which addresses are used
+for text and data.  The simple machine enforces this and will
+"fault" on invalid accesses.
+
+The second machine is 'wpc', and is an emulation of the
+Williams Pinball Controller which was the impetus for me
+working on the compiler in the first place.
+
+The third machine, still in development, is called 'eon'
+(for Eight-O-Nine).  It is similar to simple but has some
+more advanced I/O capabilities, like a larger memory space
+that can be paged in/out, and a disk emulation for programs
+that wants to have persistence.
+
+TODO : Would anyone be interested in a CoCo machine type?
+
+
+Faults
+
+
+-----------------------------------------------------------------
 
 Original README text from Arto:
 
 
-simple 6809 simulator under GPL licence 
+simple 6809 simulator under GPL licence
 
 NOTE! this software is beta stage, and has bugs.
 To compile it you should have 32-bit ANSI C complier.

@@ -134,12 +134,19 @@ struct wpc_asic
    U8 switch_strobe;
    U8 switch_mx[8];
    U8 directsw;
+
+	int curr_sw;
+	int curr_sw_time;
 };
+
+struct wpc_asic *global_wpc;
 
 
 void wpc_asic_reset (struct hw_device *dev)
 {
    struct wpc_asic *wpc = dev->priv;
+	global_wpc = wpc;
+	wpc->curr_sw_time = 0;
 }
 
 static int wpc_console_inited = 0;
@@ -152,6 +159,10 @@ static U8 wpc_get_console_state (void)
 
 	if (!wpc_console_inited)
 		rc |= WPC_DEBUG_READ_READY;
+
+#if 1
+	return rc;
+#endif
 
 	FD_ZERO (&fds);
 	FD_SET (0, &fds);
@@ -202,6 +213,91 @@ static int scanbit (U8 val)
 }
 
 
+unsigned int wpc_read_switch (struct wpc_asic *wpc, int num)
+{
+	unsigned int val;
+	val = wpc->switch_mx[num / 8] & (1 << (num % 8));
+	// printf ("SW %d = %d\n", num, val);
+	return val ? 1 : 0;
+}
+
+void wpc_write_switch (struct wpc_asic *wpc, int num, int flag)
+{
+	unsigned int col, val;
+
+	col = num / 8;
+	val = 1 << (num % 8);
+	wpc->switch_mx[col] &= ~val;
+	if (flag)
+		wpc->switch_mx[col] |= val;
+}
+
+void wpc_press_switch (struct wpc_asic *wpc, int num, int delay)
+{
+	wpc_write_switch (wpc, num, 1);
+	wpc->curr_sw = num;
+	wpc->curr_sw_time = delay;
+}
+
+unsigned int wpc_read_switch_column (struct wpc_asic *wpc, int col)
+{
+	unsigned int val = 0;
+	int row;
+	for (row = 0; row < 8; row++)
+		if (wpc_read_switch (wpc, col * 8 + row))
+			val |= (1 << row);
+	return val;
+}
+
+void wpc_write_lamp (int num, int flag)
+{
+}
+
+
+void wpc_write_sol (int num, int flag)
+{
+}
+
+
+void wpc_keypoll (struct wpc_asic *wpc)
+{
+	fd_set fds;
+	struct timeval timeout;
+	int rc;
+	unsigned char c;
+
+	FD_ZERO (&fds);
+	FD_SET (0, &fds);
+
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 0;
+	if (select (1, &fds, NULL, NULL, &timeout))
+	{
+		rc = read (0, &c, 1);
+
+		//printf ("%c pressed\n", c);
+		switch (c)
+		{
+			case '7':
+				wpc_press_switch (wpc, 4, 200);
+				break;
+			case '8':
+				wpc_press_switch (wpc, 5, 200);
+				break;
+			case '9':
+				wpc_press_switch (wpc, 6, 200);
+				break;
+			case '0':
+				wpc_press_switch (wpc, 7, 200);
+				break;
+			default:
+				break;
+		}
+	}
+}
+
+
+
 U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 {
 	struct wpc_asic *wpc = dev->priv;
@@ -235,6 +331,18 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 
 		case WPC_SHIFTBIT:
 			val = 1 << (wpc->shiftbit % 8);
+			break;
+
+		case WPC_SW_ROW_INPUT:
+			val = wpc_read_switch_column (wpc, 1 + scanbit (wpc->switch_strobe));
+			break;
+
+		case WPC_SW_JUMPER_INPUT:
+			val = 0x55;
+			break;
+
+		case WPC_SW_CABINET_INPUT:
+			val = wpc_read_switch_column (wpc, 0);
 			break;
 
 		default:
@@ -283,6 +391,12 @@ void wpc_update_ram (struct wpc_asic *wpc)
 }
 
 
+void wpc_set_rom_page (unsigned char val)
+{
+	bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READONLY);
+}
+
+
 void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
 	struct wpc_asic *wpc = dev->priv;
@@ -298,7 +412,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 		case WPC_ROM_BANK:
 			wpc->rombank = val;
-			bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READONLY);
+			wpc_set_rom_page (val);
 			break;
 
 		case WPC_DEBUG_DATA_PORT:
@@ -337,6 +451,9 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
          wpc->lamp_strobe = val;
          break;
 
+		case WPC_SW_COL_STROBE:
+			wpc->switch_strobe = val;
+
 		default:
 			break;
 	}
@@ -346,7 +463,22 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 void wpc_periodic (void)
 {
+	struct wpc_asic *wpc = global_wpc;
+	//printf ("WPC 100ms periodic\n");
+
+	wpc_keypoll (wpc);
+
+	if (wpc->curr_sw_time > 0)
+	{
+		wpc->curr_sw_time -= 100;
+		if (wpc->curr_sw_time <= 0)
+		{
+			wpc->curr_sw_time = 0;
+			wpc_write_switch (wpc, wpc->curr_sw, 0);
+		}
+	}
 }
+
 
 struct hw_class wpc_asic_class =
 {

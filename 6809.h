@@ -191,6 +191,7 @@ typedef struct
    unsigned int on_execute : 1;
    unsigned int size : 4;
    unsigned int keep_running : 1;
+	unsigned int temp : 1;
    absolute_address_t addr;
    char condition[128];
    thread_id_t tid;

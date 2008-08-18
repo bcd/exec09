@@ -920,6 +920,7 @@ dasm (char *buf, absolute_address_t opc)
     }
 
   op_str = (char *) mne[op];
+  buf += sprintf (buf, "%-6.6s", op_str);
 
   switch (am)
     {
@@ -927,19 +928,18 @@ dasm (char *buf, absolute_address_t opc)
       sprintf (buf, "???");
       break;
     case _implied:
-      sprintf (buf, "%s ", op_str);
       break;
     case _imm_byte:
-      sprintf (buf, "%s #$%02X", op_str, fetch8 ());
+      sprintf (buf, "#$%02X", fetch8 ());
       break;
     case _imm_word:
-      sprintf (buf, "%s #$%04X", op_str, fetch16 ());
+      sprintf (buf, "#$%04X", fetch16 ());
       break;
     case _direct:
-      sprintf (buf, "%s <%s", op_str, monitor_addr_name (fetch8 ()));
+      sprintf (buf, "<%s", monitor_addr_name (fetch8 ()));
       break;
     case _extended:
-      sprintf (buf, "%s %s", op_str, monitor_addr_name (fetch16 ()));
+      sprintf (buf, "%s", monitor_addr_name (fetch16 ()));
       break;
 
     case _indexed:
@@ -948,105 +948,104 @@ dasm (char *buf, absolute_address_t opc)
 
       if ((op & 0x80) == 0)
 	{
-	  sprintf (buf, "%s %s,%c", op_str, off4[op & 0x1f], R);
+	  sprintf (buf, "%s,%c", off4[op & 0x1f], R);
 	  break;
 	}
 
       switch (op & 0x1f)
 	{
 	case 0x00:
-	  sprintf (buf, "%s ,%c+", op_str, R);
+	  sprintf (buf, ",%c+", R);
 	  break;
 	case 0x01:
-	  sprintf (buf, "%s ,%c++", op_str, R);
+	  sprintf (buf, ",%c++", R);
 	  break;
 	case 0x02:
-	  sprintf (buf, "%s ,-%c", op_str, R);
+	  sprintf (buf, ",-%c", R);
 	  break;
 	case 0x03:
-	  sprintf (buf, "%s ,--%c", op_str, R);
+	  sprintf (buf, ",--%c", R);
 	  break;
 	case 0x04:
-	  sprintf (buf, "%s ,%c", op_str, R);
+	  sprintf (buf, ",%c", R);
 	  break;
 	case 0x05:
-	  sprintf (buf, "%s B,%c", op_str, R);
+	  sprintf (buf, "B,%c", R);
 	  break;
 	case 0x06:
-	  sprintf (buf, "%s A,%c", op_str, R);
+	  sprintf (buf, "A,%c", R);
 	  break;
 	case 0x08:
-	  sprintf (buf, "%s $%02X,%c", op_str, fetch8 (), R);
+	  sprintf (buf, "$%02X,%c", fetch8 (), R);
 	  break;
 	case 0x09:
-	  sprintf (buf, "%s $%04X,%c", op_str, fetch16 (), R);
+	  sprintf (buf, "$%04X,%c", fetch16 (), R);
 	  break;
 	case 0x0B:
-	  sprintf (buf, "%s D,%c", op_str, R);
+	  sprintf (buf, "D,%c", R);
 	  break;
 	case 0x0C:
-	  sprintf (buf, "%s $%02X,PC", op_str, fetch8 ());
+	  sprintf (buf, "$%02X,PC", fetch8 ());
 	  break;
 	case 0x0D:
-	  sprintf (buf, "%s $%04X,PC", op_str, fetch16 ());
+	  sprintf (buf, "$%04X,PC", fetch16 ());
 	  break;
 	case 0x11:
-	  sprintf (buf, "%s [,%c++]", op_str, R);
+	  sprintf (buf, "[,%c++]", R);
 	  break;
 	case 0x13:
-	  sprintf (buf, "%s [,--%c]", op_str, R);
+	  sprintf (buf, "[,--%c]", R);
 	  break;
 	case 0x14:
-	  sprintf (buf, "%s [,%c]", op_str, R);
+	  sprintf (buf, "[,%c]", R);
 	  break;
 	case 0x15:
-	  sprintf (buf, "%s [B,%c]", op_str, R);
+	  sprintf (buf, "[B,%c]", R);
 	  break;
 	case 0x16:
-	  sprintf (buf, "%s [A,%c]", op_str, R);
+	  sprintf (buf, "[A,%c]", R);
 	  break;
 	case 0x18:
-	  sprintf (buf, "%s [$%02X,%c]", op_str, fetch8 (), R);
+	  sprintf (buf, "[$%02X,%c]", fetch8 (), R);
 	  break;
 	case 0x19:
-	  sprintf (buf, "%s [$%04X,%c]", op_str, fetch16 (), R);
+	  sprintf (buf, "[$%04X,%c]", fetch16 (), R);
 	  break;
 	case 0x1B:
-	  sprintf (buf, "%s [D,%c]", op_str, R);
+	  sprintf (buf, "[D,%c]", R);
 	  break;
 	case 0x1C:
-	  sprintf (buf, "%s [$%02X,PC]", op_str, fetch8 ());
+	  sprintf (buf, "[$%02X,PC]", fetch8 ());
 	  break;
 	case 0x1D:
-	  sprintf (buf, "%s [$%04X,PC]", op_str, fetch16 ());
+	  sprintf (buf, "[$%04X,PC]", fetch16 ());
 	  break;
 	case 0x1F:
-	  sprintf (buf, "%s [%s]", op_str, monitor_addr_name (fetch16 ()));
+	  sprintf (buf, "[%s]", monitor_addr_name (fetch16 ()));
 	  break;
 	default:
-	  sprintf (buf, "%s ??", op_str);
+	  sprintf (buf, "???");
 	  break;
 	}
       break;
 
     case _rel_byte:
       fetch1 = ((INT8) fetch8 ());
-      sprintf (buf, "%s $%04X", op_str, (fetch1 + pc) & 0xffff);
+      sprintf (buf, "$%04X", (fetch1 + pc) & 0xffff);
       break;
 
     case _rel_word:
-      sprintf (buf, "%s $%04X", op_str, (fetch16 () + pc) & 0xffff);
+      sprintf (buf, "$%04X", (fetch16 () + pc) & 0xffff);
       break;
 
     case _reg_post:
       op = fetch8 ();
-      sprintf (buf, "%s %s,%s", op_str, reg[op >> 4], reg[op & 15]);
+      sprintf (buf, "%s,%s", reg[op >> 4], reg[op & 15]);
       break;
 
     case _usr_post:
     case _sys_post:
       op = fetch8 ();
-      sprintf (buf, "%s ", op_str);
 
       if (op & 0x80)
 	strcat (buf, "PC,");
@@ -1112,6 +1111,14 @@ load_map_file (const char *name)
 			break;
 
 		value_ptr = buf;
+		if (!strncmp (value_ptr, "page", 4))
+		{
+			unsigned char page = strtoul (value_ptr+4, NULL, 10);
+			printf ("Page is now %d\n", page);
+			wpc_set_rom_page (page);
+			continue;
+		}
+
 		if (strncmp (value_ptr, "      ", 6))
 			continue;
 

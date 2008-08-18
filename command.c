@@ -6,8 +6,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#if 0
 #include <sys/time.h>
+#endif
 #include <sys/errno.h>
+#include <termios.h>
 
 #define PERIODIC_INTERVAL 50  /* in ms */
 
@@ -40,7 +43,7 @@ char *command_flags;
 
 int exit_command_loop;
 
-unsigned long eval (const char *expr);
+unsigned long eval (char *expr);
 extern int auto_break_insn_count;
 
 
@@ -56,11 +59,13 @@ print_addr (absolute_address_t addr)
 
    print_device_name (addr >> 28);
    putchar (':');
-   printf ("0x%X", addr & 0xFFFFFF);
+   printf ("0x%04X", addr & 0xFFFFFF);
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
-      printf ("  <%s>", name);
+      printf ("  <%-16.16s>", name);
+   else
+      printf ("%-20.20s", "");
 }
 
 
@@ -213,8 +218,36 @@ parse_size_flag (const char *flags, unsigned int *sizep)
 }
 
 
+char *
+match_binary (char *expr, const char *op, char **secondp)
+{
+   char *p;
+   p = strstr (expr, op);
+   if (!p)
+      return NULL;
+   *p = '\0';
+   p += strlen (op);
+   *secondp = p;
+   return expr;
+}
+
+
 int
-fold_binary (const char *expr, const char op, unsigned long *valp)
+fold_comparisons (char *expr, unsigned long *value)
+{
+   char *p;
+   if (match_binary (expr, "==", &p))
+      *value = (eval (expr) == eval (p));
+   else if (match_binary (expr, "!=", &p))
+      *value = (eval (expr) != eval (p));
+   else
+      return 0;
+   return 1;
+}
+
+
+int
+fold_binary (char *expr, const char op, unsigned long *valp)
 {
 	char *p;
 	unsigned long val1, val2;
@@ -243,7 +276,7 @@ fold_binary (const char *expr, const char op, unsigned long *valp)
 
 
 unsigned long
-eval_mem (const char *expr)
+eval_mem (char *expr)
 {
    char *p;
    unsigned long val;
@@ -260,6 +293,8 @@ eval_mem (const char *expr)
    }
    else
    {
+      /* TODO - if expr is already in absolute form,
+      this explodes ! */
       val = to_absolute (eval (expr));
    }
    return val;
@@ -267,12 +302,13 @@ eval_mem (const char *expr)
 
 
 unsigned long
-eval (const char *expr)
+eval (char *expr)
 {
    char *p;
    unsigned long val;
 
-   if ((p = strchr (expr, '=')) != NULL)
+   if (fold_comparisons (expr, &val));
+   else if ((p = strchr (expr, '=')) != NULL)
 	{
       *p++ = '\0';
 		val = eval (p);
@@ -295,8 +331,16 @@ eval (const char *expr)
    }
    else if (*expr == '*')
    {
-      absolute_address_t addr = eval_mem (expr+1);
-      return abs_read8 (addr);
+      unsigned int size = 1;
+      expr++;
+      if (*expr == '*')
+      {
+         expr++;
+         size = 2;
+      }
+
+      absolute_address_t addr = eval_mem (expr);
+      return target_read (addr, size);
    }
    else if (*expr == '@')
    {
@@ -343,6 +387,7 @@ brkalloc (void)
          br->threaded = 0;
          br->keep_running = 0;
          br->ignore_count = 0;
+         br->temp = 0;
          brk_enable (br, 1);
          return br;
       }
@@ -400,6 +445,8 @@ brkprint (breakpoint_t *brkpt)
       printf (" on thread %d", brkpt->tid);
    if (brkpt->keep_running)
       printf (", print-only");
+   if (brkpt->temp)
+      printf (", temp");
    putchar ('\n');
 }
 
@@ -458,16 +505,23 @@ void
 display_print (void)
 {
    unsigned int n;
+   char comma = '\0';
+
 	for (n = 0; n < MAX_DISPLAYS; n++)
 	{
 		display_t *ds = &displaytab[n];
 		if (ds->used)
 		{
-         printf ("%s = ", ds->expr);
-         print_value (eval (ds->expr), &ds->type);
-         putchar ('\n');
+         char expr[256];
+         strcpy (expr, ds->expr);
+         printf ("%c %s = ", comma, expr);
+         print_value (eval (expr), &ds->type);
+         comma = ',';
 		}
 	}
+
+   if (comma)
+      putchar ('\n');
 }
 
 
@@ -537,7 +591,7 @@ do_examine (void)
 }
 
 void
-do_print (const char *expr)
+do_print (char *expr)
 {
    unsigned long val = eval (expr);
    printf ("$%d = ", history_count);
@@ -550,7 +604,7 @@ do_print (const char *expr)
 }
 
 void
-do_set (const char *expr)
+do_set (char *expr)
 {
 	unsigned long val = eval (expr);
    save_value (val);
@@ -604,7 +658,7 @@ getarg (void)
 
 void cmd_print (void)
 {
-   const char *arg = getarg ();
+   char *arg = getarg ();
    if (arg)
       do_print (arg);
    else
@@ -614,7 +668,7 @@ void cmd_print (void)
 
 void cmd_set (void)
 {
-   const char *arg = getarg ();
+   char *arg = getarg ();
    if (arg)
       do_set (arg);
    else
@@ -624,7 +678,7 @@ void cmd_set (void)
 
 void cmd_examine (void)
 {
-   const char *arg = getarg ();
+   char *arg = getarg ();
    if (arg)
       examine_addr = eval_mem (arg);
    do_examine ();
@@ -632,20 +686,28 @@ void cmd_examine (void)
 
 void cmd_break (void)
 {
-   const char *arg = getarg ();
+   char *arg = getarg ();
    if (!arg)
       return;
    unsigned long val = eval_mem (arg);
    breakpoint_t *br = brkalloc ();
    br->addr = val;
    br->on_execute = 1;
+
+   if ((arg = getarg()) && !strcmp (arg, "if"))
+   {
+      br->conditional = 1;
+      arg = getarg ();
+      strcpy (br->condition, arg);
+   }
+
    brkprint (br);
 }
 
 
 void cmd_watch1 (int on_read, int on_write)
 {
-   const char *arg;
+   char *arg;
 
    arg = getarg ();
    if (!arg)
@@ -659,8 +721,15 @@ void cmd_watch1 (int on_read, int on_write)
    arg = getarg ();
    if (!arg)
       return;
+
    if (!strcmp (arg, "print"))
       br->keep_running = 1;
+   else if (!strcmp (arg, "if"))
+   {
+      arg = getarg ();
+      br->conditional = 1;
+      strcpy (br->condition, arg);
+   }
 
    brkprint (br);
 }
@@ -690,9 +759,27 @@ void cmd_break_list (void)
       brkprint (&breaktab[n]);
 }
 
-void cmd_step_next (void)
+void cmd_step (void)
 {
    auto_break_insn_count = 1;
+   exit_command_loop = 0;
+}
+
+void cmd_next (void)
+{
+   char buf[128];
+   breakpoint_t *br;
+
+   unsigned long addr = to_absolute (get_pc ());
+   addr += dasm (buf, addr);
+   printf ("Will stop at ");
+   print_addr (addr);
+   putchar ('\n');
+
+   br = brkalloc ();
+   br->addr = addr;
+   br->on_execute = 1;
+   br->temp = 1;
    exit_command_loop = 0;
 }
 
@@ -775,32 +862,47 @@ void cmd_symbol_file (void)
 
 void cmd_display (void)
 {
-   display_t *ds = display_alloc ();
-   strcpy (ds->expr, getarg ());
-   ds->type = print_type;
-   parse_format_flag (command_flags, &ds->type.format);
-   parse_size_flag (command_flags, &ds->type.size);
+   char *arg;
+
+   while ((arg = getarg ()) != NULL)
+   {
+      display_t *ds = display_alloc ();
+      strcpy (ds->expr, arg);
+      ds->type = print_type;
+      parse_format_flag (command_flags, &ds->type.format);
+      parse_size_flag (command_flags, &ds->type.size);
+   }
 }
 
 
-void cmd_script (void)
+void command_exec_file (const char *filename)
 {
-   char *arg = getarg ();
    FILE *infile;
    extern int command_exec (FILE *);
 
-   if (!arg)
-      return;
-
-   infile = fopen (arg, "r");
+   infile = fopen (filename, "r");
    if (!infile)
    {
-      fprintf (stderr, "can't open %s\n", arg);
+      fprintf (stderr, "can't open %s\n", filename);
       return;
    }
 
    while (command_exec (infile) >= 0);
    fclose (infile);
+}
+
+
+void cmd_source (void)
+{
+   char *arg = getarg ();
+   if (!arg)
+      return;
+   command_exec_file (arg);
+}
+
+
+void cmd_regs (void)
+{
 }
 
 
@@ -827,10 +929,10 @@ struct command_name
       "List all breakpoints" },
    { "d", "delete", cmd_delete,
       "Delete a breakpoint" },
-   { "s", "step", cmd_step_next,
-      "Step to the next instruction" },
-   { "n", "next", cmd_step_next,
-      "Continue up to the next instruction" },
+   { "s", "step", cmd_step,
+      "Step one instruction" },
+   { "n", "next", cmd_next,
+      "Break at the next instruction" },
    { "c", "continue", cmd_continue,
       "Continue the program" },
    { "q", "quit", cmd_quit,
@@ -851,8 +953,10 @@ struct command_name
       "Open a symbol table file" },
    { "di", "display", cmd_display,
       "Add a display expression" },
-   { "scr", "script", cmd_script,
+   { "so", "source", cmd_source,
       "Run a command script" },
+   { "regs", "regs", cmd_regs,
+      "Show all CPU registers" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -933,7 +1037,7 @@ int
 command_exec (FILE *infile)
 {
    char buffer[256];
-   char prev_buffer[256];
+   static char prev_buffer[256];
    char *cmd;
    command_handler_t handler;
    int rc;
@@ -945,8 +1049,14 @@ command_exec (FILE *infile)
          return -1;
    } while (errno != 0);
 
+   /* In terminal mode, a blank line means to execute
+   the previous command. */
    if (buffer[0] == '\n')
       strcpy (buffer, prev_buffer);
+
+   /* Skip comments */
+   if (*buffer == '#')
+      return 0;
 
    cmd = strtok (buffer, " \t\n");
    if (!cmd)
@@ -966,9 +1076,24 @@ command_exec (FILE *infile)
 }
 
 
+void
+keybuffering (int flag)
+{
+   struct termios tio;
+
+   tcgetattr (0, &tio);
+   if (!flag) /* 0 = no buffering = not default */
+      tio.c_lflag &= ~ICANON;
+   else /* 1 = buffering = default */
+      tio.c_lflag |= ICANON;
+   tcsetattr (0, TCSANOW, &tio);
+}
+
+
 int
 command_loop (void)
 {
+   keybuffering (1);
    display_print ();
    print_current_insn ();
    exit_command_loop = -1;
@@ -978,6 +1103,9 @@ command_loop (void)
       if (command_exec (stdin) < 0)
          break;
    }
+
+   if (exit_command_loop == 0)
+      keybuffering (0);
    return (exit_command_loop);
 }
 
@@ -985,12 +1113,13 @@ command_loop (void)
 void
 breakpoint_hit (breakpoint_t *br)
 {
-   if (br->threaded)
-   {
-   }
+   if (br->threaded && (thread_id != br->tid))
+      return;
 
    if (br->conditional)
    {
+      if (eval (br->condition) == 0)
+         return;
    }
 
    if (br->ignore_count)
@@ -1016,8 +1145,13 @@ command_insn_hook (void)
 	br = brkfind_by_addr (abspc);
 	if (br && br->enabled && br->on_execute)
 	{
-		printf ("Breakpoint %d reached.\n", br->id);
       breakpoint_hit (br);
+      if (monitor_on == 0)
+         return;
+      if (br->temp)
+         brkfree (br);
+      else
+		   printf ("Breakpoint %d reached.\n", br->id);
 	}
 }
 
@@ -1044,11 +1178,13 @@ command_write_hook (absolute_address_t addr, U8 val)
    br = brkfind_by_addr (addr);
 	if (br && br->enabled && br->on_write)
    {
+      breakpoint_hit (br);
+      if (monitor_on == 0)
+         return;
       printf ("Watchpoint %d triggered. [", br->id);
       print_addr (addr);
       printf (" = 0x%02X", val);
       printf ("]\n");
-      breakpoint_hit (br);
    }
 
    if (thread_id_size && (addr == thread_current + thread_id_size - 1))
@@ -1076,6 +1212,12 @@ void s_virtual (unsigned long *val, int writep) {
 void d_virtual (unsigned long *val, int writep) {
 	writep ? set_d (*val) : (*val = get_d ());
 }
+void a_virtual (unsigned long *val, int writep) {
+	writep ? set_a (*val) : (*val = get_a ());
+}
+void b_virtual (unsigned long *val, int writep) {
+	writep ? set_b (*val) : (*val = get_b ());
+}
 void dp_virtual (unsigned long *val, int writep) {
 	writep ? set_dp (*val) : (*val = get_dp ());
 }
@@ -1095,17 +1237,6 @@ void cycles_virtual (unsigned long *val, int writep)
 void
 command_periodic (int signo)
 {
-   static unsigned long last_cycles = 0;
-
-   if (!monitor_on && signo == SIGALRM)
-   {
-      /* TODO */
-#if 0
-      unsigned long diff = get_cycles () - last_cycles;
-      printf ("%d cycles in 50ms\n");
-      last_cycles += diff;
-#endif
-   }
 }
 
 
@@ -1119,7 +1250,7 @@ command_irq_hook (unsigned long cycles)
 void
 command_init (void)
 {
-   struct itimerval itimer;
+   //struct itimerval itimer;
    struct sigaction sact;
    int rc;
 
@@ -1129,6 +1260,8 @@ command_init (void)
    sym_add (&auto_symtab, "u", (unsigned long)u_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "s", (unsigned long)s_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "d", (unsigned long)d_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "a", (unsigned long)a_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "b", (unsigned long)b_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "dp", (unsigned long)dp_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "cc", (unsigned long)cc_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "cycles", (unsigned long)cycles_virtual, SYM_AUTO);
@@ -1139,6 +1272,7 @@ command_init (void)
    print_type.format = 'x';
    print_type.size = 1;
 
+#if 0
    sigemptyset (&sact.sa_mask);
    sact.sa_flags = 0;
    sact.sa_handler = command_periodic;
@@ -1151,6 +1285,9 @@ command_init (void)
    rc = setitimer (ITIMER_REAL, &itimer, NULL);
    if (rc < 0)
       fprintf (stderr, "couldn't register interval timer\n");
+#endif
+
+   command_exec_file (".dbinit");
 }
 
 /* vim: set ts=3: */
