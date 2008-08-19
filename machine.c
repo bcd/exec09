@@ -319,7 +319,7 @@ struct hw_device *rom_create (const char *filename, unsigned int maxsize)
 
 	if (filename)
 	{	
-		fp = fopen (filename, "rb");
+		fp = file_open (NULL, filename, "rb");
 		if (!fp)
 			return NULL;
 		image_size = sizeof_file (fp);
@@ -576,11 +576,11 @@ struct hw_device *disk_create (const char *backing_file)
 	struct disk_priv *disk = malloc (sizeof (struct disk_priv));
 	int newdisk = 0;
 
-	disk->fp = fopen (backing_file, "r+b");
+	disk->fp = file_open (NULL, backing_file, "r+b");
 	if (disk->fp == NULL)
 	{
 		printf ("warning: disk does not exist, creating\n");
-		disk->fp = fopen (backing_file, "w+b");
+		disk->fp = file_open (NULL, backing_file, "w+b");
 		newdisk = 1;
 		if (disk->fp == NULL)
 		{
@@ -601,18 +601,30 @@ struct hw_device *disk_create (const char *backing_file)
 
 /**********************************************************/
 
+int machine_match (const char *machine_name, const char *boot_rom_file, struct machine *m)
+{
+	if (!strcmp (m->name, machine_name))
+	{
+		machine = m;
+		m->init (boot_rom_file);
+		return 1;
+	}
+	return 0;
+}
+
+
 void machine_init (const char *machine_name, const char *boot_rom_file)
 {
+	extern struct machine simple_machine;
+	extern struct machine eon_machine;
+	extern struct machine wpc_machine;
+
 	memset (busmaps, 0, sizeof (busmaps));
 
-	if (!strcmp (machine_name, "simple"))
-		simple_init (boot_rom_file);
-	else if (!strcmp (machine_name, "eon"))
-		eon_init (boot_rom_file);
-	else if (!strcmp (machine_name, "wpc"))
-		wpc_init (boot_rom_file);
-	else
-		exit (1);
+	if (machine_match (machine_name, boot_rom_file, &simple_machine));
+	else if (machine_match (machine_name, boot_rom_file, &eon_machine));
+	else if (machine_match (machine_name, boot_rom_file, &wpc_machine));
+	else exit (1);
 
 	/* Save the default busmap configuration, before the
 	CPU begins to run, so that it can be restored if

@@ -121,7 +121,10 @@ extern struct machine *machine;
 
 struct machine
 {
+	const char *name;
+	void (*init) (char *boot_rom_file);
 	void (*fault) (unsigned int addr, unsigned char type);
+	void (*dump_thread) (unsigned int thread_id);
 };
 
 #endif /* _M6809_MACHINE_H */

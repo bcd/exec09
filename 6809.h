@@ -113,6 +113,21 @@ extern void set_u  (unsigned);
 extern void set_pc (unsigned);
 extern void set_d  (unsigned);
 
+/* fileio.c */
+
+struct pathlist
+{
+	int count;
+	char *entry[32];
+};
+
+
+void path_init (struct pathlist *path);
+void path_add (struct pathlist *path, const char *dir);
+FILE * file_open (struct pathlist *path, const char *filename, const char *mode);
+FILE * file_require_open (struct pathlist *path, const char *filename, const char *mode);
+void file_close (FILE *fp);
+
 /* monitor.c */
 extern int monitor_on;
 extern int check_break (unsigned);

@@ -1,12 +1,6 @@
 
 #include <stdio.h>
-
-struct pathlist
-{
-	int count;
-	char *entry[32];
-};
-
+#include "6809.h"
 
 void
 path_init (struct pathlist *path)
@@ -35,7 +29,7 @@ file_open (struct pathlist *path, const char *filename, const char *mode)
 	if (fp)
 		return fp;
 
-	if (!path || strchr (filename, dirsep))
+	if (!path || strchr (filename, dirsep) || *mode == 'w')
 		return NULL;
 
 	for (count = 0; count < path->count; count++)
@@ -47,6 +41,16 @@ file_open (struct pathlist *path, const char *filename, const char *mode)
 	}
 
 	return NULL;
+}
+
+
+FILE *
+file_require_open (struct pathlist *path, const char *filename, const char *mode)
+{
+	FILE *fp = file_open (path, filename, mode);
+	if (!fp)
+		fprintf (stderr, "error: could not open '%s'\n", filename);
+	return fp;
 }
 
 

@@ -1100,7 +1100,7 @@ load_map_file (const char *name)
 
 	sprintf (map_filename, "%s.map", name);
 
-	fp = fopen (map_filename, "r");
+	fp = file_open (NULL, map_filename, "r");
 	if (!fp)
 		return -1;
 
@@ -1114,7 +1114,6 @@ load_map_file (const char *name)
 		if (!strncmp (value_ptr, "page", 4))
 		{
 			unsigned char page = strtoul (value_ptr+4, NULL, 10);
-			printf ("Page is now %d\n", page);
 			wpc_set_rom_page (page);
 			continue;
 		}
@@ -1155,7 +1154,7 @@ load_hex (char *name)
   int done = 1;
   int line = 0;
 
-  fp = fopen (name, "r");
+  fp = file_open (NULL, name, "r");
 
   if (fp == NULL)
     {
@@ -1224,7 +1223,7 @@ load_s19 (char *name)
   int done = 1;
   int line = 0;
 
-  fp = fopen (name, "r");
+  fp = file_open (NULL, name, "r");
 
   if (fp == NULL)
     {
