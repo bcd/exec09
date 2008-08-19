@@ -113,7 +113,6 @@ idle_loop (void)
 	if (total_ms_elapsed > 100)
 	{
 		total_ms_elapsed -= 100;
-		command_periodic ();
 		wpc_periodic ();
 	}
 

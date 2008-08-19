@@ -133,7 +133,7 @@ struct wpc_asic
    U8 sols[6];
    U8 switch_strobe;
    U8 switch_mx[8];
-   U8 directsw;
+	U8 opto_mx[8];
 
 	int curr_sw;
 	int curr_sw_time;
@@ -227,6 +227,10 @@ void wpc_write_switch (struct wpc_asic *wpc, int num, int flag)
 
 	col = num / 8;
 	val = 1 << (num % 8);
+
+	if (wpc->opto_mx[col] & val)
+		flag = !flag;
+
 	wpc->switch_mx[col] &= ~val;
 	if (flag)
 		wpc->switch_mx[col] |= val;
@@ -326,7 +330,7 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 			break;
 
 		case WPC_SHIFTADDR+1:
-			val = (wpc->shiftaddr & 0xFF) + (wpc->shiftbit % 8);
+			val = (wpc->shiftaddr & 0xFF) + (wpc->shiftbit / 8);
 			break;
 
 		case WPC_SHIFTBIT:
@@ -504,6 +508,7 @@ void io_sym_add (const char *name, unsigned long cpuaddr)
 }
 
 #define IO_SYM_ADD(name) io_sym_add (#name, name)
+
 
 void wpc_init (const char *boot_rom_file)
 {

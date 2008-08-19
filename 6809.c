@@ -1420,7 +1420,7 @@ rti (void)
 {
   monitor_return ();
   cpu_clk -= 6;
-  command_irq_hook (get_cycles () - irq_start_time);
+  command_exit_irq_hook (get_cycles () - irq_start_time);
   set_cc (read_stack (S));
   S = (S + 1) & 0xffff;
 
