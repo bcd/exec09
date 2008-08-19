@@ -5,14 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
-#if 0
-#include <sys/time.h>
-#endif
 #include <sys/errno.h>
 #include <termios.h>
-
-#define PERIODIC_INTERVAL 50  /* in ms */
 
 /**********************************************************/
 /********************* Global Data ************************/
@@ -43,6 +37,11 @@ char *command_flags;
 
 int exit_command_loop;
 
+#define IRQ_CYCLE_COUNTS 128
+unsigned int irq_cycle_tab[IRQ_CYCLE_COUNTS] = { 0, };
+unsigned int irq_cycle_entry = 0;
+unsigned long irq_cycles = 0;
+
 unsigned long eval (char *expr);
 extern int auto_break_insn_count;
 
@@ -67,19 +66,6 @@ print_addr (absolute_address_t addr)
    else
       printf ("%-20.20s", "");
 }
-
-
-unsigned long
-compute_inirq (void)
-{
-}
-
-
-unsigned long
-compute_infirq (void)
-{
-}
-
 
 
 /**********************************************************/
@@ -149,7 +135,6 @@ eval_virtual (const char *name)
    }
    else
    {
-		syntax_error ("???");
 		return 0;
    }
 
@@ -1224,6 +1209,10 @@ void dp_virtual (unsigned long *val, int writep) {
 void cc_virtual (unsigned long *val, int writep) {
 	writep ? set_cc (*val) : (*val = get_cc ());
 }
+void irq_load_virtual (unsigned long *val, int writep) {
+	if (!writep)
+      *val = irq_cycles / IRQ_CYCLE_COUNTS;
+}
 
 
 void cycles_virtual (unsigned long *val, int writep)
@@ -1235,23 +1224,20 @@ void cycles_virtual (unsigned long *val, int writep)
 
 
 void
-command_periodic (int signo)
+command_exit_irq_hook (unsigned long cycles)
 {
-}
-
-
-void
-command_irq_hook (unsigned long cycles)
-{
+   irq_cycles -= irq_cycle_tab[irq_cycle_entry];
+   irq_cycles += cycles;
+   irq_cycle_tab[irq_cycle_entry] = cycles;
+   irq_cycle_entry = (irq_cycle_entry + 1) % IRQ_CYCLE_COUNTS;
    //printf ("IRQ took %lu cycles\n", cycles);
+   //printf ("Average = %d\n", irq_cycles / IRQ_CYCLE_COUNTS);
 }
 
 
 void
 command_init (void)
 {
-   //struct itimerval itimer;
-   struct sigaction sact;
    int rc;
 
    sym_add (&auto_symtab, "pc", (unsigned long)pc_virtual, SYM_AUTO);
@@ -1265,27 +1251,13 @@ command_init (void)
    sym_add (&auto_symtab, "dp", (unsigned long)dp_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "cc", (unsigned long)cc_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "cycles", (unsigned long)cycles_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "irqload", (unsigned long)irq_load_virtual, SYM_AUTO);
 
    examine_type.format = 'x';
    examine_type.size = 1;
 
    print_type.format = 'x';
    print_type.size = 1;
-
-#if 0
-   sigemptyset (&sact.sa_mask);
-   sact.sa_flags = 0;
-   sact.sa_handler = command_periodic;
-   sigaction (SIGALRM, &sact, NULL);
-
-   itimer.it_interval.tv_sec = 0;
-   itimer.it_interval.tv_usec = PERIODIC_INTERVAL * 1000;
-   itimer.it_value.tv_sec = 0;
-   itimer.it_value.tv_usec = PERIODIC_INTERVAL * 1000;
-   rc = setitimer (ITIMER_REAL, &itimer, NULL);
-   if (rc < 0)
-      fprintf (stderr, "couldn't register interval timer\n");
-#endif
 
    command_exec_file (".dbinit");
 }

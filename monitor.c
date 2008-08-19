@@ -1031,11 +1031,13 @@ dasm (char *buf, absolute_address_t opc)
 
     case _rel_byte:
       fetch1 = ((INT8) fetch8 ());
-      sprintf (buf, "$%04X", (fetch1 + pc) & 0xffff);
+      //sprintf (buf, "$%04X", (fetch1 + pc) & 0xffff);
+	   sprintf (buf, "%s", monitor_addr_name ((fetch1 + pc) & 0xffff));
       break;
 
     case _rel_word:
-      sprintf (buf, "$%04X", (fetch16 () + pc) & 0xffff);
+      //sprintf (buf, "$%04X", (fetch16 () + pc) & 0xffff);
+	   sprintf (buf, "%s", monitor_addr_name ((fetch16 () + pc) & 0xffff));
       break;
 
     case _reg_post:
@@ -1114,7 +1116,6 @@ load_map_file (const char *name)
 		if (!strncmp (value_ptr, "page", 4))
 		{
 			unsigned char page = strtoul (value_ptr+4, NULL, 10);
-			printf ("Page is now %d\n", page);
 			wpc_set_rom_page (page);
 			continue;
 		}
