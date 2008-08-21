@@ -76,6 +76,7 @@ void monitor_branch (void);
 void monitor_call (unsigned int flags);
 void monitor_return (void);
 const char * monitor_addr_name (target_addr_t addr);
+const char * absolute_addr_name (unsigned long addr);
 
 
 

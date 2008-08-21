@@ -137,6 +137,7 @@ struct wpc_asic
 
 	int curr_sw;
 	int curr_sw_time;
+	int wdog_timer;
 };
 
 struct wpc_asic *global_wpc;
@@ -147,6 +148,7 @@ void wpc_asic_reset (struct hw_device *dev)
    struct wpc_asic *wpc = dev->priv;
 	global_wpc = wpc;
 	wpc->curr_sw_time = 0;
+	wpc->wdog_timer = 0;
 }
 
 static int wpc_console_inited = 0;
@@ -411,7 +413,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 			break;
 
 		case WPC_ZEROCROSS_IRQ_CLEAR:
-			/* ignore for now */
+			wpc->wdog_timer++;
 			break;
 
 		case WPC_ROM_BANK:
@@ -468,9 +470,13 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 void wpc_periodic (void)
 {
 	struct wpc_asic *wpc = global_wpc;
-	//printf ("WPC 100ms periodic\n");
 
 	wpc_keypoll (wpc);
+
+	wpc->wdog_timer -= 50;
+	if (wpc->wdog_timer <= 0)
+	{
+	}
 
 	if (wpc->curr_sw_time > 0)
 	{

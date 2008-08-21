@@ -189,6 +189,7 @@ parse_format_flag (const char *flags, unsigned char *formatp)
          case 'u':
          case 'o':
          case 'a':
+         case 's':
             *formatp = *flags;
             break;
       }
@@ -403,6 +404,12 @@ brkfree (breakpoint_t *br)
 void
 brkfree_temps (void)
 {
+   unsigned int n;
+   for (n = 0; n < MAX_BREAKS; n++)
+      if (breaktab[n].used && breaktab[n].temp)
+      {
+         brkfree (&breaktab[n]);
+      }
 }
 
 
@@ -486,6 +493,18 @@ print_value (unsigned long val, datatype_t *typep)
       case 'a':
          print_addr (val);
          return;
+
+      case 's':
+      {
+         absolute_address_t addr = (absolute_address_t)val;
+         char c;
+
+         putchar ('"');
+         while ((c = abs_read8 (addr++)) != '\0')
+            putchar (c);
+         putchar ('"');
+         return;
+      }
    }
 
 	if (typep->format == 'x')
@@ -548,7 +567,7 @@ do_examine (void)
    if (isdigit (*command_flags))
       examine_repeat = strtoul (command_flags, &command_flags, 0);
 
-	if (*command_flags == 's' || *command_flags == 'i')
+	if (*command_flags == 'i')
 		examine_type.format = *command_flags;
 	else
       parse_format_flag (command_flags, &examine_type.format);
