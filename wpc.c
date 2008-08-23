@@ -468,7 +468,6 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 void wpc_periodic (void)
 {
 	struct wpc_asic *wpc = global_wpc;
-	//printf ("WPC 100ms periodic\n");
 
 	wpc_keypoll (wpc);
 
