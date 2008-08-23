@@ -24,14 +24,26 @@
 #include <string.h>
 
 
+/* A pointer to the current stringspace */
 struct stringspace *current_stringspace;
 
+/* Symbol table for program variables (taken from symbol file) */
 struct symtab program_symtab;
 
+/* Symbol table for internal variables.  Works identically to the
+above but in a different namespace */
 struct symtab internal_symtab;
 
+/* Symbol table for the 'autocomputed virtuals'.  The values
+kept in the table are pointers to functions that compute the
+values, allowing for dynamic variables. */
 struct symtab auto_symtab;
 
+
+/**
+ * Create a new stringspace, which is just a buffer that
+ * holds strings.
+ */
 struct stringspace *stringspace_create (void)
 {
 	struct stringspace *ss = malloc (sizeof (struct stringspace));
@@ -39,6 +51,12 @@ struct stringspace *stringspace_create (void)
 	return ss;
 }
 
+
+/**
+ * Copy a string into the stringspace.  This keeps it around
+ * permanently; the caller is allowed to free the string
+ * afterwards.
+ */
 char *stringspace_copy (const char *string)
 {
 	unsigned int len = strlen (string) + 1;
@@ -76,9 +94,9 @@ unsigned int sym_hash_value (unsigned long value)
 
 
 /**
- * Lookup the symbol 'name'.
- * Returns 0 if the symbol exists (and optionally stores its value
- * in *value if not NULL), or -1 if it does not exist.
+ * Lookup the symbol table entry for 'name'.
+ * Returns NULL if the symbol is not defined.
+ * If VALUE is not-null, the value is also copied there.
  */
 struct symbol *sym_find1 (struct symtab *symtab,
                           const char *name, unsigned long *value,
@@ -113,6 +131,11 @@ struct symbol *sym_find1 (struct symtab *symtab,
 }
 
 
+/**
+ * Lookup the symbol 'name'.
+ * Returns 0 if the symbol exists (and optionally stores its value
+ * in *value if not NULL), or -1 if it does not exist.
+ */
 int sym_find (struct symtab *symtab,
               const char *name, unsigned long *value, unsigned int type)
 {
@@ -172,6 +195,23 @@ void sym_set (struct symtab *symtab,
 		sym_add (symtab, name, value, type);
 }
 
+
+void for_each_var (void (*cb) (struct symbol *, unsigned int size))
+{
+	struct symtab *symtab = &program_symtab;
+	absolute_address_t addr;
+	const char *sym;
+	unsigned int devid = 1;
+
+	for (addr = devid << 28; addr < (devid << 28) + 0x2000; addr++)
+	{
+		sym = sym_lookup (symtab, addr);
+		if (sym)
+		{
+			printf ("%s = %X\n", sym, addr);
+		}
+	}
+}
 
 void symtab_init (struct symtab *symtab)
 {

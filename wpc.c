@@ -137,6 +137,7 @@ struct wpc_asic
 
 	int curr_sw;
 	int curr_sw_time;
+	int wdog_timer;
 };
 
 struct wpc_asic *global_wpc;
@@ -147,6 +148,7 @@ void wpc_asic_reset (struct hw_device *dev)
    struct wpc_asic *wpc = dev->priv;
 	global_wpc = wpc;
 	wpc->curr_sw_time = 0;
+	wpc->wdog_timer = 0;
 }
 
 static int wpc_console_inited = 0;
@@ -411,7 +413,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 			break;
 
 		case WPC_ZEROCROSS_IRQ_CLEAR:
-			/* ignore for now */
+			wpc->wdog_timer++;
 			break;
 
 		case WPC_ROM_BANK:
@@ -471,6 +473,11 @@ void wpc_periodic (void)
 
 	wpc_keypoll (wpc);
 
+	wpc->wdog_timer -= 50;
+	if (wpc->wdog_timer <= 0)
+	{
+	}
+
 	if (wpc->curr_sw_time > 0)
 	{
 		wpc->curr_sw_time -= 100;
@@ -501,19 +508,18 @@ void wpc_fault (unsigned int addr, unsigned char type)
 {
 }
 
-struct machine wpc_machine =
+void io_sym_add (const char *name, unsigned long cpuaddr)
 {
-	.fault = wpc_fault,
-};
+   sym_add (&program_symtab, name, to_absolute (cpuaddr), 0);
+}
 
+#define IO_SYM_ADD(name) io_sym_add (#name, name)
 
 
 void wpc_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
 	struct wpc_asic *wpc;
-
-	machine = &wpc_machine;
 
 	device_define ( dev = wpc_asic_create (), 0,
 		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);
@@ -531,6 +537,57 @@ void wpc_init (const char *boot_rom_file)
 	wpc->rom_dev = dev;
 	wpc_update_ram (wpc);
 
-   sym_add (&program_symtab, "WPC_ROM_BANK", to_absolute (WPC_ROM_BANK), 0);
+	IO_SYM_ADD(WPC_DMD_HIGH_PAGE);
+	IO_SYM_ADD(WPC_DMD_FIRQ_ROW_VALUE);
+	IO_SYM_ADD(WPC_DMD_LOW_PAGE);
+	IO_SYM_ADD(WPC_DMD_ACTIVE_PAGE);
+	IO_SYM_ADD(WPC_SERIAL_STATUS_PORT);
+	IO_SYM_ADD(WPC_PARALLEL_DATA_PORT);
+	IO_SYM_ADD(WPC_PARALLEL_STROBE_PORT);
+	IO_SYM_ADD(WPC_SERIAL_DATA_OUTPUT);
+	IO_SYM_ADD(WPC_SERIAL_CONTROL_OUTPUT);
+	IO_SYM_ADD(WPC_SERIAL_BAUD_SELECT);
+	IO_SYM_ADD(WPC_TICKET_DISPENSE);
+	IO_SYM_ADD(WPC_DCS_SOUND_DATA_OUT);
+	IO_SYM_ADD(WPC_DCS_SOUND_DATA_IN);
+	IO_SYM_ADD(WPC_DCS_SOUND_RESET);
+	IO_SYM_ADD(WPC_DCS_SOUND_DATA_READY);
+	IO_SYM_ADD(WPC_FLIPTRONIC_PORT_A);
+	IO_SYM_ADD(WPC_FLIPTRONIC_PORT_B);
+	IO_SYM_ADD(WPCS_DATA);
+	IO_SYM_ADD(WPCS_CONTROL_STATUS);
+	IO_SYM_ADD(WPC_SOL_FLASH2_OUTPUT);
+	IO_SYM_ADD(WPC_SOL_HIGHPOWER_OUTPUT);
+	IO_SYM_ADD(WPC_SOL_FLASH1_OUTPUT);
+	IO_SYM_ADD(WPC_SOL_LOWPOWER_OUTPUT);
+	IO_SYM_ADD(WPC_LAMP_ROW_OUTPUT);
+	IO_SYM_ADD(WPC_LAMP_COL_STROBE);
+	IO_SYM_ADD(WPC_GI_TRIAC);
+	IO_SYM_ADD(WPC_SW_JUMPER_INPUT);
+	IO_SYM_ADD(WPC_SW_CABINET_INPUT);
+	IO_SYM_ADD(WPC_SW_ROW_INPUT);
+	IO_SYM_ADD(WPC_SW_COL_STROBE);
+	IO_SYM_ADD(WPC_LEDS);
+	IO_SYM_ADD(WPC_RAM_BANK);
+	IO_SYM_ADD(WPC_SHIFTADDR);
+	IO_SYM_ADD(WPC_SHIFTBIT);
+	IO_SYM_ADD(WPC_SHIFTBIT2);
+	IO_SYM_ADD(WPC_PERIPHERAL_TIMER_FIRQ_CLEAR);
+	IO_SYM_ADD(WPC_ROM_LOCK);
+	IO_SYM_ADD(WPC_CLK_HOURS_DAYS);
+	IO_SYM_ADD(WPC_CLK_MINS);
+	IO_SYM_ADD(WPC_ROM_BANK);
+	IO_SYM_ADD(WPC_RAM_LOCK);
+	IO_SYM_ADD(WPC_RAM_LOCKSIZE);
 }
+
+
+struct machine wpc_machine =
+{
+	.name = "wpc",
+	.fault = wpc_fault,
+	.init = wpc_init,
+};
+
+
 

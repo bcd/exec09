@@ -8,6 +8,14 @@
 #include <sys/errno.h>
 #include <termios.h>
 
+typedef struct
+{
+   unsigned int size;
+   unsigned int count;
+   char **strings;
+} cmdqueue_t;
+
+
 /**********************************************************/
 /********************* Global Data ************************/
 /**********************************************************/
@@ -30,6 +38,10 @@ unsigned int thread_id_size = 2;
 absolute_address_t thread_current;
 absolute_address_t thread_id = 0;
 thread_t threadtab[MAX_THREADS];
+
+#define MAX_CMD_QUEUES 8
+int command_stack_depth = -1;
+cmdqueue_t command_stack[MAX_CMD_QUEUES];
 
 datatype_t print_type;
 
@@ -177,6 +189,7 @@ parse_format_flag (const char *flags, unsigned char *formatp)
          case 'u':
          case 'o':
          case 'a':
+         case 's':
             *formatp = *flags;
             break;
       }
@@ -388,6 +401,18 @@ brkfree (breakpoint_t *br)
 }
 
 
+void
+brkfree_temps (void)
+{
+   unsigned int n;
+   for (n = 0; n < MAX_BREAKS; n++)
+      if (breaktab[n].used && breaktab[n].temp)
+      {
+         brkfree (&breaktab[n]);
+      }
+}
+
+
 breakpoint_t *
 brkfind_by_addr (absolute_address_t addr)
 {
@@ -468,6 +493,18 @@ print_value (unsigned long val, datatype_t *typep)
       case 'a':
          print_addr (val);
          return;
+
+      case 's':
+      {
+         absolute_address_t addr = (absolute_address_t)val;
+         char c;
+
+         putchar ('"');
+         while ((c = abs_read8 (addr++)) != '\0')
+            putchar (c);
+         putchar ('"');
+         return;
+      }
    }
 
 	if (typep->format == 'x')
@@ -530,7 +567,7 @@ do_examine (void)
    if (isdigit (*command_flags))
       examine_repeat = strtoul (command_flags, &command_flags, 0);
 
-	if (*command_flags == 's' || *command_flags == 'i')
+	if (*command_flags == 'i')
 		examine_type.format = *command_flags;
 	else
       parse_format_flag (command_flags, &examine_type.format);
@@ -620,15 +657,44 @@ command_change_thread (void)
       return;
 
    thread_id = th;
-   if (addr)
+
+   if (machine->dump_thread && eval ("$thread_debug"))
    {
-      printf ("[Current thread = ");
-      print_addr (thread_id);
-      print_thread_data (thread_id);
-      printf ("]\n");
+      if (addr)
+      {
+         printf ("[Current thread = ");
+         print_addr (thread_id);
+         machine->dump_thread (thread_id);
+         print_thread_data (thread_id);
+         printf ("]\n");
+      }
+      else
+      {
+         printf ("[ No thread ]\n");
+      }
    }
-   else
-      printf ("[ No thread ]\n");
+}
+
+
+void
+command_stack_push (unsigned int reason)
+{
+   cmdqueue_t *q = &command_stack[++command_stack_depth];
+}
+
+
+void
+command_stack_pop (void)
+{
+   cmdqueue_t *q = &command_stack[command_stack_depth];
+   --command_stack_depth;
+}
+
+
+void
+command_stack_add (const char *cmd)
+{
+   cmdqueue_t *q = &command_stack[command_stack_depth];
 }
 
 
@@ -757,14 +823,15 @@ void cmd_next (void)
 
    unsigned long addr = to_absolute (get_pc ());
    addr += dasm (buf, addr);
-   printf ("Will stop at ");
-   print_addr (addr);
-   putchar ('\n');
 
    br = brkalloc ();
    br->addr = addr;
    br->on_execute = 1;
    br->temp = 1;
+
+   /* TODO - for conditional branches, should also set a
+   temp breakpoint at the branch target */
+
    exit_command_loop = 0;
 }
 
@@ -860,20 +927,18 @@ void cmd_display (void)
 }
 
 
-void command_exec_file (const char *filename)
+int command_exec_file (const char *filename)
 {
    FILE *infile;
    extern int command_exec (FILE *);
 
-   infile = fopen (filename, "r");
+   infile = file_open (NULL, filename, "r");
    if (!infile)
-   {
-      fprintf (stderr, "can't open %s\n", filename);
-      return;
-   }
+      return 0;
 
    while (command_exec (infile) >= 0);
    fclose (infile);
+   return 1;
 }
 
 
@@ -882,12 +947,19 @@ void cmd_source (void)
    char *arg = getarg ();
    if (!arg)
       return;
-   command_exec_file (arg);
+
+   if (command_exec_file (arg) == 0)
+      fprintf (stderr, "can't open %s\n", arg);
 }
 
 
 void cmd_regs (void)
 {
+}
+
+void cmd_vars (void)
+{
+   for_each_var (NULL);
 }
 
 
@@ -942,6 +1014,8 @@ struct command_name
       "Run a command script" },
    { "regs", "regs", cmd_regs,
       "Show all CPU registers" },
+   { "vars", "vars", cmd_vars,
+      "Show all program variables" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -1079,6 +1153,7 @@ int
 command_loop (void)
 {
    keybuffering (1);
+   brkfree_temps ();
    display_print ();
    print_current_insn ();
    exit_command_loop = -1;
@@ -1259,7 +1334,7 @@ command_init (void)
    print_type.format = 'x';
    print_type.size = 1;
 
-   command_exec_file (".dbinit");
+   (void)command_exec_file (".dbinit");
 }
 
 /* vim: set ts=3: */

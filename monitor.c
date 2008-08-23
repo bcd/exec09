@@ -1031,13 +1031,11 @@ dasm (char *buf, absolute_address_t opc)
 
     case _rel_byte:
       fetch1 = ((INT8) fetch8 ());
-      //sprintf (buf, "$%04X", (fetch1 + pc) & 0xffff);
-	   sprintf (buf, "%s", monitor_addr_name ((fetch1 + pc) & 0xffff));
+	   sprintf (buf, "%s", absolute_addr_name (fetch1 + pc));
       break;
 
     case _rel_word:
-      //sprintf (buf, "$%04X", (fetch16 () + pc) & 0xffff);
-	   sprintf (buf, "%s", monitor_addr_name ((fetch16 () + pc) & 0xffff));
+	   sprintf (buf, "%s", absolute_addr_name (fetch16 () + pc));
       break;
 
     case _reg_post:
@@ -1102,7 +1100,7 @@ load_map_file (const char *name)
 
 	sprintf (map_filename, "%s.map", name);
 
-	fp = fopen (map_filename, "r");
+	fp = file_open (NULL, map_filename, "r");
 	if (!fp)
 		return -1;
 
@@ -1156,7 +1154,7 @@ load_hex (char *name)
   int done = 1;
   int line = 0;
 
-  fp = fopen (name, "r");
+  fp = file_open (NULL, name, "r");
 
   if (fp == NULL)
     {
@@ -1225,7 +1223,7 @@ load_s19 (char *name)
   int done = 1;
   int line = 0;
 
-  fp = fopen (name, "r");
+  fp = file_open (NULL, name, "r");
 
   if (fp == NULL)
     {
@@ -1297,6 +1295,11 @@ monitor_call (unsigned int flags)
 		current_function_call->flags = flags;
 	}
 #endif
+	const char *id = sym_lookup (&program_symtab, to_absolute (get_pc ()));
+	if (id)
+	{
+		// printf ("In %s now\n", id);
+	}
 }
 
 
@@ -1319,6 +1322,25 @@ monitor_return (void)
 	if (current_function_call > fctab)
 		current_function_call--;
 #endif
+}
+
+
+const char *
+absolute_addr_name (absolute_address_t addr)
+{
+	static char buf[256], *bufptr;
+	const char *name;
+
+	bufptr = buf;
+
+   bufptr += sprintf (bufptr, "%02X:0x%04X", addr >> 28, addr & 0xFFFFFF);
+
+   name = sym_lookup (&program_symtab, addr);
+   if (name)
+      bufptr += sprintf (bufptr, "  <%-16.16s>", name);
+
+	return buf;
+
 }
 
 
@@ -1374,47 +1396,6 @@ check_break (unsigned break_pc)
 		if (--auto_break_insn_count == 0)
 			return 1;
 	return 0;
-}
-
-
-
-void
-cmd_show (void)
-{
-  int cc = get_cc ();
-  int pc = get_pc ();
-  char inst[50];
-  int offset, moffset;
-
-  moffset = dasm (inst, pc);
-
-  printf ("S  $%04X U  $%04X X  $%04X Y  $%04X   EFHINZVC\n", get_s (),
-	  get_u (), get_x (), get_y ());
-  printf ("A  $%02X   B  $%02X   DP $%02X   CC $%02X     ", get_a (),
-	  get_b (), get_dp (), cc);
-  printf ("%c%c%c%c", (cc & E_FLAG ? '1' : '.'), (cc & F_FLAG ? '1' : '.'),
-	  (cc & H_FLAG ? '1' : '.'), (cc & I_FLAG ? '1' : '.'));
-  printf ("%c%c%c%c\n", (cc & N_FLAG ? '1' : '.'), (cc & Z_FLAG ? '1' : '.'),
-	  (cc & V_FLAG ? '1' : '.'), (cc & C_FLAG ? '1' : '.'));
-  printf ("PC: %s  ", monitor_addr_name (pc));
-  printf ("Cycle  %lX   ", total);
-  for (offset = 0; offset < moffset; offset++)
-    printf ("%02X", read8 (offset+pc));
-  printf ("  NextInst: %s\n", inst);
-}
-
-
-void
-monitor_prompt (void)
-{
-	char inst[50];
-	target_addr_t pc = get_pc ();
-	dasm (inst, pc);
-
-	printf ("S:%04X U:%04X X:%04X Y:%04X D:%04X\n", 
-		get_s (), get_u (), get_x (), get_y (), get_d ());
-
-	printf ("%30.30s   %s\n", monitor_addr_name (pc), inst);
 }
 
 

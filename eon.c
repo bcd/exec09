@@ -18,11 +18,6 @@ void eon_fault (unsigned int addr, unsigned char type)
 	}
 }
 
-struct machine eon_machine =
-{
-	.fault = eon_fault,
-};
-
 
 /**
  * Initialize the EON machine.
@@ -30,8 +25,6 @@ struct machine eon_machine =
 void eon_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
-
-	machine = &eon_machine;
 
 	/* The MMU must be defined first, as all other devices
 	that are attached can try to hook into the MMU. */
@@ -62,10 +55,25 @@ void eon_init (const char *boot_rom_file)
  */
 void simple_init (const char *boot_rom_file)
 {
-	machine = &eon_machine;
 	device_define ( ram_create (MAX_CPU_ADDR), 0,
 		0x0000, MAX_CPU_ADDR, MAP_READWRITE );
 	device_define ( console_create (), 0,
 		0xFF00, BUS_MAP_SIZE, MAP_READWRITE );
 }
+
+
+struct machine eon_machine =
+{
+	.name = "eon",
+	.fault = eon_fault,
+	.init = eon_init,
+};
+
+struct machine simple_machine =
+{
+	.name = "simple",
+	.fault = eon_fault,
+	.init = simple_init,
+};
+
 

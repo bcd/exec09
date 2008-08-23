@@ -56,6 +56,7 @@ extern int dump_cycles_on_success;
 extern int trace_enabled;
 
 extern void irq (void);
+extern void firq (void);
 
 
 void request_irq (unsigned int source)
@@ -64,7 +65,6 @@ void request_irq (unsigned int source)
 	 * IRQ immediately.  Else, mark it pending and
 	 * we'll check it later when the flags change.
 	 */
-	//printf ("request IRQ : pending=%02X flags=%02X\n", irqs_pending, EFI);
 	irqs_pending |= (1 << source);
 	if (!(EFI & I_FLAG))
 		irq ();
@@ -74,6 +74,24 @@ void release_irq (unsigned int source)
 {
 	irqs_pending &= ~(1 << source);
 }
+
+
+void request_firq (unsigned int source)
+{
+	/* If the interrupt is not masked, generate
+	 * IRQ immediately.  Else, mark it pending and
+	 * we'll check it later when the flags change.
+	 */
+	firqs_pending |= (1 << source);
+	if (!(EFI & I_FLAG))
+		firq ();
+}
+
+void release_firq (unsigned int source)
+{
+	firqs_pending &= ~(1 << source);
+}
+
 
 
 static inline void
@@ -617,7 +635,9 @@ set_cc (unsigned arg)
   C = arg & C_FLAG;
 
   /* Check for pending interrupts */
-	if (irqs_pending && !(EFI & I_FLAG))
+	if (firqs_pending && !(EFI & F_FLAG))
+		firq ();
+	else if (irqs_pending && !(EFI & I_FLAG))
 		irq ();
 }
 
@@ -1483,6 +1503,24 @@ irq (void)
   irqs_pending = 0;
 #endif
 }
+
+
+void
+firq (void)
+{
+  EFI |= E_FLAG;
+  S = (S - 2) & 0xffff;
+  write_stack16 (S, PC & 0xffff);
+  S = (S - 1) & 0xffff;
+  write_stack (S, get_cc ());
+  EFI |= (I_FLAG | F_FLAG);
+
+  change_pc (read16 (0xfffc));
+#if 1
+  firqs_pending = 0;
+#endif
+}
+
 
 void
 swi (void)
