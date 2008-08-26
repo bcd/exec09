@@ -43,6 +43,8 @@ thread_t threadtab[MAX_THREADS];
 int command_stack_depth = -1;
 cmdqueue_t command_stack[MAX_CMD_QUEUES];
 
+int stop_after_ms = 0;
+
 datatype_t print_type;
 
 char *command_flags;
@@ -457,6 +459,8 @@ brkprint (breakpoint_t *brkpt)
       printf (", print-only");
    if (brkpt->temp)
       printf (", temp");
+   if (brkpt->ignore_count)
+      printf (", ignore %d times\n", brkpt->ignore_count);
    putchar ('\n');
 }
 
@@ -745,11 +749,17 @@ void cmd_break (void)
    br->addr = val;
    br->on_execute = 1;
 
-   if ((arg = getarg()) && !strcmp (arg, "if"))
+   arg = getarg ();
+   if (!arg);
+   else if (!strcmp (arg, "if"))
    {
       br->conditional = 1;
       arg = getarg ();
       strcpy (br->condition, arg);
+   }
+   else if (!strcmp (arg, "ignore"))
+   {
+      br->ignore_count = atoi (getarg ());
    }
 
    brkprint (br);
@@ -963,6 +973,15 @@ void cmd_vars (void)
 }
 
 
+void cmd_runfor (void)
+{
+   char *arg = getarg ();
+   int secs = atoi (arg);
+   stop_after_ms = secs * 1000;
+   exit_command_loop = 0;
+}
+
+
 /****************** Parser ************************/
 
 void cmd_help (void);
@@ -1016,6 +1035,8 @@ struct command_name
       "Show all CPU registers" },
    { "vars", "vars", cmd_vars,
       "Show all program variables" },
+   { "runfor", "runfor", cmd_runfor,
+      "Run for a certain amount of time" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -1250,6 +1271,22 @@ command_write_hook (absolute_address_t addr, U8 val)
    if (thread_id_size && (addr == thread_current + thread_id_size - 1))
    {
       command_change_thread ();
+   }
+}
+
+
+void
+command_periodic (void)
+{
+   if (stop_after_ms)
+   {
+      stop_after_ms -= 100;
+      if (stop_after_ms <= 0)
+      {
+         monitor_on = 1;
+         stop_after_ms = 0;
+         printf ("Stopping after time elapsed.\n");
+      }
    }
 }
 

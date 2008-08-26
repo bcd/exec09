@@ -109,16 +109,15 @@ idle_loop (void)
 		sim_ms += cycles_per_ms;
 	last_cycles = cycles;
 
-
-	/* Minimum sleep time is usually around 10ms. */
-	delay = sim_ms - real_ms;
-	total_ms_elapsed += delay;
+	total_ms_elapsed += sim_ms;
 	if (total_ms_elapsed > 100)
 	{
 		total_ms_elapsed -= 100;
 		wpc_periodic ();
+		command_periodic ();
 	}
 
+	delay = sim_ms - real_ms;
 	if (delay > 0)
 	{
 		if (delay > 60)
