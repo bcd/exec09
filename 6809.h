@@ -78,7 +78,7 @@ extern UINT8 *memory;
 
 /* 16-bit versions */
 #define read16(addr)       (read8(addr) << 8 | read8(addr+1))
-#define write16(addr,val)  do { write8(addr, val & 0xFF); write8(addr+1, (val >> 8) & 0xFF) } while (0)
+#define write16(addr,val)  do { write8(addr+1, val & 0xFF); write8(addr, (val >> 8) & 0xFF); } while (0)
 
 /* Fetch macros */
 
@@ -207,6 +207,8 @@ typedef struct
    unsigned int size : 4;
    unsigned int keep_running : 1;
 	unsigned int temp : 1;
+	unsigned int last_write : 16;
+	unsigned int write_mask : 16;
    absolute_address_t addr;
    char condition[128];
    thread_id_t tid;
