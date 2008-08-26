@@ -55,6 +55,7 @@ unsigned int irq_cycle_entry = 0;
 unsigned long irq_cycles = 0;
 
 unsigned long eval (char *expr);
+unsigned long eval_mem (char *expr);
 extern int auto_break_insn_count;
 
 
@@ -161,6 +162,12 @@ eval_assign (const char *expr, unsigned long val)
 	{
 		assign_virtual (expr+1, val);
 	}
+   else
+   {
+      absolute_address_t dst = eval_mem (expr);
+      printf ("Setting %X to %02X\n", dst, val);
+      abs_write8 (dst, val);
+   }
 }
 
 
@@ -457,6 +464,8 @@ brkprint (breakpoint_t *brkpt)
       printf (", print-only");
    if (brkpt->temp)
       printf (", temp");
+   if (brkpt->write_mask)
+      printf (", mask %02X\n", brkpt->write_mask);
    putchar ('\n');
 }
 
@@ -769,17 +778,25 @@ void cmd_watch1 (int on_read, int on_write)
    br->on_read = on_read;
    br->on_write = on_write;
 
-   arg = getarg ();
-   if (!arg)
-      return;
-
-   if (!strcmp (arg, "print"))
-      br->keep_running = 1;
-   else if (!strcmp (arg, "if"))
+   for (;;)
    {
       arg = getarg ();
-      br->conditional = 1;
-      strcpy (br->condition, arg);
+      if (!arg)
+         return;
+
+      if (!strcmp (arg, "print"))
+         br->keep_running = 1;
+      else if (!strcmp (arg, "mask"))
+      {
+         arg = getarg ();
+         br->write_mask = strtoul (arg, NULL, 0);
+      }
+      else if (!strcmp (arg, "if"))
+      {
+         arg = getarg ();
+         br->conditional = 1;
+         strcpy (br->condition, arg);
+      }
    }
 
    brkprint (br);
@@ -963,6 +980,58 @@ void cmd_vars (void)
 }
 
 
+void cmd_measure (void)
+{
+   absolute_address_t addr;
+   target_addr_t retaddr = get_pc ();
+   breakpoint_t *br;
+
+   /* Get the address of the function to be measured. */
+   char *arg = getarg ();
+   if (!arg)
+      return;
+   addr = eval_mem (arg);
+   printf ("Measuring ");
+   print_addr (addr);
+   printf (" back to ");
+   print_addr (to_absolute (retaddr));
+   putchar ('\n');
+
+   /* Push the current PC onto the stack for the
+   duration of the measurement. */
+   set_s (get_s () - 2);
+   write16 (get_s (), retaddr);
+
+   /* Set a temp breakpoint at the current PC, so that
+   the measurement will halt. */
+   br = brkalloc ();
+   br->addr = to_absolute (retaddr);
+   br->on_execute = 1;
+   br->temp = 1;
+
+   /* Interrupts must be disabled for this to work ! */
+   set_cc (get_cc () | 0x50);
+
+   /* Change the PC to the function-under-test. */
+   set_pc (addr);
+
+   /* Go! */
+   exit_command_loop = 0;
+}
+
+
+void cmd_dump (void)
+{
+   extern int dump_every_insn;
+
+   char *arg = getarg ();
+   if (arg)
+      dump_every_insn = strtoul (arg, NULL, 0);
+   printf ("Instruction dump is %s\n",
+      dump_every_insn ? "on" : "off");
+}
+
+
 /****************** Parser ************************/
 
 void cmd_help (void);
@@ -1016,6 +1085,10 @@ struct command_name
       "Show all CPU registers" },
    { "vars", "vars", cmd_vars,
       "Show all program variables" },
+   { "me", "measure", cmd_measure,
+      "Measure time that a function takes" },
+   { "dump", "dump", cmd_dump,
+      "Set dump-instruction flag" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -1238,6 +1311,16 @@ command_write_hook (absolute_address_t addr, U8 val)
    br = brkfind_by_addr (addr);
 	if (br && br->enabled && br->on_write)
    {
+      if (br->write_mask)
+      {
+         int mask_ok = ((br->last_write & br->write_mask) !=
+            (val & br->write_mask));
+
+         br->last_write = val;
+         if (!mask_ok)
+            return;
+      }
+
       breakpoint_hit (br);
       if (monitor_on == 0)
          return;
@@ -1297,6 +1380,14 @@ void cycles_virtual (unsigned long *val, int writep)
 }
 
 
+void et_virtual (unsigned long *val, int writep)
+{
+   static unsigned long last_cycles = 0;
+   if (!writep)
+      *val = get_cycles () - last_cycles;
+   last_cycles = get_cycles ();
+}
+
 
 void
 command_exit_irq_hook (unsigned long cycles)
@@ -1326,6 +1417,7 @@ command_init (void)
    sym_add (&auto_symtab, "dp", (unsigned long)dp_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "cc", (unsigned long)cc_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "cycles", (unsigned long)cycles_virtual, SYM_AUTO);
+   sym_add (&auto_symtab, "et", (unsigned long)et_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "irqload", (unsigned long)irq_load_virtual, SYM_AUTO);
 
    examine_type.format = 'x';

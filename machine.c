@@ -210,6 +210,7 @@ void cpu_write8 (unsigned int addr, U8 val)
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
+	U8 oldval;
 
 	/* This can fail if the area is read-only */
 	if (system_running && (map->flags & MAP_READONLY))
@@ -218,6 +219,16 @@ void cpu_write8 (unsigned int addr, U8 val)
 		(*class_ptr->write) (dev, phy_addr, val);
 	command_write_hook (absolute_from_reladdr (map->devid, phy_addr), val);
 }
+
+void abs_write8 (absolute_address_t addr, U8 val)
+{
+   unsigned int id = addr >> 28;
+   unsigned long phy_addr = addr & 0xFFFFFFF;
+	struct hw_device *dev = device_table[id];
+	struct hw_class *class_ptr = dev->class_ptr;
+	class_ptr->write (dev, phy_addr, val);
+}
+
 
 
 absolute_address_t

@@ -37,6 +37,7 @@ int auto_break_insn_count = 0;
 
 int monitor_on = 0;
 
+int dump_every_insn = 0;
 
 
 enum addr_mode
@@ -1392,6 +1393,9 @@ monitor_init (void)
 int
 check_break (unsigned break_pc)
 {
+	if (dump_every_insn)
+		print_current_insn ();
+
 	if (auto_break_insn_count > 0)
 		if (--auto_break_insn_count == 0)
 			return 1;
