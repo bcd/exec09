@@ -60,6 +60,7 @@ unsigned long eval (char *expr);
 unsigned long eval_mem (char *expr);
 extern int auto_break_insn_count;
 
+FILE *command_input;
 
 /**********************************************************/
 /******************** 6809 Functions **********************/
@@ -167,7 +168,7 @@ eval_assign (const char *expr, unsigned long val)
    else
    {
       absolute_address_t dst = eval_mem (expr);
-      printf ("Setting %X to %02X\n", dst, val);
+      //printf ("Setting %X to %02X\n", dst, val);
       abs_write8 (dst, val);
    }
 }
@@ -963,8 +964,7 @@ int command_exec_file (const char *filename)
    if (!infile)
       return 0;
 
-   while (command_exec (infile) >= 0);
-   fclose (infile);
+   command_input = infile;
    return 1;
 }
 
@@ -1247,18 +1247,33 @@ command_loop (void)
 {
    keybuffering (1);
    brkfree_temps ();
-   display_print ();
-   print_current_insn ();
+
+restart:
+   if (command_input == stdin)
+   {
+      display_print ();
+      print_current_insn ();
+   }
+
    exit_command_loop = -1;
    while (exit_command_loop < 0)
    {
-      command_prompt ();
-      if (command_exec (stdin) < 0)
+      if (command_input == stdin)
+         command_prompt ();
+      if (command_exec (command_input) < 0)
          break;
    }
 
    if (exit_command_loop == 0)
       keybuffering (0);
+
+   if (feof (command_input) && command_input != stdin)
+   {
+      fclose (command_input);
+      command_input = stdin;
+      goto restart;
+   }
+
    return (exit_command_loop);
 }
 
