@@ -43,6 +43,10 @@ thread_t threadtab[MAX_THREADS];
 int command_stack_depth = -1;
 cmdqueue_t command_stack[MAX_CMD_QUEUES];
 
+#define MAX_TRACE 256
+target_addr_t trace_buffer[MAX_TRACE];
+unsigned int trace_offset = 0;
+
 int stop_after_ms = 0;
 
 datatype_t print_type;
@@ -1050,6 +1054,25 @@ void cmd_dump (void)
 }
 
 
+void
+cmd_trace_dump (void)
+{
+   unsigned int off = (trace_offset + 1) % MAX_TRACE;
+   do {
+      target_addr_t pc = trace_buffer[off];
+      absolute_address_t addr = to_absolute (pc);
+      //const char *name = sym_lookup (&program_symtab, addr);
+      //printf ("%04X ", pc);
+      print_addr (addr);
+      putchar (':');
+      print_insn (addr);
+      putchar ('\n');
+      //putchar (name ? '\n' : ' ');
+      off = (off + 1) % MAX_TRACE;
+   } while (off != trace_offset);
+   fflush (stdout);
+}
+
 /****************** Parser ************************/
 
 void cmd_help (void);
@@ -1109,6 +1132,8 @@ struct command_name
       "Measure time that a function takes" },
    { "dump", "dump", cmd_dump,
       "Set dump-instruction flag" },
+   { "td", "tracedump", cmd_trace_dump,
+      "Dump the trace buffer" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -1301,15 +1326,27 @@ breakpoint_hit (breakpoint_t *br)
 
 
 void
+command_trace_insn (target_addr_t addr)
+{
+   trace_buffer[trace_offset++] = addr;
+   trace_offset %= MAX_TRACE;
+}
+
+
+void
 command_insn_hook (void)
 {
+   target_addr_t pc;
    absolute_address_t abspc;
 	breakpoint_t *br;
+
+   pc = get_pc ();
+   command_trace_insn (pc);
 
 	if (active_break_count == 0)
 		return;
 
-	abspc = to_absolute (get_pc ());
+	abspc = to_absolute (pc);
 	br = brkfind_by_addr (abspc);
 	if (br && br->enabled && br->on_execute)
 	{
