@@ -331,68 +331,7 @@ main (int argc, char *argv[])
   /* TODO - enable different options by default
   based on the executable name. */
 
-#if 1
 	parse_args (argc, argv);
-#else
-  while (argn < argc)
-    {
-      if (argv[argn][0] == '-')
-	{
-	  int argpos = 1;
-	next_arg:
-	  switch (argv[argn][argpos++])
-	    {
-	    case 'd':
-	      debug_enabled = 1;
-	      goto next_arg;
-	    case 'h':
-	      type = HEX;
-	      goto next_arg;
-	    case 'b':
-	      type = BIN;
-	      goto next_arg;
-	    case 'M':
-	      mhz = strtoul (argv[++argn], NULL, 16);
-	      break;
-	    case 'o':
-	      off = strtoul (argv[++argn], NULL, 16);
-	      type = BIN;
-	      break;
-	    case 'I':
-	      cycles_per_irq = strtoul (argv[++argn], NULL, 0);
-	      break;
-	    case 'F':
-	      cycles_per_firq = strtoul (argv[++argn], NULL, 0);
-	      break;
-	    case 'C':
-	      dump_cycles_on_success = 1;
-	      goto next_arg;
-       case 'T':
-		   trace_enabled = 1;
-			goto next_arg;
-       case 'm':
-		   max_cycles = strtoul (argv[++argn], NULL, 16);
-			break;
-		case 's':
-			machine_name = argv[++argn];
-			break;
-	    case '\0':
-	      break;
-	    default:
-	      usage ();
-	    }
-	}
-      else if (!prog_name)
-	{
-	  prog_name = argv[argn];
-	}
-      else
-	{
-	  usage ();
-	}
-      argn++;
-    }
-#endif
 
 	sym_init ();
 
