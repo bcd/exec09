@@ -30,7 +30,7 @@
 #define WPC_FIXED_SIZE              0x8000
 
 /* The register set of the WPC ASIC */
-#define WPC_ASIC_BASE               0x3800
+#define WPC_ASIC_BASE               0x3c00
 
 #define WPC_DMD_LOW_BASE 				0x3800
 #define WPC_DMD_HIGH_BASE 				0x3A00
@@ -121,6 +121,7 @@ struct wpc_asic
 {
 	struct hw_device *rom_dev;
 	struct hw_device *ram_dev;
+	struct hw_device *dmd_dev;
 
 	U8 led;
 	U8 rombank;
@@ -134,6 +135,8 @@ struct wpc_asic
    U8 switch_strobe;
    U8 switch_mx[8];
 	U8 opto_mx[8];
+	U8 dmd_maps[2];
+	U8 dmd_active_page;
 
 	int curr_sw;
 	int curr_sw_time;
@@ -219,7 +222,6 @@ unsigned int wpc_read_switch (struct wpc_asic *wpc, int num)
 {
 	unsigned int val;
 	val = wpc->switch_mx[num / 8] & (1 << (num % 8));
-	// printf ("SW %d = %d\n", num, val);
 	return val ? 1 : 0;
 }
 
@@ -265,6 +267,25 @@ void wpc_write_sol (int num, int flag)
 }
 
 
+void wpc_print_display (struct wpc_asic *wpc)
+{
+	FILE *fp;
+	char *p = wpc->dmd_dev->priv + wpc->dmd_active_page * 512;
+
+	if (wpc->dmd_active_page >= 14)
+		return;
+
+	fp = fopen ("dmd", "wb");
+	if (!fp)
+	{
+		fprintf (stderr, "could not write to DMD!!!\n");
+		return;
+	}
+	fwrite (p, 512, 1, fp);
+	fclose (fp);
+}
+
+
 void wpc_keypoll (struct wpc_asic *wpc)
 {
 	fd_set fds;
@@ -281,7 +302,6 @@ void wpc_keypoll (struct wpc_asic *wpc)
 	{
 		rc = read (0, &c, 1);
 
-		//printf ("%c pressed\n", c);
 		switch (c)
 		{
 			case '7':
@@ -295,6 +315,9 @@ void wpc_keypoll (struct wpc_asic *wpc)
 				break;
 			case '0':
 				wpc_press_switch (wpc, 7, 200);
+				break;
+			case 'd':
+				wpc_print_display (wpc);
 				break;
 			default:
 				break;
@@ -402,12 +425,34 @@ void wpc_set_rom_page (unsigned char val)
 	bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READONLY);
 }
 
+void wpc_set_dmd_page (struct wpc_asic *wpc, unsigned int map, unsigned char val)
+{
+	wpc->dmd_maps[map] = val;
+	bus_map (0x3800 + map * 0x200, 3, val * 0x200, 0x200, MAP_READWRITE);
+}
+
 
 void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
 	struct wpc_asic *wpc = dev->priv;
 	switch (addr + WPC_ASIC_BASE)
 	{
+		case WPC_DMD_LOW_PAGE:
+			wpc_set_dmd_page (wpc, 0, val);
+			break;
+
+		case WPC_DMD_HIGH_PAGE:
+			wpc_set_dmd_page (wpc, 1, val);
+			break;
+
+		case WPC_DMD_FIRQ_ROW_VALUE:
+			break;
+
+		case WPC_DMD_ACTIVE_PAGE:
+			wpc->dmd_active_page = val;
+			wpc_print_display (wpc);
+			break;
+
 		case WPC_LEDS:
 			wpc->led = val;
 			break;
@@ -535,8 +580,15 @@ void wpc_init (const char *boot_rom_file)
 	device_define ( dev, WPC_ROM_SIZE - WPC_FIXED_SIZE,
 		WPC_FIXED_REGION, WPC_FIXED_SIZE, MAP_READONLY);
 	wpc->rom_dev = dev;
+
+	device_define ( dev = ram_create (16 * 512), 0,
+		0x3800, 0x200 * 2, MAP_READWRITE );
+	wpc->dmd_dev = dev;
+
 	wpc_update_ram (wpc);
 
+	IO_SYM_ADD(WPC_DMD_LOW_BASE);
+	IO_SYM_ADD(WPC_DMD_HIGH_BASE);
 	IO_SYM_ADD(WPC_DMD_HIGH_PAGE);
 	IO_SYM_ADD(WPC_DMD_FIRQ_ROW_VALUE);
 	IO_SYM_ADD(WPC_DMD_LOW_PAGE);
@@ -588,6 +640,4 @@ struct machine wpc_machine =
 	.fault = wpc_fault,
 	.init = wpc_init,
 };
-
-
 
