@@ -210,7 +210,6 @@ void cpu_write8 (unsigned int addr, U8 val)
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
-	U8 oldval;
 
 	/* This can fail if the area is read-only */
 	if (system_running && (map->flags & MAP_READONLY))
