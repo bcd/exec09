@@ -48,6 +48,7 @@ long cpu_period = 0;
 int cpu_quit = 1;
 unsigned int irqs_pending = 0;
 unsigned int firqs_pending = 0;
+unsigned int cc_changed = 0;
 
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
@@ -83,7 +84,7 @@ void request_firq (unsigned int source)
 	 * we'll check it later when the flags change.
 	 */
 	firqs_pending |= (1 << source);
-	if (!(EFI & I_FLAG))
+	if (!(EFI & F_FLAG))
 		firq ();
 }
 
@@ -633,12 +634,19 @@ set_cc (unsigned arg)
   Z = (~arg) & Z_FLAG;
   OV = (arg & V_FLAG ? 0x80 : 0);
   C = arg & C_FLAG;
+  cc_changed = 1;
+}
 
+
+void
+cc_modified (void)
+{
   /* Check for pending interrupts */
 	if (firqs_pending && !(EFI & F_FLAG))
 		firq ();
 	else if (irqs_pending && !(EFI & I_FLAG))
 		irq ();
+	cc_changed = 0;
 }
 
 unsigned
@@ -1495,7 +1503,7 @@ irq (void)
   write_stack (S, A);
   S = (S - 1) & 0xffff;
   write_stack (S, get_cc ());
-  EFI |= (I_FLAG | F_FLAG);
+  EFI |= I_FLAG;
 
   irq_start_time = get_cycles ();
   change_pc (read16 (0xfff8));
@@ -1508,14 +1516,14 @@ irq (void)
 void
 firq (void)
 {
-  EFI |= E_FLAG;
+  EFI &= ~E_FLAG;
   S = (S - 2) & 0xffff;
   write_stack16 (S, PC & 0xffff);
   S = (S - 1) & 0xffff;
   write_stack (S, get_cc ());
   EFI |= (I_FLAG | F_FLAG);
 
-  change_pc (read16 (0xfffc));
+  change_pc (read16 (0xfff6));
 #if 1
   firqs_pending = 0;
 #endif
@@ -3066,6 +3074,9 @@ cpu_execute (int cycles)
      PC = iPC;
 	  break;
 	}
+
+	if (cc_changed)
+		cc_modified ();
     }
   while (cpu_clk > 0);
 

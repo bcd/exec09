@@ -380,9 +380,10 @@ main (int argc, char *argv[])
 		}
 		else
 		{
-			/* TODO - FIRQ not handled yet */
 			total += cpu_execute (cycles_per_irq);
 			request_irq (0);
+			/* TODO - FIRQ not handled yet */
+			request_firq (0);
 		}
 
 		idle_loop ();
