@@ -1391,7 +1391,7 @@ monitor_init (void)
 
 
 int
-check_break (unsigned break_pc)
+check_break (void)
 {
 	if (dump_every_insn)
 		print_current_insn ();

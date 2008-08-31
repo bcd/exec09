@@ -130,7 +130,7 @@ void file_close (FILE *fp);
 
 /* monitor.c */
 extern int monitor_on;
-extern int check_break (unsigned);
+extern int check_break (void);
 extern void monitor_init (void); 
 extern int monitor6809 (void);
 extern int dasm (char *, absolute_address_t);

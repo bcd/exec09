@@ -1732,7 +1732,7 @@ cpu_execute (int cycles)
   do
     {
 	 	command_insn_hook ();
-      if (check_break (PC) != 0)
+      if (check_break () != 0)
 	monitor_on = 1;
       if (monitor_on != 0)
 	if (monitor6809 () != 0)
