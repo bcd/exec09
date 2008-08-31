@@ -272,9 +272,6 @@ void wpc_print_display (struct wpc_asic *wpc)
 	FILE *fp;
 	char *p = wpc->dmd_dev->priv + wpc->dmd_active_page * 512;
 
-	if (wpc->dmd_active_page >= 14)
-		return;
-
 	fp = fopen ("dmd", "wb");
 	if (!fp)
 	{
