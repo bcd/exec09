@@ -382,8 +382,15 @@ main (int argc, char *argv[])
 		{
 			total += cpu_execute (cycles_per_irq);
 			request_irq (0);
-			/* TODO - FIRQ not handled yet */
-			request_firq (0);
+			{
+			/* TODO - FIRQ frequency not handled yet */
+				static int firq_freq = 0;
+				if (++firq_freq == 8)
+				{
+					request_firq (0);
+					firq_freq = 0;
+				}
+			}
 		}
 
 		idle_loop ();
