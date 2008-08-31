@@ -204,12 +204,12 @@ int
 process_option (struct option *opt, const char *arg)
 {
 	int rc;
-	printf ("Processing option '%s'\n", opt->o_long);
+	//printf ("Processing option '%s'\n", opt->o_long);
 	if (opt->takes_arg)
 	{
 		if (!arg)
 		{
-			printf ("  Takes argument but none given.\n");
+			//printf ("  Takes argument but none given.\n");
 			rc = 0;
 		}
 		else
@@ -217,12 +217,12 @@ process_option (struct option *opt, const char *arg)
 			if (opt->int_value)
 			{
 				*(opt->int_value) = strtoul (arg, NULL, 0);
-				printf ("  Integer argument '%d' taken.\n", *(opt->int_value));
+				//printf ("  Integer argument '%d' taken.\n", *(opt->int_value));
 			}
 			else if (opt->string_value)
 			{
 				*(opt->string_value) = arg;
-				printf ("  String argument '%s' taken.\n", *(opt->string_value));
+				//printf ("  String argument '%s' taken.\n", *(opt->string_value));
 			}
 			rc = 1;
 		}
@@ -230,12 +230,12 @@ process_option (struct option *opt, const char *arg)
 	else
 	{
 		if (arg)
-			printf ("  Takes no argument but one given, ignored.\n");
+			//printf ("  Takes no argument but one given, ignored.\n");
 
 		if (opt->int_value)
 		{
 			*(opt->int_value) = opt->default_value;
-			printf ("  Integer argument 1 implied.\n");
+			//printf ("  Integer argument 1 implied.\n");
 		}
 		rc = 0;
 	}
@@ -243,7 +243,7 @@ process_option (struct option *opt, const char *arg)
 	if (opt->handler)
 	{
 		rc = opt->handler (arg);
-		printf ("  Handler called, rc=%d\n", rc);
+		//printf ("  Handler called, rc=%d\n", rc);
 	}
 
 	if (rc < 0)
@@ -255,7 +255,7 @@ process_option (struct option *opt, const char *arg)
 int
 process_plain_argument (const char *arg)
 {
-	printf ("plain argument '%s'\n", arg);
+	//printf ("plain argument '%s'\n", arg);
 	if (!prog_name)
 		prog_name = arg;
 }
