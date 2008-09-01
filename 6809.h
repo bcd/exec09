@@ -77,7 +77,7 @@ extern UINT8 *memory;
 #define write8(addr,val)   do { cpu_write8 (addr, val); } while (0)
 
 /* 16-bit versions */
-#define read16(addr)       (read8(addr) << 8 | read8(addr+1))
+#define read16(addr)       cpu_read16(addr)
 #define write16(addr,val)  do { write8(addr+1, val & 0xFF); write8(addr, (val >> 8) & 0xFF); } while (0)
 
 /* Fetch macros */

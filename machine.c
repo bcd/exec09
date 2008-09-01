@@ -189,6 +189,10 @@ U8 abs_read8 (absolute_address_t addr)
 
 /**
  * Called by the CPU to read a byte.
+ * This is the bottleneck in terms of performance.  Consider
+ * a caching scheme that cuts down on some of this...
+ * Also consider a native 16-bit read that doesn't require
+ * 2 separate calls here...
  */
 U8 cpu_read8 (unsigned int addr)
 {
@@ -198,6 +202,17 @@ U8 cpu_read8 (unsigned int addr)
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
 	return (*class_ptr->read) (dev, phy_addr);
+}
+
+U16 cpu_read16 (unsigned int addr)
+{
+	struct bus_map *map = find_map (addr);
+	struct hw_device *dev = find_device (addr, map->devid);
+	struct hw_class *class_ptr = dev->class_ptr;
+	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
+	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
+	return ((*class_ptr->read) (dev, phy_addr) << 8)
+		| (*class_ptr->read) (dev, phy_addr+1);
 }
 
 
