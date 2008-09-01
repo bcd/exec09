@@ -1,5 +1,5 @@
 /*
- * Copyright 2006, 2007 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2008 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -7,19 +7,23 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * GCC6809 is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with GCC6809; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
 #include "6809.h"
-#include <sys/time.h>
+#ifdef HAVE_SYS_TIME_H
+# include <sys/time.h>
+#else
+#error
+#endif
 
 #define WPC_RAM_BASE                0x0000
 #define WPC_RAM_SIZE                0x2000
@@ -116,7 +120,13 @@
 #define WPC_RAM_LOCKSIZE 				0x3FFE
 #define WPC_ZEROCROSS_IRQ_CLEAR 		0x3FFF
 
-
+/**
+ * The 'wpc_asic' struct holds all of the state
+ * of the ASIC.  There is a single instance of this,
+ * named 'the_wpc', and it is pointed to by the
+ * global 'wpc'.  Only one ASIC can be defined at
+ * a time.
+ */
 struct wpc_asic
 {
 	struct hw_device *rom_dev;
@@ -141,15 +151,13 @@ struct wpc_asic
 	int curr_sw;
 	int curr_sw_time;
 	int wdog_timer;
-};
+} the_wpc;
 
-struct wpc_asic *global_wpc;
+struct wpc_asic *wpc = NULL;
 
 
 void wpc_asic_reset (struct hw_device *dev)
 {
-   struct wpc_asic *wpc = dev->priv;
-	global_wpc = wpc;
 	wpc->curr_sw_time = 0;
 	wpc->wdog_timer = 0;
 }
@@ -218,14 +226,14 @@ static int scanbit (U8 val)
 }
 
 
-unsigned int wpc_read_switch (struct wpc_asic *wpc, int num)
+unsigned int wpc_read_switch (int num)
 {
 	unsigned int val;
 	val = wpc->switch_mx[num / 8] & (1 << (num % 8));
 	return val ? 1 : 0;
 }
 
-void wpc_write_switch (struct wpc_asic *wpc, int num, int flag)
+void wpc_write_switch (int num, int flag)
 {
 	unsigned int col, val;
 
@@ -240,19 +248,19 @@ void wpc_write_switch (struct wpc_asic *wpc, int num, int flag)
 		wpc->switch_mx[col] |= val;
 }
 
-void wpc_press_switch (struct wpc_asic *wpc, int num, int delay)
+void wpc_press_switch (int num, int delay)
 {
-	wpc_write_switch (wpc, num, 1);
+	wpc_write_switch (num, 1);
 	wpc->curr_sw = num;
 	wpc->curr_sw_time = delay;
 }
 
-unsigned int wpc_read_switch_column (struct wpc_asic *wpc, int col)
+unsigned int wpc_read_switch_column (int col)
 {
 	unsigned int val = 0;
 	int row;
 	for (row = 0; row < 8; row++)
-		if (wpc_read_switch (wpc, col * 8 + row))
+		if (wpc_read_switch (col * 8 + row))
 			val |= (1 << row);
 	return val;
 }
@@ -267,7 +275,7 @@ void wpc_write_sol (int num, int flag)
 }
 
 
-void wpc_print_display (struct wpc_asic *wpc)
+void wpc_print_display (void)
 {
 	FILE *fp;
 	char *p = wpc->dmd_dev->priv + wpc->dmd_active_page * 512;
@@ -283,7 +291,7 @@ void wpc_print_display (struct wpc_asic *wpc)
 }
 
 
-void wpc_keypoll (struct wpc_asic *wpc)
+void wpc_keypoll (void)
 {
 	fd_set fds;
 	struct timeval timeout;
@@ -302,19 +310,19 @@ void wpc_keypoll (struct wpc_asic *wpc)
 		switch (c)
 		{
 			case '7':
-				wpc_press_switch (wpc, 4, 200);
+				wpc_press_switch (4, 200);
 				break;
 			case '8':
-				wpc_press_switch (wpc, 5, 200);
+				wpc_press_switch (5, 200);
 				break;
 			case '9':
-				wpc_press_switch (wpc, 6, 200);
+				wpc_press_switch (6, 200);
 				break;
 			case '0':
-				wpc_press_switch (wpc, 7, 200);
+				wpc_press_switch (7, 200);
 				break;
 			case 'd':
-				wpc_print_display (wpc);
+				wpc_print_display ();
 				break;
 			default:
 				break;
@@ -326,7 +334,6 @@ void wpc_keypoll (struct wpc_asic *wpc)
 
 U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 {
-	struct wpc_asic *wpc = dev->priv;
 	U8 val;
 
 	switch (addr + WPC_ASIC_BASE)
@@ -360,7 +367,7 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 			break;
 
 		case WPC_SW_ROW_INPUT:
-			val = wpc_read_switch_column (wpc, 1 + scanbit (wpc->switch_strobe));
+			val = wpc_read_switch_column (1 + scanbit (wpc->switch_strobe));
 			break;
 
 		case WPC_SW_JUMPER_INPUT:
@@ -368,7 +375,7 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 			break;
 
 		case WPC_SW_CABINET_INPUT:
-			val = wpc_read_switch_column (wpc, 0);
+			val = wpc_read_switch_column (0);
 			break;
 
 		default:
@@ -383,7 +390,7 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 /**
  * Enforce the current read-only area of RAM.
  */
-void wpc_update_ram (struct wpc_asic *wpc)
+void wpc_update_ram (void)
 {
 	unsigned int size_writable = WPC_RAM_SIZE;
 
@@ -422,7 +429,7 @@ void wpc_set_rom_page (unsigned char val)
 	bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READONLY);
 }
 
-void wpc_set_dmd_page (struct wpc_asic *wpc, unsigned int map, unsigned char val)
+void wpc_set_dmd_page (unsigned int map, unsigned char val)
 {
 	wpc->dmd_maps[map] = val;
 	bus_map (0x3800 + map * 0x200, 3, val * 0x200, 0x200, MAP_READWRITE);
@@ -431,15 +438,14 @@ void wpc_set_dmd_page (struct wpc_asic *wpc, unsigned int map, unsigned char val
 
 void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
-	struct wpc_asic *wpc = dev->priv;
 	switch (addr + WPC_ASIC_BASE)
 	{
 		case WPC_DMD_LOW_PAGE:
-			wpc_set_dmd_page (wpc, 0, val);
+			wpc_set_dmd_page (0, val);
 			break;
 
 		case WPC_DMD_HIGH_PAGE:
-			wpc_set_dmd_page (wpc, 1, val);
+			wpc_set_dmd_page (1, val);
 			break;
 
 		case WPC_DMD_FIRQ_ROW_VALUE:
@@ -447,7 +453,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 		case WPC_DMD_ACTIVE_PAGE:
 			wpc->dmd_active_page = val;
-			wpc_print_display (wpc);
+			wpc_print_display ();
 			break;
 
 		case WPC_LEDS:
@@ -469,12 +475,12 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 		case WPC_RAM_LOCK:
 			wpc->ram_unlocked = val;
-			wpc_update_ram (wpc);
+			wpc_update_ram ();
 			break;
 
 		case WPC_RAM_LOCKSIZE:
 			wpc->ram_lock_size = val;
-			wpc_update_ram (wpc);
+			wpc_update_ram ();
 			break;
 
 		case WPC_SHIFTADDR:
@@ -511,9 +517,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 void wpc_periodic (void)
 {
-	struct wpc_asic *wpc = global_wpc;
-
-	wpc_keypoll (wpc);
+	wpc_keypoll ();
 
 	wpc->wdog_timer -= 50;
 	if (wpc->wdog_timer <= 0)
@@ -526,7 +530,7 @@ void wpc_periodic (void)
 		if (wpc->curr_sw_time <= 0)
 		{
 			wpc->curr_sw_time = 0;
-			wpc_write_switch (wpc, wpc->curr_sw, 0);
+			wpc_write_switch (wpc->curr_sw, 0);
 		}
 	}
 }
@@ -541,7 +545,13 @@ struct hw_class wpc_asic_class =
 
 struct hw_device *wpc_asic_create (void)
 {
-	struct wpc_asic *wpc = calloc (sizeof (struct wpc_asic), 1);
+	if (wpc)
+	{
+		fprintf (stderr, "WPC ASIC already created\n");
+		return NULL;
+	}
+
+	wpc = &the_wpc;
 	return device_attach (&wpc_asic_class, 0x800, wpc);
 }
 
@@ -561,11 +571,9 @@ void io_sym_add (const char *name, unsigned long cpuaddr)
 void wpc_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
-	struct wpc_asic *wpc;
 
 	device_define ( dev = wpc_asic_create (), 0,
 		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);
-	wpc = dev->priv;
 
 	device_define ( dev = ram_create (WPC_RAM_SIZE), 0,
 		WPC_RAM_BASE, WPC_RAM_SIZE, MAP_READWRITE );
@@ -582,7 +590,7 @@ void wpc_init (const char *boot_rom_file)
 		0x3800, 0x200 * 2, MAP_READWRITE );
 	wpc->dmd_dev = dev;
 
-	wpc_update_ram (wpc);
+	wpc_update_ram ();
 
 	IO_SYM_ADD(WPC_DMD_LOW_BASE);
 	IO_SYM_ADD(WPC_DMD_HIGH_BASE);
