@@ -1,4 +1,4 @@
-AC_PREREQ(2.57)
+AC_PREREQ(2.61)
 AC_INIT(m6809-run, 0.91, brian@oddchange.com)
 AC_CONFIG_SRCDIR([6809.c])
 AM_INIT_AUTOMAKE([foreign])
@@ -9,34 +9,25 @@ AC_PROG_CC
 
 # Checks for header files.
 AC_HEADER_STDC
-AC_CHECK_HEADERS([fcntl.h netinet/in.h stdlib.h string.h sys/socket.h unistd.h])
+AC_CHECK_HEADERS([netinet/in.h stdint.h stdlib.h string.h sys/socket.h sys/time.h termios.h unistd.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_C_BIGENDIAN
 AC_C_CONST
 AC_C_INLINE
-AC_TYPE_SIZE_T
 AC_HEADER_TIME
-AC_STRUCT_TM
+AC_TYPE_UINT16_T
+AC_TYPE_UINT32_T
+AC_TYPE_UINT8_T
 AC_C_VOLATILE
 
 # Checks for library functions.
 AC_FUNC_MALLOC
+AC_FUNC_SELECT_ARGTYPES
 AC_TYPE_SIGNAL
-AC_CHECK_FUNCS([memset socket strtoul])
+AC_FUNC_VPRINTF
+AC_CHECK_FUNCS([gettimeofday memset select strchr strstr strtoul socket])
 
-# Template:
-# AC_DEFINE will place in config.h; AC_SUBST updates the makefiles
-#AC_DEFINE(VAR, value, [Doc string])
-#AC_SUBST([VAR])
-
-# Template for --enable options
-#AC_ARG_ENABLE([name],
-#   AC_HELP_STRING([--enable-name], [doc string for option]),
-#   [enable_name=$enableval], [enable_name=default value])
-#if test $enable_name = yes; then
-#   AC_DEFINE(CONFIG_NAME, 1, [doc string when enabled])
-#fi
 AC_ARG_ENABLE([wpc],
    AC_HELP_STRING([--enable-wpc], [Enable WPC address map]),
    [wpc=$enableval], [wpc=no])
@@ -51,12 +42,6 @@ if test $h6309 = yes; then
    AC_DEFINE(H6309, 1, [Use 6309 extensions])
 fi
 
-
-# Template for --with options
-#AC_ARG_WITH([name],
-#   AC_HELP_STRING([--with-name=<parameter-name>], [doc string]),
-#   [with_name=$withval], [with_name=default value])
-#CONFIG_NAME="$with_name" etc.
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT
