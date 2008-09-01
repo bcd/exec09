@@ -624,7 +624,7 @@ do_examine (void)
             print_value (target_read (examine_addr, examine_type.size),
                          &examine_type);
             putchar (' ');
-      		examine_addr += examine_type.size;
+            examine_addr += examine_type.size;
       }
    }
    putchar ('\n');
@@ -1364,7 +1364,12 @@ command_insn_hook (void)
 void
 command_read_hook (absolute_address_t addr)
 {
-	breakpoint_t *br = brkfind_by_addr (addr);
+	breakpoint_t *br;
+
+   if (active_break_count == 0)
+      return;
+
+   br = brkfind_by_addr (addr);
 	if (br && br->enabled && br->on_read)
    {
       printf ("Watchpoint %d triggered. [", br->id);
@@ -1379,27 +1384,30 @@ void
 command_write_hook (absolute_address_t addr, U8 val)
 {
 	breakpoint_t *br;
- 
-   br = brkfind_by_addr (addr);
-	if (br && br->enabled && br->on_write)
+
+   if (active_break_count != 0)
    {
-      if (br->write_mask)
+      br = brkfind_by_addr (addr);
+      if (br && br->enabled && br->on_write)
       {
-         int mask_ok = ((br->last_write & br->write_mask) !=
-            (val & br->write_mask));
+         if (br->write_mask)
+         {
+            int mask_ok = ((br->last_write & br->write_mask) !=
+               (val & br->write_mask));
 
-         br->last_write = val;
-         if (!mask_ok)
+            br->last_write = val;
+            if (!mask_ok)
+               return;
+         }
+
+         breakpoint_hit (br);
+         if (monitor_on == 0)
             return;
+         printf ("Watchpoint %d triggered. [", br->id);
+         print_addr (addr);
+         printf (" = 0x%02X", val);
+         printf ("]\n");
       }
-
-      breakpoint_hit (br);
-      if (monitor_on == 0)
-         return;
-      printf ("Watchpoint %d triggered. [", br->id);
-      print_addr (addr);
-      printf (" = 0x%02X", val);
-      printf ("]\n");
    }
 
    if (thread_id_size && (addr == thread_current + thread_id_size - 1))
