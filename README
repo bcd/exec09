@@ -43,6 +43,82 @@ TODO : Would anyone be interested in a CoCo machine type?
 Faults
 
 
+Debugging
+
+The simulator supports interactive debugging similar to that
+provided by 'gdb'.
+
+b <expr>
+	Set a breakpoint at the given address.
+
+bl
+	List all breakpoints.
+
+c
+	Continue running.
+
+d <num>
+	Delete a breakpoint/watchpoint.
+
+di <expr>
+	Add a display expression.  The value of the expression
+	is display anytime the CPU breaks.
+
+h
+	Display help.
+
+l <expr>
+	List CPU instructions.
+
+me <expr>
+	Measure the amount of time that a function named by
+	<expr> takes.
+
+n
+	Continue until the next instruction is reached.
+	If the current instruction is a call, then
+	the debugger resumes after control returns.
+
+p <expr>
+	Print the value of an expression.  See "Expressions" below.
+
+q
+	Quit the simulator.
+
+re
+	Reset the CPU/machine.
+
+runfor <expr>
+	Continue but break after a certain period of (simulated) time.
+
+s
+	Step one CPU instruction.
+
+set <expr>
+	Sets the value of an internal variable or target memory.
+	See "Expressions" below for details on the syntax.
+
+so <file>
+	Run a set of debugger commands from another file.
+	The commands may start/stop the CPU.  When the commands
+	are finished, control returns to the previous input
+	source (the file that called it, or the keyboard.)
+
+sym <file>
+	Load a symbol table file.  Currently, the only format
+	supported is an aslink map file.
+
+td
+	Dump the last 256 instructions that were executed.
+
+wa <expr>
+	Add a watchpoint.  The CPU will break when the
+	memory given by <expr> is modified.
+
+x <expr>
+	Examine target memory at the address given.
+
+
 -----------------------------------------------------------------
 
 Original README text from Arto:
