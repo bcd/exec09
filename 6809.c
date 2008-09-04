@@ -147,7 +147,9 @@ sim_exit (uint8_t exit_code)
 
 	/* If a cycle count should be printed, do that last. */
 	if (dump_cycles_on_success)
-		printf ("Finished in %d cycles\n", get_cycles ());
+	{
+		printf ("Simulated time : %ld cycles\n", get_cycles ());
+	}
 
 	exit (exit_code);
 }
