@@ -63,18 +63,7 @@ const char *machine_name = "simple";
 
 const char *prog_name = NULL;
 
-static void usage (void)
-{
-  printf ("Usage: %s <options> filename\n", exename);
-  printf ("Options are:\n");
-  printf ("-hex	- load intel hex file\n");
-  printf ("-s19	- load motorola s record file\n");
-  printf ("-bin	- load binary file\n");
-  printf ("-s addr - specify binary load address hexadecimal (default 0)\n");
-  printf ("default format is motorola s record\n");
-  exit (1);
-}
-
+FILE *stat_file = NULL;
 
 void
 idle_loop (void)
@@ -182,16 +171,28 @@ int
 do_help (const char *arg __attribute__((unused)))
 {
 	struct option *opt = option_table;
+
+	printf ("Motorola 6809 Simulator     Version %s\n", PACKAGE_VERSION);
+	printf ("m6809-run [options] [program]\n\n");
+	printf ("Options:\n");
 	while (opt->o_long != NULL)
 	{
 		if (opt->help)
 		{
-			printf ("-%c,--%s    %s\n",
-				opt->o_short, opt->o_long, opt->help);
+			if (opt->o_short == '-')
+				printf ("   --%-16.16s    %s\n", opt->o_long, opt->help);
+			else
+				printf ("   -%c, --%-16.16s%s\n", opt->o_short, opt->o_long, opt->help);
 		}
 		opt++;
 	}
 	return -1;
+}
+
+
+void usage (void)
+{
+	do_help (NULL);
 }
 
 
