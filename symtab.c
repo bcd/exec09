@@ -19,10 +19,6 @@
  */
 
 #include "6809.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 
 /* A pointer to the current stringspace */
 struct stringspace *current_stringspace;
