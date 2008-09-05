@@ -1522,6 +1522,7 @@ command_init (void)
    print_type.format = 'x';
    print_type.size = 1;
 
+   command_input = stdin;
    (void)command_exec_file (".dbinit");
 }
 
