@@ -2,11 +2,12 @@
 #include "6809.h"
 #include "monitor.h"
 #include "machine.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/errno.h>
-#include <termios.h>
+#ifdef HAVE_TERMIOS_H
+# include <termios.h>
+#else
+#error
+#endif
 
 typedef struct
 {
