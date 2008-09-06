@@ -1296,11 +1296,13 @@ monitor_call (unsigned int flags)
 		current_function_call->flags = flags;
 	}
 #endif
+#if 0
 	const char *id = sym_lookup (&program_symtab, to_absolute (get_pc ()));
 	if (id)
 	{
 		// printf ("In %s now\n", id);
 	}
+#endif
 }
 
 
