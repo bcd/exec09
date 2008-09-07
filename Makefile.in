@@ -53,7 +53,7 @@ binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_m6809_run_OBJECTS = 6809.$(OBJEXT) main.$(OBJEXT) monitor.$(OBJEXT) \
 	machine.$(OBJEXT) eon.$(OBJEXT) wpc.$(OBJEXT) symtab.$(OBJEXT) \
-	command.$(OBJEXT) fileio.$(OBJEXT)
+	command.$(OBJEXT) fileio.$(OBJEXT) wpclib.$(OBJEXT)
 m6809_run_OBJECTS = $(am_m6809_run_OBJECTS)
 m6809_run_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I. -I$(srcdir) -I.
@@ -156,7 +156,7 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-m6809_run_SOURCES = 6809.c main.c monitor.c machine.c eon.c wpc.c symtab.c command.c fileio.c
+m6809_run_SOURCES = 6809.c main.c monitor.c machine.c eon.c wpc.c symtab.c command.c fileio.c wpclib.c
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -254,6 +254,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symtab.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wpc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wpclib.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	if $(COMPILE) -MT $@ -MD -MP -MF "$(DEPDIR)/$*.Tpo" -c -o $@ $<; \

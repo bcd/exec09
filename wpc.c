@@ -24,6 +24,11 @@
 #else
 #error
 #endif
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <sys/errno.h>
+#include "wpclib.h"
 
 #define WPC_RAM_BASE                0x0000
 #define WPC_RAM_SIZE                0x2000
@@ -146,20 +151,25 @@ struct wpc_asic
    U8 switch_mx[8];
 	U8 opto_mx[8];
 	U8 dmd_maps[2];
-	U8 dmd_active_page;
+
+	unsigned int dmd_phase;
+	U8 dmd_visibles[3];
+	U8 dmd_last_visibles[3];
 
 	int curr_sw;
 	int curr_sw_time;
 	int wdog_timer;
 } the_wpc;
 
+
 struct wpc_asic *wpc = NULL;
+
+int wpc_sock;
 
 
 void wpc_asic_reset (struct hw_device *dev)
 {
-	wpc->curr_sw_time = 0;
-	wpc->wdog_timer = 0;
+	memset (wpc, 0, sizeof (struct wpc_asic));
 }
 
 static int wpc_console_inited = 0;
@@ -275,19 +285,52 @@ void wpc_write_sol (int num, int flag)
 }
 
 
-void wpc_print_display (void)
+void wpc_dmd_set_visible (U8 val)
 {
+#if 0
 	FILE *fp;
-	char *p = wpc->dmd_dev->priv + wpc->dmd_active_page * 512;
+#endif
+	char *p;
+	struct wpc_message msg;
+	int rc;
+	int i, n;
 
+#if 0
 	fp = fopen ("dmd", "wb");
 	if (!fp)
 	{
 		fprintf (stderr, "could not write to DMD!!!\n");
 		return;
 	}
-	fwrite (p, 512, 1, fp);
 	fclose (fp);
+#endif
+
+	wpc->dmd_visibles[wpc->dmd_phase++] = val;
+	if (wpc->dmd_phase == 3)
+		wpc->dmd_phase = 0;
+
+	if (!memcmp (wpc->dmd_visibles, wpc->dmd_last_visibles, 3))
+		return;
+
+	memcpy (wpc->dmd_last_visibles, wpc->dmd_visibles, 3);
+
+	/* Send updated page contents */
+	wpc_msg_init (CODE_DMD_PAGE, &msg);
+	for (i=0; i < 3; i++)
+	{
+		p = wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
+		msg.u.dmdpage.phases[i].page = wpc->dmd_visibles[i];
+		memcpy (&msg.u.dmdpage.phases[i].data, p, 512);
+	}
+	msg.len = sizeof (struct _dmdpage_info);
+	wpc_msg_send (wpc_sock, 9000 ^ 1, &msg);
+
+	/* Send status of which pages are visible now */
+	wpc_msg_init (CODE_DMD_VISIBLE, &msg);
+	for (i=0; i < 3; i++)
+		msg.u.dmdvisible.phases[i] = wpc->dmd_visibles[i];
+	msg.len = sizeof (struct _dmdvisible_info);
+	wpc_msg_send (wpc_sock, 9000 ^ 1, &msg);
 }
 
 
@@ -320,9 +363,6 @@ void wpc_keypoll (void)
 				break;
 			case '0':
 				wpc_press_switch (7, 200);
-				break;
-			case 'd':
-				wpc_print_display ();
 				break;
 			default:
 				break;
@@ -452,8 +492,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 			break;
 
 		case WPC_DMD_ACTIVE_PAGE:
-			wpc->dmd_active_page = val;
-			wpc_print_display ();
+			wpc_dmd_set_visible (val);
 			break;
 
 		case WPC_LEDS:
@@ -571,6 +610,8 @@ void io_sym_add (const char *name, unsigned long cpuaddr)
 void wpc_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
+	int rc;
+	struct sockaddr_in myaddr;
 
 	device_define ( dev = wpc_asic_create (), 0,
 		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);
@@ -591,6 +632,10 @@ void wpc_init (const char *boot_rom_file)
 	wpc->dmd_dev = dev;
 
 	wpc_update_ram ();
+
+	wpc_sock = udp_socket_create (9000);
+	if (wpc_sock < 0)
+		fprintf (stderr, "could not open output socket\n");
 
 	IO_SYM_ADD(WPC_DMD_LOW_BASE);
 	IO_SYM_ADD(WPC_DMD_HIGH_BASE);
