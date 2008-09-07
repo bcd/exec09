@@ -158,6 +158,7 @@ sim_exit (uint8_t exit_code)
 static inline void
 change_pc (unsigned newPC)
 {
+#if 0
   /* TODO - will let some RAM execute for trampolines */
   if ((newPC < 0x1C00) || (newPC > 0xFFFF))
   {
@@ -171,6 +172,7 @@ change_pc (unsigned newPC)
 		fprintf (stderr, "PC : %s ", monitor_addr_name (PC));
 		fprintf (stderr, "-> %s\n", monitor_addr_name (newPC));
 	}
+#endif
   PC = newPC;
 }
 
