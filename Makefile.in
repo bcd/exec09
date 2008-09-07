@@ -156,7 +156,11 @@ sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
-m6809_run_SOURCES = 6809.c main.c monitor.c machine.c eon.c wpc.c symtab.c command.c fileio.c wpclib.c
+m6809_run_SOURCES = \
+	6809.c main.c monitor.c machine.c eon.c wpc.c \
+	symtab.c command.c fileio.c wpclib.c \
+	6809.h config.h eon.h machine.h monitor.h wpclib.h
+
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
