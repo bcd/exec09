@@ -375,15 +375,7 @@ indexed (void)			/* note take 1 extra cycle */
 	  break;
 	default:
 	  ea = 0;
-	  printf ("%X: invalid index post $%02X\n", iPC, post);
-	  if (debug_enabled)
-	    {
-	      monitor_on = 1;
-	    }
-	  else
-	    {
-	      exit (1);
-	    }
+	  sim_error ("invalid index post $%02X\n", post);
 	  break;
 	}
     }
