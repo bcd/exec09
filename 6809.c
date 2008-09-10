@@ -1613,16 +1613,14 @@ swi3 (void)
 void
 cwai (void)
 {
-  puts ("CWAI - not supported yet!");
-  exit (100);
+  sim_error ("CWAI - not supported yet!");
 }
 
 void
 sync (void)
 {
-  puts ("SYNC - not supported yet!");
-  exit (100);
   cpu_clk -= 4;
+  sim_error ("SYNC - not supported yet!");
 }
 
 static void
