@@ -454,6 +454,12 @@ get_d (void)
   return (A << 8) | B;
 }
 
+unsigned
+get_flags (void)
+{
+  return EFI;
+}
+
 #ifdef H6309
 unsigned
 get_e (void)
