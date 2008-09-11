@@ -275,35 +275,13 @@ unsigned int wpc_read_switch_column (int col)
 	return val;
 }
 
-void wpc_write_lamp (int num, int flag)
-{
-}
-
-
-void wpc_write_sol (int num, int flag)
-{
-}
-
 
 void wpc_dmd_set_visible (U8 val)
 {
-#if 0
-	FILE *fp;
-#endif
 	char *p;
 	struct wpc_message msg;
 	int rc;
 	int i, n;
-
-#if 0
-	fp = fopen ("dmd", "wb");
-	if (!fp)
-	{
-		fprintf (stderr, "could not write to DMD!!!\n");
-		return;
-	}
-	fclose (fp);
-#endif
 
 	wpc->dmd_visibles[wpc->dmd_phase++] = val;
 	if (wpc->dmd_phase == 3)
