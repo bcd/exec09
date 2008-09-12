@@ -88,12 +88,10 @@
 #define WPC_GI_TRIAC 					0x3FE6
 #define WPC_SW_JUMPER_INPUT 			0x3FE7
 #define WPC_SW_CABINET_INPUT 			0x3FE8
-#define WPC_SW_ROW_INPUT 				0x3FE9
-#define WPC_SW_COL_STROBE 				0x3FEA
-#if (MACHINE_PIC == 1)
-#define WPCS_PIC_READ 					0x3FE9
-#define WPCS_PIC_WRITE 					0x3FEA
-#endif
+#define WPC_SW_ROW_INPUT 				0x3FE9 /* WPC */
+#define WPC_SW_COL_STROBE 				0x3FEA /* WPC */
+#define WPCS_PIC_READ 					0x3FE9 /* WPCS, WPC95 */
+#define WPCS_PIC_WRITE 					0x3FEA /* WPCS, WPC95 */
 #if (MACHINE_DMD == 0)
 #define WPC_ALPHA_POS 					0x3FEB
 #define WPC_ALPHA_ROW1 					0x3FEC
@@ -102,17 +100,14 @@
 #define WPC_EXTBOARD2 					0x3FEC
 #define WPC_EXTBOARD3 					0x3FED
 #endif
-#if (MACHINE_WPC95 == 1)
-#define WPC95_FLIPPER_COIL_OUTPUT 	0x3FEE
-#define WPC95_FLIPPER_SWITCH_INPUT 	0x3FEF
-#else
-#endif
+#define WPC95_FLIPPER_COIL_OUTPUT 	0x3FEE /* WPC95 */
+#define WPC95_FLIPPER_SWITCH_INPUT 	0x3FEF /* WPC95 */
 #if (MACHINE_DMD == 0)
 #define WPC_ALPHA_ROW2 					0x3FEE
 #else
 #endif
 #define WPC_LEDS 							0x3FF2
-#define WPC_RAM_BANK 					0x3FF3
+#define WPC_RAM_BANK 					0x3FF3 /* WPC95 */
 #define WPC_SHIFTADDR 					0x3FF4
 #define WPC_SHIFTBIT 					0x3FF6
 #define WPC_SHIFTBIT2 					0x3FF7
@@ -282,14 +277,45 @@ void wpc_dmd_set_visible (U8 val)
 	struct wpc_message msg;
 	int rc;
 	int i, n;
+	static unsigned long last_firq_time = 0;
+	unsigned long now;
+	static int no_change_count = 0;
 
-	wpc->dmd_visibles[wpc->dmd_phase++] = val;
-	if (wpc->dmd_phase == 3)
+	now = get_cycles ();
+	if (now - last_firq_time <= 1850 * 8)
+	{
+		//printf ("%02X ignored.\n", val);
+		return;
+	}
+	else if (now - last_firq_time >= 1850 * 8 * 5)
+	{
+		memset (wpc->dmd_visibles, val, 3);
 		wpc->dmd_phase = 0;
+	}
+	else
+	{
+		wpc->dmd_visibles[wpc->dmd_phase++] = val;
+		if (wpc->dmd_phase == 3)
+			wpc->dmd_phase = 0;
+	}
 
-	if (!memcmp (wpc->dmd_visibles, wpc->dmd_last_visibles, 3))
+	last_firq_time = now;
+
+#if 0
+	printf ("%02X %f\n", val, get_cycles () / 1952.0);
+#endif
+
+	if (!memcmp (wpc->dmd_visibles, wpc->dmd_last_visibles, 3)
+		&& (++no_change_count < 100))
 		return;
 
+	no_change_count = 0;
+#if 0
+	printf ("%02X %02X %02X\n",
+		wpc->dmd_visibles[0],
+		wpc->dmd_visibles[1],
+		wpc->dmd_visibles[2]);
+#endif
 	memcpy (wpc->dmd_last_visibles, wpc->dmd_visibles, 3);
 
 	/* Send updated page contents */
@@ -395,6 +421,11 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 		case WPC_SW_CABINET_INPUT:
 			val = wpc_read_switch_column (0);
 			break;
+
+		case WPC_FLIPTRONIC_PORT_A:
+		case WPC_FLIPTRONIC_PORT_B:
+		case WPC95_FLIPPER_SWITCH_INPUT:
+			return 0xFF;
 
 		default:
 			val = 0;
@@ -665,6 +696,14 @@ void wpc_init (const char *boot_rom_file)
 struct machine wpc_machine =
 {
 	.name = "wpc",
+	.fault = wpc_fault,
+	.init = wpc_init,
+};
+
+
+struct machine wpc95_machine =
+{
+	.name = "wpc95",
 	.fault = wpc_fault,
 	.init = wpc_init,
 };

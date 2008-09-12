@@ -375,15 +375,7 @@ indexed (void)			/* note take 1 extra cycle */
 	  break;
 	default:
 	  ea = 0;
-	  printf ("%X: invalid index post $%02X\n", iPC, post);
-	  if (debug_enabled)
-	    {
-	      monitor_on = 1;
-	    }
-	  else
-	    {
-	      exit (1);
-	    }
+	  sim_error ("invalid index post $%02X\n", post);
 	  break;
 	}
     }
@@ -460,6 +452,12 @@ unsigned
 get_d (void)
 {
   return (A << 8) | B;
+}
+
+unsigned
+get_flags (void)
+{
+  return EFI;
 }
 
 #ifdef H6309
@@ -1613,16 +1611,14 @@ swi3 (void)
 void
 cwai (void)
 {
-  puts ("CWAI - not supported yet!");
-  exit (100);
+  sim_error ("CWAI - not supported yet!");
 }
 
 void
 sync (void)
 {
-  puts ("SYNC - not supported yet!");
-  exit (100);
   cpu_clk -= 4;
+  sim_error ("SYNC - not supported yet!");
 }
 
 static void

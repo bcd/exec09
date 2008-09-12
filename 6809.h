@@ -99,6 +99,7 @@ extern unsigned get_s  (void);
 extern unsigned get_u  (void);
 extern unsigned get_pc (void);
 extern unsigned get_d  (void);
+extern unsigned get_flags (void);
 extern void set_a  (unsigned);
 extern void set_b  (unsigned);
 extern void set_cc (unsigned);
