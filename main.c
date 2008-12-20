@@ -65,6 +65,30 @@ const char *prog_name = NULL;
 
 FILE *stat_file = NULL;
 
+struct timeval time_started;
+
+
+/**
+ * Return elapsed real time in milliseconds.
+ */
+long
+time_diff (struct timeval *old, struct timeval *new)
+{
+	long ms = (new->tv_usec - old->tv_usec) / 1000;
+	ms += (new->tv_sec - old->tv_sec) * 1000;
+	return ms;
+}
+
+
+long
+get_elapsed_realtime (void)
+{
+	struct timeval now;
+	gettimeofday (&now, NULL);
+	return time_diff (&time_started, &now);
+}
+
+
 void
 idle_loop (void)
 {
@@ -75,21 +99,20 @@ idle_loop (void)
 	unsigned long cycles;
 	int sim_ms;
 	const int cycles_per_ms = 2000;
-	static int period = 100;
-	static int count = 100;
+	static int period = 30;
+	static int count = 30;
 	int delay;
 	static int total_ms_elapsed = 0;
+	static int cumulative_delay = 0;
 
 	if (--count > 0)
 		return;
 
-	if (last.tv_usec == 0)
+	if (last.tv_sec == 0 && last.tv_usec == 0)
 		gettimeofday (&last, NULL);
 
 	gettimeofday (&now, NULL);
-	real_ms = (now.tv_usec - last.tv_usec) / 1000;
-	if (real_ms < 0)
-		real_ms += 1000;
+	real_ms = time_diff (&last, &now);
 	last = now;
 
 	cycles = get_cycles ();
@@ -107,13 +130,11 @@ idle_loop (void)
 	}
 
 	delay = sim_ms - real_ms;
-	if (delay > 0)
+	cumulative_delay += delay;
+	if (cumulative_delay > 0)
 	{
-		if (delay > 60)
-			period -= 5;
-		else if (delay < 20)
-			period += 5;
-		usleep (delay * 1000UL);
+		usleep (50 * 1000UL);
+		cumulative_delay -= 50;
 	}
 
 	count = period;
@@ -248,7 +269,7 @@ process_option (struct option *opt, const char *arg)
 	}
 
 	if (rc < 0)
-		exit (0);
+		sim_exit (0x70);
 	return rc;
 }
 
@@ -328,6 +349,8 @@ main (int argc, char *argv[])
   int argn = 1;
   unsigned int loops = 0;
 
+	gettimeofday (&time_started, NULL);
+
   exename = argv[0];
   /* TODO - enable different options by default
   based on the executable name. */
@@ -403,6 +426,7 @@ main (int argc, char *argv[])
 				monitor_addr_name (get_pc ()));
 		}
 	}
-	printf ("m6809-run stopped after %d cycles\n", total);
+
+	sim_exit (0);
 	return 0;
 }

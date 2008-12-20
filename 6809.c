@@ -136,6 +136,7 @@ get_cycles (void)
 void
 sim_exit (uint8_t exit_code)
 {
+	char *s;
 
 	/* On a nonzero exit, always print an error message. */
 	if (exit_code != 0)
@@ -148,7 +149,19 @@ sim_exit (uint8_t exit_code)
 	/* If a cycle count should be printed, do that last. */
 	if (dump_cycles_on_success)
 	{
-		printf ("Simulated time : %ld cycles\n", get_cycles ());
+		printf ("%s : %ld cycles, %ld ms\n", prog_name, get_cycles (),
+			get_elapsed_realtime ());
+	}
+
+	if ((s = getenv ("LOG6809")) != NULL)
+	{
+		FILE *fp = fopen (s, "a");
+		if (fp)
+		{
+			fprintf (fp, "%s : %ld cycles, %ld ms\n", prog_name, get_cycles (),
+				get_elapsed_realtime ());
+			fclose (fp);
+		}
 	}
 
 	exit (exit_code);
