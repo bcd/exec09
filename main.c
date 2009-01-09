@@ -55,6 +55,10 @@ int dump_cycles_on_success = 0;
 exit.  This is to help speed through test cases that never finish. */
 int max_cycles = 100000000;
 
+/* When nonzero, says that the state of the machine is persistent
+across runs of the simulator. */
+int machine_persistent = 0;
+
 static int type = S19;
 
 char *exename;
@@ -163,6 +167,8 @@ struct option
 		NO_NEG, HAS_ARG, &max_cycles, 0, NULL, NULL },
 	{ 's', "machine", "Specify the machine (exact hardware) to emulate",
 		NO_NEG, HAS_ARG, NULL, 0, &machine_name, NULL },
+	{ 'p', "persistent", "Use persistent machine state",
+		NO_NEG, NO_ARG, &machine_persistent, 1, NULL, NULL },
 	{ '\0', NULL },
 };
 
