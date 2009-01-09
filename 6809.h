@@ -67,7 +67,9 @@ extern int debug_enabled;
 extern int need_flush;
 extern unsigned long total;
 extern int dump_cycles_on_success;
+extern const char *prog_name;
 
+long get_elapsed_realtime (void);
 
 /* Primitive read/write macros */
 #define read8(addr)        cpu_read8 (addr)
