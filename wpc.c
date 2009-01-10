@@ -141,10 +141,10 @@ struct wpc_asic
 	U16 shiftbit;
    U8 lamp_strobe;
    U8 lamp_mx[8];
-   U8 sols[6];
+   U8 sols[48];
    U8 switch_strobe;
-   U8 switch_mx[8];
-	U8 opto_mx[8];
+   U8 switch_mx[10];
+	U8 opto_mx[10];
 	U8 dmd_maps[2];
 
 	unsigned int dmd_phase;
@@ -161,11 +161,6 @@ struct wpc_asic *wpc = NULL;
 
 int wpc_sock;
 
-
-void wpc_asic_reset (struct hw_device *dev)
-{
-	memset (wpc, 0, sizeof (struct wpc_asic));
-}
 
 static int wpc_console_inited = 0;
 
@@ -275,8 +270,13 @@ void wpc_write_lamp (int num, int flag)
 }
 
 
-void wpc_write_sol (int num, int flag)
+void wpc_write_sols (int first, U8 val)
 {
+	int i;
+	for (i=0; i < 8; i++)
+	{
+		wpc->sols[first+i] = (val & (1 << i)) ? 1 : 0;
+	}
 }
 
 
@@ -378,6 +378,12 @@ void wpc_keypoll (void)
 			case '0':
 				wpc_press_switch (7, 200);
 				break;
+			case ',':
+				wpc_press_switch (75, 200);
+				break;
+			case '.':
+				wpc_press_switch (73, 200);
+				break;
 			default:
 				break;
 		}
@@ -421,8 +427,14 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 			break;
 
 		case WPC_SW_ROW_INPUT:
-			val = wpc_read_switch_column (1 + scanbit (wpc->switch_strobe));
+		{
+			/* Handle WPC and WPC-S machines differently */
+			if (wpc->switch_strobe >= 0x16 && wpc->switch_strobe <= 0x1F)
+				val = wpc_read_switch_column (wpc->switch_strobe - 0x16 + 1);
+			else
+				val = wpc_read_switch_column (1 + scanbit (wpc->switch_strobe));
 			break;
+		}
 
 		case WPC_SW_JUMPER_INPUT:
 			val = 0x55;
@@ -435,7 +447,8 @@ U8 wpc_asic_read (struct hw_device *dev, unsigned long addr)
 		case WPC_FLIPTRONIC_PORT_A:
 		case WPC_FLIPTRONIC_PORT_B:
 		case WPC95_FLIPPER_SWITCH_INPUT:
-			return 0xFF;
+			val = wpc_read_switch_column (9);
+			break;
 
 		default:
 			val = 0;
@@ -565,6 +578,15 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 		case WPC_SW_COL_STROBE:
 			wpc->switch_strobe = val;
+			break;
+
+		case WPC_SOL_FLASH2_OUTPUT:
+		case WPC_SOL_HIGHPOWER_OUTPUT:
+		case WPC_SOL_FLASH1_OUTPUT:
+		case WPC_SOL_LOWPOWER_OUTPUT:
+			if (val != 0)
+				printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
+			break;
 
 		default:
 			break;
@@ -591,6 +613,12 @@ void wpc_periodic (void)
 			wpc_write_switch (wpc->curr_sw, 0);
 		}
 	}
+}
+
+void wpc_asic_reset (struct hw_device *dev)
+{
+	memset (wpc, 0, sizeof (struct wpc_asic));
+	wpc_write_switch (19, 1); /* Always Closed */
 }
 
 
