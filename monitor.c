@@ -1099,12 +1099,28 @@ load_map_file (const char *name)
 	target_addr_t value;
 	char *file_ptr;
 
+	/* Try appending the suffix 'map' to the name of the program. */
 	sprintf (map_filename, "%s.map", name);
-
 	fp = file_open (NULL, map_filename, "r");
 	if (!fp)
-		return -1;
+	{
+		/* If that fails, try replacing any existing suffix. */
+		sprintf (map_filename, "%s", name);
+		char *s = strrchr (map_filename, '.');
+		if (s)
+		{
+			sprintf (s+1, "map");
+			fp = file_open (NULL, map_filename, "r");
+		}
 
+		if (!fp)
+		{
+			fprintf (stderr, "warning: no symbols for %s\n", name);
+			return -1;
+		}
+	}
+
+	printf ("Reading symbols from '%s'...\n", map_filename);
 	for (;;)
 	{
 		fgets (buf, sizeof(buf)-1, fp);

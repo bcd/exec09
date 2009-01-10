@@ -643,8 +643,13 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 	extern struct machine simple_machine;
 	extern struct machine eon_machine;
 	extern struct machine wpc_machine;
+	int i;
 
+	/* Initialize CPU maps, so that no CPU addresses map to
+	anything.  Default maps will trigger faults at runtime. */
 	memset (busmaps, 0, sizeof (busmaps));
+	for (i = 0; i < NUM_BUS_MAPS; i++)
+		busmaps[i].devid = INVALID_DEVID;
 
 	if (machine_match (machine_name, boot_rom_file, &simple_machine));
 	else if (machine_match (machine_name, boot_rom_file, &eon_machine));

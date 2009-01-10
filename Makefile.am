@@ -4,3 +4,4 @@ m6809_run_SOURCES = \
 	6809.h config.h eon.h machine.h monitor.h wpclib.h
 
 bin_PROGRAMS = m6809-run
+bin_SCRIPTS = wpc-run

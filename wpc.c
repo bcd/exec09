@@ -240,8 +240,10 @@ void wpc_write_switch (int num, int flag)
 	col = num / 8;
 	val = 1 << (num % 8);
 
+#if 0
 	if (wpc->opto_mx[col] & val)
 		flag = !flag;
+#endif
 
 	wpc->switch_mx[col] &= ~val;
 	if (flag)
@@ -314,7 +316,6 @@ void wpc_dmd_set_visible (U8 val)
 	printf ("%02X %f\n", val, get_cycles () / 1952.0);
 #endif
 
-
 	if (!memcmp (wpc->dmd_visibles, wpc->dmd_last_visibles, 3)
 		&& (++no_change_count < 100))
 		return;
@@ -364,19 +365,20 @@ void wpc_keypoll (void)
 	{
 		rc = read (0, &c, 1);
 
+#define BUTTON_DURATION 500
 		switch (c)
 		{
 			case '7':
-				wpc_press_switch (4, 200);
+				wpc_press_switch (4, BUTTON_DURATION);
 				break;
 			case '8':
-				wpc_press_switch (5, 200);
+				wpc_press_switch (5, BUTTON_DURATION);
 				break;
 			case '9':
-				wpc_press_switch (6, 200);
+				wpc_press_switch (6, BUTTON_DURATION);
 				break;
 			case '0':
-				wpc_press_switch (7, 200);
+				wpc_press_switch (7, BUTTON_DURATION);
 				break;
 			case ',':
 				wpc_press_switch (75, 200);
@@ -385,6 +387,7 @@ void wpc_keypoll (void)
 				wpc_press_switch (73, 200);
 				break;
 			default:
+				printf ("wpc: invalid character '%c'\n", c);
 				break;
 		}
 	}

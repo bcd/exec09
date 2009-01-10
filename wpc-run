@@ -1,0 +1,2 @@
+#!/bin/sh
+m6809-run -s wpc -I 2049 -b -C -d -m -1 $*
