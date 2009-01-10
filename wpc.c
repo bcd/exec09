@@ -162,11 +162,6 @@ struct wpc_asic *wpc = NULL;
 int wpc_sock;
 
 
-void wpc_asic_reset (struct hw_device *dev)
-{
-	memset (wpc, 0, sizeof (struct wpc_asic));
-}
-
 static int wpc_console_inited = 0;
 
 static U8 wpc_get_console_state (void)
@@ -245,8 +240,10 @@ void wpc_write_switch (int num, int flag)
 	col = num / 8;
 	val = 1 << (num % 8);
 
+#if 0
 	if (wpc->opto_mx[col] & val)
 		flag = !flag;
+#endif
 
 	wpc->switch_mx[col] &= ~val;
 	if (flag)
@@ -354,21 +351,23 @@ void wpc_keypoll (void)
 	{
 		rc = read (0, &c, 1);
 
+#define BUTTON_DURATION 500
 		switch (c)
 		{
 			case '7':
-				wpc_press_switch (4, 200);
+				wpc_press_switch (4, BUTTON_DURATION);
 				break;
 			case '8':
-				wpc_press_switch (5, 200);
+				wpc_press_switch (5, BUTTON_DURATION);
 				break;
 			case '9':
-				wpc_press_switch (6, 200);
+				wpc_press_switch (6, BUTTON_DURATION);
 				break;
 			case '0':
-				wpc_press_switch (7, 200);
+				wpc_press_switch (7, BUTTON_DURATION);
 				break;
 			default:
+				printf ("wpc: invalid character '%c'\n", c);
 				break;
 		}
 	}
@@ -581,6 +580,12 @@ void wpc_periodic (void)
 			wpc_write_switch (wpc->curr_sw, 0);
 		}
 	}
+}
+
+void wpc_asic_reset (struct hw_device *dev)
+{
+	memset (wpc, 0, sizeof (struct wpc_asic));
+	wpc_write_switch (19, 1); /* Always Closed */
 }
 
 
