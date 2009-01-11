@@ -365,7 +365,7 @@ void wpc_keypoll (void)
 	{
 		rc = read (0, &c, 1);
 
-#define BUTTON_DURATION 500
+#define BUTTON_DURATION 200
 		switch (c)
 		{
 			case '7':
@@ -381,10 +381,10 @@ void wpc_keypoll (void)
 				wpc_press_switch (7, BUTTON_DURATION);
 				break;
 			case ',':
-				wpc_press_switch (75, 200);
+				wpc_press_switch (75, BUTTON_DURATION);
 				break;
 			case '.':
-				wpc_press_switch (73, 200);
+				wpc_press_switch (73, BUTTON_DURATION);
 				break;
 			default:
 				printf ("wpc: invalid character '%c'\n", c);
