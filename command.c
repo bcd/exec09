@@ -998,8 +998,15 @@ void cmd_vars (void)
 void cmd_runfor (void)
 {
    char *arg = getarg ();
-   int secs = atoi (arg);
-   stop_after_ms = secs * 1000;
+   char *units;
+   unsigned long val = atoi (arg);
+
+   units = getarg ();
+   if (!units || !strcmp (units, "ms"))
+      stop_after_ms = val;
+   else if (!strcmp (units, "s"))
+      stop_after_ms = val * 1000;
+   exit_command_loop = 0;
 }
 
 
