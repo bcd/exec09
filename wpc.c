@@ -649,6 +649,10 @@ void wpc_fault (unsigned int addr, unsigned char type)
 {
 }
 
+void wpc_dump_thread (unsigned long addr)
+{
+}
+
 void io_sym_add (const char *name, unsigned long cpuaddr)
 {
    sym_add (&program_symtab, name, to_absolute (cpuaddr), 0);
@@ -739,6 +743,7 @@ struct machine wpc_machine =
 	.name = "wpc",
 	.fault = wpc_fault,
 	.init = wpc_init,
+	.dump_thread = wpc_dump_thread,
 };
 
 
@@ -747,5 +752,6 @@ struct machine wpc95_machine =
 	.name = "wpc95",
 	.fault = wpc_fault,
 	.init = wpc_init,
+	.dump_thread = wpc_dump_thread,
 };
 
