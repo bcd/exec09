@@ -17,6 +17,14 @@ typedef struct
 } cmdqueue_t;
 
 
+typedef enum
+{
+   LVALUE,
+   RVALUE,
+} eval_mode_t;
+
+#define MAKE_ADDR(devno, phyaddr) ((devno * 0x10000000L) + phyaddr)
+
 /**********************************************************/
 /********************* Global Data ************************/
 /**********************************************************/
@@ -35,6 +43,11 @@ absolute_address_t examine_addr = 0;
 unsigned int examine_repeat = 1;
 datatype_t examine_type;
 
+/* Thread tracking. thread_current points to a location in
+ * target memory where the current thread ID is kept.  thread_id
+ * is the debugger's current cached value of that, to avoid
+ * reading memory constantly.  The size allows for targets to
+ * define the ID format differently. */
 unsigned int thread_id_size = 2;
 absolute_address_t thread_current;
 absolute_address_t thread_id = 0;
@@ -62,7 +75,7 @@ unsigned int irq_cycle_entry = 0;
 unsigned long irq_cycles = 0;
 
 unsigned long eval (char *expr);
-unsigned long eval_mem (char *expr);
+unsigned long eval_mem (char *expr, eval_mode_t mode);
 extern int auto_break_insn_count;
 
 FILE *command_input;
@@ -119,6 +132,9 @@ assign_virtual (const char *name, unsigned long val)
 {
    unsigned long v_val;
 
+   /* First check for a special variable with this name, and
+    * invoke its write handler.  Otherwise, store to the
+    * user table. */
    if (!sym_find (&auto_symtab, name, &v_val, 0))
    {
       virtual_handler_t virtual = (virtual_handler_t)v_val;
@@ -172,8 +188,7 @@ eval_assign (const char *expr, unsigned long val)
 	}
    else
    {
-      absolute_address_t dst = eval_mem (expr);
-      //printf ("Setting %X to %02X\n", dst, val);
+      absolute_address_t dst = eval_mem (expr, LVALUE);
       abs_write8 (dst, val);
    }
 }
@@ -287,17 +302,20 @@ fold_binary (char *expr, const char op, unsigned long *valp)
 	return 1;
 }
 
-
+/**
+ * Evaluate a memory expression, as an lvalue or rvalue.
+ */
 unsigned long
-eval_mem (char *expr)
+eval_mem (char *expr, eval_mode_t mode)
 {
    char *p;
    unsigned long val;
 
+   /* First evaluate the address */
    if ((p = strchr (expr, ':')) != NULL)
    {
       *p++ = '\0';
-      val = eval (expr) * 0x10000000L + eval (p);
+      val = MAKE_ADDR (eval (expr), eval (p));
    }
    else if (isalpha (*expr))
    {
@@ -310,10 +328,23 @@ eval_mem (char *expr)
       this explodes ! */
       val = to_absolute (eval (expr));
    }
+
+   /* If mode is RVALUE, then dereference it */
+   if (mode == RVALUE)
+      val = target_read (val, 1);
+
    return val;
 }
 
 
+/**
+ * Evaluate an expression, given as a string.
+ * The return is the value (rvalue) of the expression.
+ *
+ * TODO:
+ * - Support typecasts ( {TYPE}ADDR )
+ *
+ */
 unsigned long
 eval (char *expr)
 {
@@ -342,27 +373,13 @@ eval (char *expr)
       else
          val = eval_virtual (expr+1);
    }
-   else if (*expr == '*')
+   else if (*expr == '&')
    {
-      unsigned int size = 1;
-      expr++;
-      if (*expr == '*')
-      {
-         expr++;
-         size = 2;
-      }
-
-      absolute_address_t addr = eval_mem (expr);
-      return target_read (addr, size);
-   }
-   else if (*expr == '@')
-   {
-      val = eval_mem (expr+1);
+      val = eval_mem (expr+1, LVALUE);
    }
    else if (isalpha (*expr))
    {
-      if (sym_find (&program_symtab, expr, &val, 0))
-         val = 0;
+      val = eval_mem (expr, RVALUE);
    }
    else
    {
@@ -524,6 +541,10 @@ print_value (unsigned long val, datatype_t *typep)
          putchar ('"');
          return;
       }
+
+      case 't':
+         /* TODO : print as binary integer */
+         break;
    }
 
 	if (typep->format == 'x')
@@ -647,10 +668,10 @@ do_print (char *expr)
 void
 do_set (char *expr)
 {
-	unsigned long val = eval (expr);
-   save_value (val);
+	(void)eval (expr);
 }
 
+/* TODO - WPC */
 #define THREAD_DATA_PC 3
 #define THREAD_DATA_ROMBANK 9
 
@@ -663,7 +684,13 @@ print_thread_data (absolute_address_t th)
 
    w = abs_read16 (th + THREAD_DATA_PC);
    b = abs_read8 (th + THREAD_DATA_ROMBANK);
-   printf ("{ PC = %04X, BANK = %02X }", w, b);
+   if (w >= 0x8000)
+      pc = 0xF0000 + w;
+   else
+      pc = (b * 0x4000) + (w - 0x4000);
+   pc = MAKE_ADDR (1, pc);
+   print_addr (pc);
+   //printf ("{ <%04X,%02X>", w, b);
 }
 
 
@@ -672,9 +699,9 @@ command_change_thread (void)
 {
    target_addr_t addr = target_read (thread_current, thread_id_size);
    absolute_address_t th = to_absolute (addr);
+
    if (th == thread_id)
       return;
-
    thread_id = th;
 
    if (machine->dump_thread && eval ("$thread_debug"))
@@ -739,6 +766,10 @@ void cmd_print (void)
 void cmd_set (void)
 {
    char *arg = getarg ();
+
+   if (!strcmp (arg, "var"))
+      arg = getarg ();
+
    if (arg)
       do_set (arg);
    else
@@ -750,7 +781,7 @@ void cmd_examine (void)
 {
    char *arg = getarg ();
    if (arg)
-      examine_addr = eval_mem (arg);
+      examine_addr = eval_mem (arg, LVALUE);
    do_examine ();
 }
 
@@ -759,7 +790,7 @@ void cmd_break (void)
    char *arg = getarg ();
    if (!arg)
       return;
-   unsigned long val = eval_mem (arg);
+   unsigned long val = eval_mem (arg, LVALUE);
    breakpoint_t *br = brkalloc ();
    br->addr = val;
    br->on_execute = 1;
@@ -788,7 +819,7 @@ void cmd_watch1 (int on_read, int on_write)
    arg = getarg ();
    if (!arg)
       return;
-   absolute_address_t addr = eval_mem (arg);
+   absolute_address_t addr = eval_mem (arg, LVALUE);
    breakpoint_t *br = brkalloc ();
    br->addr = addr;
    br->on_read = on_read;
@@ -915,7 +946,7 @@ void cmd_list (void)
 
    arg = getarg ();
    if (arg)
-      addr = eval_mem (arg);
+      addr = eval_mem (arg, LVALUE);
    else
    {
       addr = to_absolute (get_pc ());
@@ -1020,7 +1051,7 @@ void cmd_measure (void)
    char *arg = getarg ();
    if (!arg)
       return;
-   addr = eval_mem (arg);
+   addr = eval_mem (arg, LVALUE);
    printf ("Measuring ");
    print_addr (addr);
    printf (" back to ");
@@ -1050,7 +1081,7 @@ void cmd_measure (void)
 }
 
 
-void cmd_dump (void)
+void cmd_dump_insns (void)
 {
    extern int dump_every_insn;
 
@@ -1079,6 +1110,15 @@ cmd_trace_dump (void)
       off = (off + 1) % MAX_TRACE;
    } while (off != trace_offset);
    fflush (stdout);
+}
+
+void cmd_dump (void)
+{
+}
+
+
+void cmd_restore (void)
+{
 }
 
 /****************** Parser ************************/
@@ -1110,6 +1150,7 @@ struct command_name
       "Break at the next instruction" },
    { "c", "continue", cmd_continue,
       "Continue the program" },
+   { "fg", "foreground", cmd_continue, NULL },
    { "q", "quit", cmd_quit,
       "Quit the simulator" },
    { "re", "reset", cpu_reset,
@@ -1138,10 +1179,14 @@ struct command_name
       "Run for a certain amount of time" },
    { "me", "measure", cmd_measure,
       "Measure time that a function takes" },
-   { "dump", "dump", cmd_dump,
+   { "dumpi", "dumpi", cmd_dump_insns,
       "Set dump-instruction flag" },
    { "td", "tracedump", cmd_trace_dump,
       "Dump the trace buffer" },
+   { "dump", "du", cmd_dump,
+      "Dump contents of memory to a file" },
+   { "restore", "res", cmd_restore,
+      "Restore contents of memory from a file" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "i", "info", cmd_info },
@@ -1418,6 +1463,8 @@ command_write_hook (absolute_address_t addr, U8 val)
       }
    }
 
+   /* On any write, if threading is enabled then see if the
+    * thread ID changed by re-reading it from the target. */
    if (thread_id_size && (addr == thread_current + thread_id_size - 1))
    {
       command_change_thread ();

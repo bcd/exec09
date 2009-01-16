@@ -158,8 +158,8 @@ const char *sym_lookup (struct symtab *symtab, unsigned long value)
 }
 
 
-void sym_add (struct symtab *symtab,
-              const char *name, unsigned long value, unsigned int type)
+struct symbol *sym_add (struct symtab *symtab,
+	const char *name, unsigned long value, unsigned int type)
 {
 	unsigned int hash;
 	struct symbol *s, *chain;
@@ -168,6 +168,8 @@ void sym_add (struct symtab *symtab,
 	s->name = stringspace_copy (name);
 	s->value = value;
 	s->type = type;
+	s->ty.format = 0;
+	s->ty.size = 0;
    
    hash = sym_hash_name (name);
 	chain = symtab->syms_by_name[hash];
@@ -178,6 +180,8 @@ void sym_add (struct symtab *symtab,
 	chain = symtab->syms_by_value[hash];
 	s->value_chain = chain;
 	symtab->syms_by_value[hash] = s;
+
+	return s;
 }
 
 
@@ -196,15 +200,17 @@ void for_each_var (void (*cb) (struct symbol *, unsigned int size))
 {
 	struct symtab *symtab = &program_symtab;
 	absolute_address_t addr;
-	const char *sym;
-	unsigned int devid = 1;
+	const char *id;
+	struct symbol *sym;
+	unsigned int devid = 1; /* TODO */
 
 	for (addr = devid << 28; addr < (devid << 28) + 0x2000; addr++)
 	{
-		sym = sym_lookup (symtab, addr);
-		if (sym)
+		id = sym_lookup (symtab, addr);
+		if (id)
 		{
-			printf ("%s = %X\n", sym, addr);
+			sym = sym_find1 (symtab, id, NULL, 0);
+			printf ("%-20.20s  %8lX  %d\n", id, addr, sym->ty.size);
 		}
 	}
 }
@@ -226,6 +232,10 @@ void sym_init (void)
 {
 	current_stringspace = stringspace_create ();
 
+	/* Initialize three symbol tables for general use.
+	 * The program_symtab stores names found in the program's
+	 * symbol table/map file.  The auto symtab has special reserved
+	 * names. */
 	symtab_init (&program_symtab);
 	symtab_init (&internal_symtab);
 	symtab_init (&auto_symtab);
