@@ -1131,7 +1131,10 @@ load_map_file (const char *name)
 		if (!strncmp (value_ptr, "page", 4))
 		{
 			unsigned char page = strtoul (value_ptr+4, NULL, 10);
+#if 1 /* turn into machine hook; */
+/* TODO - detect if using linker banking */
 			wpc_set_rom_page (page);
+#endif
 			continue;
 		}
 
