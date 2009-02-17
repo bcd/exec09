@@ -1098,6 +1098,7 @@ load_map_file (const char *name)
 	char *value_ptr, *id_ptr;
 	target_addr_t value;
 	char *file_ptr;
+	struct symbol *sym = NULL;
 
 	/* Try appending the suffix 'map' to the name of the program. */
 	sprintf (map_filename, "%s.map", name);
@@ -1131,10 +1132,8 @@ load_map_file (const char *name)
 		if (!strncmp (value_ptr, "page", 4))
 		{
 			unsigned char page = strtoul (value_ptr+4, NULL, 10);
-#if 1 /* turn into machine hook; */
-/* TODO - detect if using linker banking */
-			wpc_set_rom_page (page);
-#endif
+			wpc_set_rom_page (page); /* TODO - detect using linker banking */
+			sym = NULL;
 			continue;
 		}
 
@@ -1158,7 +1157,9 @@ load_map_file (const char *name)
 
 		file_ptr = strtok (NULL, " \t\n");
 
-		sym_add (&program_symtab, id_ptr, to_absolute (value), 0); /* file_ptr? */
+		if (sym)
+			sym->ty.size = to_absolute (value) - sym->value;
+		sym = sym_add (&program_symtab, id_ptr, to_absolute (value), 0); /* file_ptr? */
 	}
 
 	fclose (fp);

@@ -183,7 +183,7 @@ extern struct symtab program_symtab;
 extern struct symtab internal_symtab;
 extern struct symtab auto_symtab;
 
-void sym_add (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
+struct symbol *sym_add (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
 void sym_set (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
 int sym_find (struct symtab *symtab, const char *name, unsigned long *value, unsigned int type);
 const char *sym_lookup (struct symtab *symtab, unsigned long value);

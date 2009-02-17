@@ -8,12 +8,12 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * GCC6809 is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with GCC6809; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -1733,8 +1733,8 @@ bsr (void)
   monitor_call (0);
 }
 
-/* execute 6809 code */
 
+/* Execute 6809 code for a certain number of cycles. */
 int
 cpu_execute (int cycles)
 {
@@ -1745,11 +1745,12 @@ cpu_execute (int cycles)
   do
     {
 	 	command_insn_hook ();
-      if (check_break () != 0)
-	monitor_on = 1;
-      if (monitor_on != 0)
-	if (monitor6809 () != 0)
-      goto cpu_exit;
+		if (check_break () != 0)
+			monitor_on = 1;
+
+		if (monitor_on != 0)
+			if (monitor6809 () != 0)
+				goto cpu_exit;
 
       iPC = PC;
       opcode = imm_byte ();
