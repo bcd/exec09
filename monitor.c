@@ -1132,7 +1132,8 @@ load_map_file (const char *name)
 		if (!strncmp (value_ptr, "page", 4))
 		{
 			unsigned char page = strtoul (value_ptr+4, NULL, 10);
-			wpc_set_rom_page (page); /* TODO - genericize */
+			if (!strcmp (machine->name, "wpc"))
+				wpc_set_rom_page (page);
 			sym = NULL;
 			continue;
 		}
