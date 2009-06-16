@@ -53,7 +53,7 @@ int dump_cycles_on_success = 0;
 
 /* When nonzero, indicates the total number of cycles before an automated
 exit.  This is to help speed through test cases that never finish. */
-int max_cycles = 100000000;
+unsigned long max_cycles = 500000000UL;
 
 /* When nonzero, says that the state of the machine is persistent
 across runs of the simulator. */
