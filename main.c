@@ -129,7 +129,8 @@ idle_loop (void)
 	if (total_ms_elapsed > 100)
 	{
 		total_ms_elapsed -= 100;
-		wpc_periodic ();
+		if (machine->periodic)
+			machine->periodic ();
 		command_periodic ();
 	}
 
@@ -411,6 +412,7 @@ main (int argc, char *argv[])
 		else
 		{
 			total += cpu_execute (cycles_per_irq);
+			/* TODO - this assumes periodic interrupts (WPC) */
 			request_irq (0);
 			{
 			/* TODO - FIRQ frequency not handled yet */
