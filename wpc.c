@@ -649,7 +649,7 @@ void wpc_fault (unsigned int addr, unsigned char type)
 {
 }
 
-void wpc_dump_thread (unsigned long addr)
+void wpc_dump_thread (unsigned int thread_id)
 {
 }
 

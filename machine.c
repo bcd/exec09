@@ -23,6 +23,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "machine.h"
+#include "6809.h"
 #include "eon.h"
 
 #define CONFIG_LEGACY

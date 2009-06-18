@@ -135,9 +135,9 @@ extern void monitor_init (void);
 extern int monitor6809 (void);
 extern int dasm (char *, absolute_address_t);
 
-extern int load_hex (char *);
-extern int load_s19 (char *);
-extern int load_bin (char *,int);
+extern int load_hex (const char *);
+extern int load_s19 (const char *);
+extern int load_bin (const char *,int);
 
 #define MAX_STRINGSPACE 32000
 #define MAX_SYMBOL_HASH 1009

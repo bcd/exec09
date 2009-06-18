@@ -180,7 +180,7 @@ eval_virtual (const char *name)
 
 
 void
-eval_assign (const char *expr, unsigned long val)
+eval_assign (char *expr, unsigned long val)
 {
 	if (*expr == '$')
 	{

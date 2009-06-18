@@ -1169,7 +1169,7 @@ load_map_file (const char *name)
 
 
 int
-load_hex (char *name)
+load_hex (const char *name)
 {
   FILE *fp;
   int count, addr, type, data, checksum;
@@ -1238,7 +1238,7 @@ load_hex (char *name)
 
 
 int
-load_s19 (char *name)
+load_s19 (const char *name)
 {
   FILE *fp;
   int count, addr, type, data, checksum;

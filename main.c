@@ -154,6 +154,8 @@ int do_help (const char *arg __attribute__((unused)));
 #define NO_ARG    0
 #define HAS_ARG   1
 
+int do_help (const char *arg __attribute__((unused)));
+
 struct option
 {
 	char o_short;
@@ -169,7 +171,7 @@ struct option
 	{ 'd', "debug", "Enter the monitor immediately",
 		HAS_NEG, NO_ARG, &debug_enabled, 1, NULL, NULL },
 	{ 'h', "help", NULL,
-		NO_NEG, NO_ARG, NULL, NULL, 0, do_help },
+		NO_NEG, NO_ARG, NULL, 0, 0, do_help },
 	{ 'b', "binary", "",
 		NO_NEG, NO_ARG, &type, BIN, NULL, NULL },
 	{ 'M', "mhz", "", NO_NEG, HAS_ARG },

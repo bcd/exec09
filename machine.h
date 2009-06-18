@@ -122,13 +122,17 @@ extern struct machine *machine;
 struct machine
 {
 	const char *name;
-	void (*init) (char *boot_rom_file);
+	void (*init) (const char *boot_rom_file);
 	void (*fault) (unsigned int addr, unsigned char type);
 	void (*dump_thread) (unsigned int thread_id);
 	void (*periodic) (void);
 };
 
+struct hw_device *device_attach (struct hw_class *class_ptr, unsigned int size, void *priv);
+
 struct hw_device *ram_create (unsigned long size);
 struct hw_device *rom_create (const char *filename, unsigned int maxsize);
+struct hw_device *console_create (void);
+struct hw_device *disk_create (const char *backing_file);
 
 #endif /* _M6809_MACHINE_H */
