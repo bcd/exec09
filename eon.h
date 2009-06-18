@@ -21,6 +21,44 @@
 #ifndef _MACHINE_EON_H
 #define _MACHINE_EON_H
 
+/* This file defines the characteristics of the EON machine architecture.
+EON is a little more advanced than the 'simple' architecture that runs by
+default, and can be used to run more sophiscated programs for the 6809.
+However, no actual hardware resembling this exists.
+
+The computer has a total of 1MB of RAM, which is mapped to logical address
+0x0000.  As the 6809 only has 64KB addressable at a time, some bank
+switching is required.  The address space is defined into 16, 4KB pages.
+The pages from 0xE000-0xFFFF are special, though, and allow access to
+I/O and a read-only boot ROM.  Thus, pages 0-13 can be mapped to any
+of the 1MB RAM, page 14 has all of the I/O registers and some of the boot
+ROM, and page 15 has the remaining boot ROM, including interrupt vectors.
+The boot ROM file to use is specified as a command-line option to the
+emulator.
+
+Each I/O device comprises 128 bytes of address space.  There can be up
+to a maximum of 8 devices defined this way.  The "device ID" is just the
+offset from the beginning of the I/O region.  At present, 5 devices are
+defined:
+
+Device 0 - the MMU.  This provides registers for reprogramming the paging
+hardware.
+
+Device 1 - the power manager.  This is not yet implemented.
+
+Device 2 - the console.  This has the basic stdin/stdout, akin to a serial
+port.
+
+Device 3 - the display.  Not implemented yet, this would be akin to a
+graphical interface.
+
+Device 4 - the disk drive.  See machine.c for a full description of how the
+disk works.  EON simulates the disk using a file named 'disk.bin', so its
+contents are actually persistent.  Disk transfers conceptually DMA to/from
+RAM in 512-byte chunks.  The maximum disk size is 32MB (16-bit sector numbers).
+
+*/
+
 /* RAM */
 #define RAM_SIZE 0x100000
 
