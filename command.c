@@ -1540,6 +1540,11 @@ void et_virtual (unsigned long *val, int writep)
 }
 
 
+/**
+ * Update the $irqload virtual register, which tracks the
+ * average number of cycles spent in IRQ.  This function
+ * maintains a rolling history of IRQ_CYCLE_COUNTS entries.
+ */
 void
 command_exit_irq_hook (unsigned long cycles)
 {
@@ -1547,8 +1552,6 @@ command_exit_irq_hook (unsigned long cycles)
    irq_cycles += cycles;
    irq_cycle_tab[irq_cycle_entry] = cycles;
    irq_cycle_entry = (irq_cycle_entry + 1) % IRQ_CYCLE_COUNTS;
-   //printf ("IRQ took %lu cycles\n", cycles);
-   //printf ("Average = %d\n", irq_cycles / IRQ_CYCLE_COUNTS);
 }
 
 
@@ -1557,6 +1560,10 @@ command_init (void)
 {
    int rc;
 
+   /* Install virtual registers.  These are referenced in expressions
+    * using a dollar-sign prefix (e.g. $pc).  The value of the
+    * symbol is a pointer to a function (e.g. pc_virtual) which
+    * computes the value dynamically. */
    sym_add (&auto_symtab, "pc", (unsigned long)pc_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "x", (unsigned long)x_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "y", (unsigned long)y_virtual, SYM_AUTO);

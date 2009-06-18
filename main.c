@@ -53,7 +53,7 @@ int dump_cycles_on_success = 0;
 
 /* When nonzero, indicates the total number of cycles before an automated
 exit.  This is to help speed through test cases that never finish. */
-int max_cycles = 100000000;
+unsigned long max_cycles = 500000000UL;
 
 /* When nonzero, says that the state of the machine is persistent
 across runs of the simulator. */
@@ -129,7 +129,8 @@ idle_loop (void)
 	if (total_ms_elapsed > 100)
 	{
 		total_ms_elapsed -= 100;
-		wpc_periodic ();
+		if (machine->periodic)
+			machine->periodic ();
 		command_periodic ();
 	}
 
@@ -411,6 +412,7 @@ main (int argc, char *argv[])
 		else
 		{
 			total += cpu_execute (cycles_per_irq);
+			/* TODO - this assumes periodic interrupts (WPC) */
 			request_irq (0);
 			{
 			/* TODO - FIRQ frequency not handled yet */

@@ -744,6 +744,7 @@ struct machine wpc_machine =
 	.fault = wpc_fault,
 	.init = wpc_init,
 	.dump_thread = wpc_dump_thread,
+	.periodic = wpc_periodic,
 };
 
 
@@ -753,5 +754,6 @@ struct machine wpc95_machine =
 	.fault = wpc_fault,
 	.init = wpc_init,
 	.dump_thread = wpc_dump_thread,
+	.periodic = wpc_periodic,
 };
 

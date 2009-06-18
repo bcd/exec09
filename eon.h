@@ -75,11 +75,11 @@ RAM in 512-byte chunks.  The maximum disk size is 32MB (16-bit sector numbers).
 	#define MMU_PAGEREGS   4
 
 		/* device select */
-		#define MMU_DEV(p)      (MMU_ADDR + (p * MMU_PAGEREGS) + 0)
+		#define MMU_DEV(p)      (MMU_ADDR + ((p) * MMU_PAGEREGS) + 0)
 		/* 4KB region to map in */
-		#define MMU_OFF(p)      (MMU_ADDR + (p * MMU_PAGEREGS) + 1)
+		#define MMU_OFF(p)      (MMU_ADDR + ((p) * MMU_PAGEREGS) + 1)
 		/* permissions */
-		#define MMU_FLG(p)      (MMU_ADDR + (p * MMU_PAGEREGS) + 2)
+		#define MMU_FLG(p)      (MMU_ADDR + ((p) * MMU_PAGEREGS) + 2)
 
 	#define MMU_FAULT_ADDR (MMU_ADDR + 0x60)
 	#define MMU_FAULT_TYPE (MMU_ADDR + 0x62)

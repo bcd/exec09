@@ -67,6 +67,7 @@ struct machine eon_machine =
 	.name = "eon",
 	.fault = eon_fault,
 	.init = eon_init,
+	.periodic = 0,
 };
 
 struct machine simple_machine =
@@ -74,6 +75,7 @@ struct machine simple_machine =
 	.name = "simple",
 	.fault = eon_fault,
 	.init = simple_init,
+	.periodic = 0,
 };
 
 

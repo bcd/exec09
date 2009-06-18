@@ -125,6 +125,7 @@ struct machine
 	void (*init) (char *boot_rom_file);
 	void (*fault) (unsigned int addr, unsigned char type);
 	void (*dump_thread) (unsigned int thread_id);
+	void (*periodic) (void);
 };
 
 struct hw_device *ram_create (unsigned long size);
