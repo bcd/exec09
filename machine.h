@@ -37,18 +37,20 @@ typedef unsigned long absolute_address_t;
 
 #define INVALID_DEVID 0xff
 
-/* Say whether or not the mapping is RO or RW. */
-#define MAP_READWRITE 0x0
-#define MAP_READONLY 0x1
+/* Say whether or not the mapping is RO or RW (or neither). */
+#define MAP_READABLE 0x1
+#define MAP_WRITABLE 0x2
+#define MAP_READWRITE 0x3
 
 /* A fixed map cannot be reprogrammed.  Attempts to
 bus_map something differently will silently be
 ignored. */
-#define MAP_FIXED 0x2
+#define MAP_FIXED 0x4
 
 #define FAULT_NONE 0
 #define FAULT_NOT_WRITABLE 1
 #define FAULT_NO_RESPONSE 2
+#define FAULT_NOT_READABLE 3
 
 /* A bus map is assocated with part of the 6809 address space
 and says what device and which part of it is mapped into that

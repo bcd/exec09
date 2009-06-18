@@ -495,13 +495,13 @@ void wpc_update_ram (void)
 	bus_map (WPC_RAM_BASE, wpc->ram_dev->devid, 0, size_writable, MAP_READWRITE);
 	if (size_writable < WPC_RAM_SIZE)
 		bus_map (WPC_RAM_BASE + size_writable, wpc->ram_dev->devid, size_writable,
-			WPC_RAM_SIZE - size_writable, MAP_READONLY);
+			WPC_RAM_SIZE - size_writable, MAP_READABLE);
 }
 
 
 void wpc_set_rom_page (unsigned char val)
 {
-	bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READONLY);
+	bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READABLE);
 }
 
 void wpc_set_dmd_page (unsigned int map, unsigned char val)
@@ -676,9 +676,9 @@ void wpc_init (const char *boot_rom_file)
 
 	dev = rom_create (boot_rom_file, WPC_ROM_SIZE);
 	device_define ( dev, 0,
-		WPC_PAGED_REGION, WPC_PAGED_SIZE, MAP_READONLY);
+		WPC_PAGED_REGION, WPC_PAGED_SIZE, MAP_READABLE);
 	device_define ( dev, WPC_ROM_SIZE - WPC_FIXED_SIZE,
-		WPC_FIXED_REGION, WPC_FIXED_SIZE, MAP_READONLY);
+		WPC_FIXED_REGION, WPC_FIXED_SIZE, MAP_READABLE);
 	wpc->rom_dev = dev;
 
 	device_define ( dev = ram_create (16 * 512), 0,

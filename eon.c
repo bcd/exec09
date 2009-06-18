@@ -37,7 +37,7 @@ void eon_init (const char *boot_rom_file)
 		0x0000, MAX_CPU_ADDR, MAP_READWRITE );
 
 	device_define ( rom_create (boot_rom_file, BOOT_ROM_SIZE), 0,
-		BOOT_ROM_ADDR, BOOT_ROM_SIZE, MAP_READONLY );
+		BOOT_ROM_ADDR, BOOT_ROM_SIZE, MAP_READABLE );
 
 	device_define ( dev = console_create (), 0,
 		CONSOLE_ADDR, BUS_MAP_SIZE, MAP_READWRITE );

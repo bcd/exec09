@@ -211,9 +211,14 @@ U16 cpu_read16 (unsigned int addr)
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
-	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
-	return ((*class_ptr->read) (dev, phy_addr) << 8)
-		| (*class_ptr->read) (dev, phy_addr+1);
+	if (system_running && !(map->flags & MAP_READABLE))
+		machine->fault (addr, FAULT_NOT_READABLE);
+	else
+	{
+		command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
+		return ((*class_ptr->read) (dev, phy_addr) << 8)
+			| (*class_ptr->read) (dev, phy_addr+1);
+	}
 }
 
 
@@ -228,7 +233,7 @@ void cpu_write8 (unsigned int addr, U8 val)
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 
 	/* This can fail if the area is read-only */
-	if (system_running && (map->flags & MAP_READONLY))
+	if (system_running && !(map->flags & MAP_WRITABLE))
 		machine->fault (addr, FAULT_NOT_WRITABLE);
 	else
 		(*class_ptr->write) (dev, phy_addr, val);
@@ -264,9 +269,9 @@ void dump_machine (void)
 	for (mapno = 0; mapno < NUM_BUS_MAPS; mapno++)
 	{
 		struct bus_map *map = &busmaps[mapno];
-		printf ("Map %d  addr=%04X  dev=%d  offset=%04X  size=%06X\n",
+		printf ("Map %d  addr=%04X  dev=%d  offset=%04X  size=%06X  flags=%02X\n",
 			mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
-			0 /* device_table[map->devid]->size */);
+			0 /* device_table[map->devid]->size */, map->flags);
 
 #if 0
 		for (n = 0; n < BUS_MAP_SIZE; n++)
@@ -446,7 +451,7 @@ void mmu_write (struct hw_device *dev, unsigned long addr, U8 val)
 	         mmu_regs[page][0],
 				mmu_regs[page][1] * MMU_PAGESIZE,
 				MMU_PAGESIZE,
-				mmu_regs[page][2] & 0x1);
+				mmu_regs[page][2] & MAP_READWRITE);
 }
 
 void mmu_reset (struct hw_device *dev)
@@ -456,7 +461,7 @@ void mmu_reset (struct hw_device *dev)
 	{
 		mmu_write (dev, page * MMU_PAGEREGS + 0, 0);
 		mmu_write (dev, page * MMU_PAGEREGS + 1, 0);
-		mmu_write (dev, page * MMU_PAGEREGS + 2, 0);
+		mmu_write (dev, page * MMU_PAGEREGS + 2, MAP_READWRITE);
 	}
 }
 
@@ -472,7 +477,7 @@ void mmu_reset_complete (struct hw_device *dev)
 		map = &busmaps[4 + page * (MMU_PAGESIZE / BUS_MAP_SIZE)];
 		mmu_regs[page][0] = map->devid;
 		mmu_regs[page][1] = map->offset / MMU_PAGESIZE;
-		mmu_regs[page][2] = map->flags & 0x1;
+		mmu_regs[page][2] = map->flags & MAP_READWRITE;
 		/* printf ("%02X %02X %02X\n",
 			map->devid, map->offset / MMU_PAGESIZE,
 			map->flags); */
