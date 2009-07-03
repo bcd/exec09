@@ -42,6 +42,14 @@ if test $h6309 = yes; then
    AC_DEFINE(H6309, 1, [Use 6309 extensions])
 fi
 
+AC_ARG_ENABLE([readline],
+   AC_HELP_STRING([--enable-readline], [Enable readline library]),
+   [rl_lib=$enableval], [rl_lib=no])
+if test $rl_lib = yes; then
+   AC_DEFINE(HAVE_READLINE, 1, [Use readline library])
+	READLINE_LIBS="-L/lib -lreadline"
+	AC_SUBST(READLINE_LIBS)
+fi
 
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

@@ -1245,14 +1245,6 @@ command_lookup (const char *cmd)
 
 
 void
-command_prompt (void)
-{
-   fprintf (stderr, "(dbg) ");
-   fflush (stderr);
-}
-
-
-void
 print_current_insn (void)
 {
 	absolute_address_t addr = to_absolute (get_pc ());
@@ -1274,9 +1266,26 @@ command_exec (FILE *infile)
 
    do {
       errno = 0;
+#ifdef HAVE_READLINE
+      if (infile == stdin)
+      {
+         char *buf = readline ("(dbg) ");
+         if (buf == NULL)
+            return -1;
+         if (*buf)
+            add_history (buf);
+         strcpy (buffer, buf);
+         strcat (buffer, "\n");
+      }
+      else
+#endif
+      {
+      if (infile == stdin)
+         printf ("(dbg) ");
       fgets (buffer, 255, infile);
       if (feof (infile))
          return -1;
+      }
    } while (errno != 0);
 
    /* In terminal mode, a blank line means to execute
@@ -1336,8 +1345,6 @@ restart:
    exit_command_loop = -1;
    while (exit_command_loop < 0)
    {
-      if (command_input == stdin)
-         command_prompt ();
       if (command_exec (command_input) < 0)
          break;
    }
