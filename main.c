@@ -376,6 +376,9 @@ main (int argc, char *argv[])
 			break;
 
 		case S19:
+			/* The machine loader cannot deal with S-record files.
+			So initialize the machine first, passing it a NULL
+			filename, then load the S-record file afterwards. */
 			machine_init (machine_name, NULL);
 			if (prog_name && load_s19 (prog_name))
 				usage ();

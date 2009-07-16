@@ -49,6 +49,44 @@ void eon_init (const char *boot_rom_file)
 }
 
 
+/*
+ * Initialize the second-generation EON machine (EON2).
+ */
+void eon2_init (const char *boot_rom_file)
+{
+	struct hw_device *dev, *mmudev, *iodev, *intdev;
+
+	/* Create a 1MB RAM */
+	dev = ram_create (0x100000);
+
+	/* Place the RAM behind a small MMU, which dynamically remaps
+	portions of the RAM into the processor address space */
+	mmudev = small_mmu_create (dev);
+
+	/* Create and map in the ROM */
+	dev = rom_create (boot_rom_file, 0x800);
+	device_define (dev, 0, 0xF800, 0x0800, MAP_READABLE);
+
+	/* Create an I/O expander to hold all of the I/O registers.
+	Each device is allocated only 8 bytes. */
+	iodev = ioexpand_create ();
+	device_define (iodev, 0, 0xFF00, 128, MAP_READWRITE);
+	ioexpand_attach (iodev, 0, console_create ());
+	ioexpand_attach (iodev, 1, disk_create ("disk.bin"));
+	ioexpand_attach (iodev, 2, mmudev);
+	ioexpand_attach (iodev, 3, intdev = imux_create ());
+	/* 4 = config EEPROM */
+	/* 5 = video display */
+	/* 6 = battery-backed clock */
+	/* 7 = power control (reboot/off) */
+	/* 8 = timer(s) */
+	/* etc. up to device 15 */
+	/* May need to define an I/O _multiplexer_ to support more than 16 devices */
+
+	/* Bind interrupting devices to the interrupt multiplexor. */
+}
+
+
 /**
  * Initialize the simple machine, which is the default
  * machine that has no bells or whistles.
@@ -67,6 +105,14 @@ struct machine eon_machine =
 	.name = "eon",
 	.fault = eon_fault,
 	.init = eon_init,
+	.periodic = 0,
+};
+
+struct machine eon2_machine =
+{
+	.name = "eon2",
+	.fault = eon_fault,
+	.init = eon2_init,
 	.periodic = 0,
 };
 

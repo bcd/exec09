@@ -123,6 +123,14 @@ RAM in 512-byte chunks.  The maximum disk size is 32MB (16-bit sector numbers).
 #define DSK_ADDR 1
 #define DSK_SECTOR 2 /* and 3 */
 
+/* The Interrupt Multiplexer */
+
+#define IMUX_DEVID      5
+#define IMUX_ADDR       DEVICE_BASE(IMUX_DEVID)
+
+#define IMUX_ENB    0
+#define IMUX_PEND   1
+
 /* Boot ROM region (7KB) */
 #define BOOT_ROM_ADDR 0xE400
 #define BOOT_ROM_SIZE 0x1C00

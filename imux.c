@@ -9,7 +9,7 @@ struct imux
 	unsigned int in_use;    /* Bits for each int that are used */
 	unsigned int enabled;   /* Bits for each int that is enabled */
 	unsigned int pending;   /* Bits for each int that are active */
-	unsigned int src;
+	unsigned int src;       /* Source line back to CPU */
 };
 
 void imux_refresh (struct imux *mux)
@@ -73,12 +73,16 @@ void imux_register (struct hw_device *dev, unsigned int sig)
 	mux->in_use |= (1 << sig);
 }
 
+/*
+ * Assert an edge-triggered interrupt line.
+ */
 void imux_assert (struct hw_device *dev, unsigned int sig)
 {
 	struct imux *mux = (struct imux *)dev->priv;
 	mux->pending |= (1 << sig);
 	imux_refresh (mux);
 }
+
 
 struct hw_class imux_class =
 {
