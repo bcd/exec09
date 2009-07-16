@@ -511,7 +511,8 @@ struct hw_device *mmu_create (void)
  *   a 32MB disk.
  * - direction, either to disk or from disk.
  *
- * Emulation is synchronous with respect to the CPU.
+ * Emulation is synchronous with respect to the CPU.  TODO: this should use
+ * interrupts and add real some latency.
  */
 
 struct disk_priv
