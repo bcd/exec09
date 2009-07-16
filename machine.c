@@ -48,10 +48,26 @@ U8 fault_type;
 
 int system_running = 0;
 
+
 void cpu_is_running (void)
 {
 	system_running = 1;
 }
+
+void do_fault (unsigned int addr, unsigned int type)
+{
+	if (system_running)
+		machine->fault (addr, type);
+}
+
+
+void exit_fault (unsigned int addr, unsigned int type)
+{
+	monitor_on = debug_enabled;
+	sim_error ("Fault: addr=%04X type=%02X\n", addr, type);
+	exit (1);
+}
+
 
 /**
  * Attach a new device to the bus.  Only called during init.
@@ -158,7 +174,7 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 {
 	/* Fault if any invalid device is accessed */
 	if ((id == INVALID_DEVID) || (id >= device_count))
-		machine->fault (addr, FAULT_NO_RESPONSE);
+		do_fault (addr, FAULT_NO_RESPONSE);
 	return device_table[id];
 }
 
@@ -212,7 +228,7 @@ U16 cpu_read16 (unsigned int addr)
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 	if (system_running && !(map->flags & MAP_READABLE))
-		machine->fault (addr, FAULT_NOT_READABLE);
+		do_fault (addr, FAULT_NOT_READABLE);
 	else
 	{
 		command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
@@ -234,7 +250,7 @@ void cpu_write8 (unsigned int addr, U8 val)
 
 	/* This can fail if the area is read-only */
 	if (system_running && !(map->flags & MAP_WRITABLE))
-		machine->fault (addr, FAULT_NOT_WRITABLE);
+		do_fault (addr, FAULT_NOT_WRITABLE);
 	else
 		(*class_ptr->write) (dev, phy_addr, val);
 	command_write_hook (absolute_from_reladdr (map->devid, phy_addr), val);
