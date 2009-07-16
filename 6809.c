@@ -1621,6 +1621,33 @@ swi3 (void)
   change_pc (read16 (0xfff2));
 }
 
+#ifdef H6309
+void
+trap (void)
+{
+  cpu_clk -= 20;
+  EFI |= E_FLAG;
+  S = (S - 2) & 0xffff;
+  write_stack16 (S, PC & 0xffff);
+  S = (S - 2) & 0xffff;
+  write_stack16 (S, U);
+  S = (S - 2) & 0xffff;
+  write_stack16 (S, Y);
+  S = (S - 2) & 0xffff;
+  write_stack16 (S, X);
+  S = (S - 1) & 0xffff;
+  write_stack (S, DP >> 8);
+  S = (S - 1) & 0xffff;
+  write_stack (S, B);
+  S = (S - 1) & 0xffff;
+  write_stack (S, A);
+  S = (S - 1) & 0xffff;
+  write_stack (S, get_cc ());
+
+  change_pc (read16 (0xfff0));
+}
+#endif
+
 void
 cwai (void)
 {
@@ -2112,14 +2139,29 @@ cpu_execute (int cycles)
 	      case 0x3f:
 		swi3 ();
 		break;
+#ifdef H6309
+			case 0x80: /* SUBE */
+			case 0x81: /* CMPE */
+#endif
 	      case 0x83:
 		cpu_clk -= 5;
 		cmp16 (U, imm_word ());
 		break;
+#ifdef H6309
+			case 0x86: /* LDE */
+			case 0x8B: /* ADDE */
+#endif
 	      case 0x8c:
 		cpu_clk -= 5;
 		cmp16 (S, imm_word ());
 		break;
+#ifdef H6309
+			case 0x8D: /* DIVD */
+			case 0x8E: /* DIVQ */
+			case 0x8F: /* MULD */
+			case 0x90: /* SUBE */
+			case 0x91: /* CMPE */
+#endif
 	      case 0x93:
 		direct ();
 		cpu_clk -= 5;
