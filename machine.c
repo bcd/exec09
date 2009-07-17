@@ -38,6 +38,8 @@ struct machine *machine;
 unsigned int device_count = 0;
 struct hw_device *device_table[MAX_BUS_DEVICES];
 
+struct hw_device *null_device;
+
 struct bus_map busmaps[NUM_BUS_MAPS];
 
 struct bus_map default_busmaps[NUM_BUS_MAPS];
@@ -137,6 +139,7 @@ void device_define (struct hw_device *dev,
 	unsigned int len,
 	unsigned int flags)
 {
+	/* Note: len must be a multiple of BUS_MAP_SIZE */
 	bus_map (addr, dev->devid, offset, len, flags);
 }
 
@@ -174,7 +177,10 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 {
 	/* Fault if any invalid device is accessed */
 	if ((id == INVALID_DEVID) || (id >= device_count))
+	{
 		do_fault (addr, FAULT_NO_RESPONSE);
+		return null_device;
+	}
 	return device_table[id];
 }
 
@@ -207,9 +213,10 @@ U8 abs_read8 (absolute_address_t addr)
 /**
  * Called by the CPU to read a byte.
  * This is the bottleneck in terms of performance.  Consider
- * a caching scheme that cuts down on some of this...
- * Also consider a native 16-bit read that doesn't require
- * 2 separate calls here...
+ * a caching scheme that cuts down on some of this.
+ * There is also a 16-bit version that is more efficient when
+ * a full word is needed, but it implies that no reads will ever
+ * occur across a device boundary.
  */
 U8 cpu_read8 (unsigned int addr)
 {
@@ -217,6 +224,9 @@ U8 cpu_read8 (unsigned int addr)
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
+
+	if (system_running && !(map->flags & MAP_READABLE))
+		machine->fault (addr, FAULT_NOT_READABLE);
 	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
 	return (*class_ptr->read) (dev, phy_addr);
 }
@@ -227,14 +237,12 @@ U16 cpu_read16 (unsigned int addr)
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
+
 	if (system_running && !(map->flags & MAP_READABLE))
 		do_fault (addr, FAULT_NOT_READABLE);
-	else
-	{
-		command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
-		return ((*class_ptr->read) (dev, phy_addr) << 8)
+	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
+	return ((*class_ptr->read) (dev, phy_addr) << 8)
 			| (*class_ptr->read) (dev, phy_addr+1);
-	}
 }
 
 
@@ -248,11 +256,9 @@ void cpu_write8 (unsigned int addr, U8 val)
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 
-	/* This can fail if the area is read-only */
 	if (system_running && !(map->flags & MAP_WRITABLE))
 		do_fault (addr, FAULT_NOT_WRITABLE);
-	else
-		(*class_ptr->write) (dev, phy_addr, val);
+	(*class_ptr->write) (dev, phy_addr, val);
 	command_write_hook (absolute_from_reladdr (map->devid, phy_addr), val);
 }
 
@@ -306,12 +312,26 @@ void null_reset (struct hw_device *dev)
 
 U8 null_read (struct hw_device *dev, unsigned long addr)
 {
-	return 0;
+	return 0xFF;
 }
 
 void null_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
 }
+
+struct hw_class null_class =
+{
+	.readonly = 0,
+	.reset = null_reset,
+	.read = null_read,
+	.write = null_write,
+};
+
+struct hw_device *null_create (void)
+{
+	return device_attach (&null_class, 0, NULL);
+}
+
 
 /**********************************************************/
 
@@ -665,17 +685,20 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 {
 	extern struct machine simple_machine;
 	extern struct machine eon_machine;
+	extern struct machine eon2_machine;
 	extern struct machine wpc_machine;
 	int i;
 
 	/* Initialize CPU maps, so that no CPU addresses map to
 	anything.  Default maps will trigger faults at runtime. */
+	null_device = null_create ();
 	memset (busmaps, 0, sizeof (busmaps));
 	for (i = 0; i < NUM_BUS_MAPS; i++)
 		busmaps[i].devid = INVALID_DEVID;
 
 	if (machine_match (machine_name, boot_rom_file, &simple_machine));
 	else if (machine_match (machine_name, boot_rom_file, &eon_machine));
+	else if (machine_match (machine_name, boot_rom_file, &eon2_machine));
 	else if (machine_match (machine_name, boot_rom_file, &wpc_machine));
 	else exit (1);
 
