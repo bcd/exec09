@@ -1,5 +1,5 @@
 /*
- * Copyright 2006, 2007, 2008 by Brian Dominy <brian@oddchange.com>
+ * Copyright 2006-2009 by Brian Dominy <brian@oddchange.com>
  *
  * This file is part of GCC6809.
  *
@@ -99,8 +99,15 @@ struct hw_class
 
 	/* Writes a byte at a given offset from the beginning of the device. */
 	void (*write) (struct hw_device *dev, unsigned long phy_addr, U8 val);
+
+	/* Update procedure.  This is called periodically and can be used for
+	whatever purpose.  The minimum update interval is once per 1ms.  Leave
+	NULL if not required */
+	void (*update) (struct hw_device *dev);
 };
 
+
+/* The hardware device structure exists for each instance of a device. */
 
 struct hw_device
 {
@@ -118,6 +125,9 @@ struct hw_device
 	(hw_class) of device. */
 	void *priv;
 };
+
+/* The machine structure collects everything about the abstract machine.
+The pointer 'machine' points to the machine that is being run. */
 
 extern struct machine *machine;
 
