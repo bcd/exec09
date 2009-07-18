@@ -59,6 +59,10 @@ unsigned long max_cycles = 500000000UL;
 across runs of the simulator. */
 int machine_persistent = 0;
 
+/* When nonzero, says that the simulator is slowed down to match what a real
+processor would run like. */
+int machine_realtime = 0;
+
 static int type = S19;
 
 char *exename;
@@ -177,7 +181,8 @@ struct option
 	{ 'M', "mhz", "", NO_NEG, HAS_ARG },
 	{ '-', "68a09", "Emulate the 68A09 variation (1.5Mhz)" },
 	{ '-', "68b09", "Emulate the 68B09 variation (2Mhz)" },
-	{ 'R', "realtime", "Limit simulation speed to match realtime" },
+	{ 'R', "realtime", "Limit simulation speed to match realtime",
+		HAS_NEG, NO_ARG, &machine_realtime, 0, NULL, NULL },
 	{ 'I', "irqfreq", "Asserts an IRQ every so many cycles automatically",
 		NO_NEG, HAS_ARG, &cycles_per_irq, 0, NULL, NULL },
 	{ 'F', "firqfreq", "Asserts an FIRQ every so many cycles automatically",
