@@ -97,6 +97,9 @@ get_elapsed_realtime (void)
 }
 
 
+/*
+ * Check if the CPU should idle.
+ */
 void
 idle_loop (void)
 {
@@ -417,7 +420,12 @@ main (int argc, char *argv[])
 	{
    	if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
 		{
-			total += cpu_execute (max_cycles ? max_cycles-1 : 500000);
+			/* Simulate some CPU time, either 1ms worth or up to the
+			next possible IRQ */
+			total += cpu_execute (mhz * 1024);
+
+			/* Call each device that needs periodic processing. */
+			machine_update ();
 		}
 		else
 		{

@@ -537,35 +537,16 @@ struct hw_device *mmu_create (void)
 
 /**********************************************************/
 
-struct hw_device *disk_create (const char *backing_file)
+void machine_update (void)
 {
-	struct disk_priv *disk = malloc (sizeof (struct disk_priv));
-	int newdisk = 0;
-
-	disk->fp = file_open (NULL, backing_file, "r+b");
-	if (disk->fp == NULL)
+	int i;
+	for (i=0; i < device_count; i++)
 	{
-		printf ("warning: disk does not exist, creating\n");
-		disk->fp = file_open (NULL, backing_file, "w+b");
-		newdisk = 1;
-		if (disk->fp == NULL)
-		{
-			printf ("warning: disk not created\n");
-		}
+		struct hw_device *dev = device_table[i];
+		if (dev->class_ptr->update)
+			dev->class_ptr->update (dev);
 	}
-
-	disk->ram = 0;
-	disk->ramdev = device_table[1];
-	disk->dev = device_attach (&disk_class, BUS_MAP_SIZE, disk);
-	disk->sectors = DISK_SECTOR_COUNT;
-
-	if (newdisk)
-		disk_format (disk->dev);
-
-	return disk->dev;
 }
-
-/**********************************************************/
 
 int machine_match (const char *machine_name, const char *boot_rom_file, struct machine *m)
 {

@@ -57,7 +57,7 @@ am_m6809_run_OBJECTS = 6809.$(OBJEXT) main.$(OBJEXT) monitor.$(OBJEXT) \
 	machine.$(OBJEXT) eon.$(OBJEXT) wpc.$(OBJEXT) symtab.$(OBJEXT) \
 	command.$(OBJEXT) fileio.$(OBJEXT) wpclib.$(OBJEXT) \
 	imux.$(OBJEXT) ioexpand.$(OBJEXT) mmu.$(OBJEXT) \
-	timer.$(OBJEXT)
+	timer.$(OBJEXT) serial.$(OBJEXT) disk.$(OBJEXT)
 m6809_run_OBJECTS = $(am_m6809_run_OBJECTS)
 m6809_run_LDADD = $(LDADD)
 binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
@@ -166,7 +166,7 @@ target_alias = @target_alias@
 m6809_run_SOURCES = \
 	6809.c main.c monitor.c machine.c eon.c wpc.c \
 	symtab.c command.c fileio.c wpclib.c imux.c \
-	ioexpand.c mmu.c timer.c \
+	ioexpand.c mmu.c timer.c serial.c disk.c \
 	6809.h config.h eon.h machine.h monitor.h wpclib.h
 
 bin_SCRIPTS = wpc-run
@@ -279,6 +279,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/6809.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/command.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/disk.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eon.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fileio.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/imux.Po@am__quote@
@@ -287,6 +288,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mmu.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/serial.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symtab.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/timer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/wpc.Po@am__quote@

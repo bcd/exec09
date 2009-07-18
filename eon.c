@@ -1,4 +1,5 @@
 
+#include <fcntl.h>
 #include "machine.h"
 #include "eon.h"
 
@@ -24,7 +25,7 @@ void eon_fault (unsigned int addr, unsigned char type)
  */
 void eon_init (const char *boot_rom_file)
 {
-	struct hw_device *dev;
+	struct hw_device *dev, *ram_dev;
 
 	/* The MMU must be defined first, as all other devices
 	that are attached can try to hook into the MMU. */
@@ -33,7 +34,7 @@ void eon_init (const char *boot_rom_file)
 
 	/* A 1MB RAM part is mapped into all of the allowable 64KB
 	address space, until overriden by other devices. */
-	device_define ( ram_create (RAM_SIZE), 0,
+	device_define ( ram_dev = ram_create (RAM_SIZE), 0,
 		0x0000, MAX_CPU_ADDR, MAP_READWRITE );
 
 	device_define ( rom_create (boot_rom_file, BOOT_ROM_SIZE), 0,
@@ -44,7 +45,7 @@ void eon_init (const char *boot_rom_file)
 	device_define (dev, 0, 
 		0xFF00, BUS_MAP_SIZE, MAP_READWRITE );
 
-	device_define ( disk_create ("disk.bin"), 0,
+	device_define ( disk_create ("disk.bin", ram_dev), 0,
 		DISK_ADDR(0), BUS_MAP_SIZE, MAP_READWRITE);
 }
 
@@ -54,14 +55,14 @@ void eon_init (const char *boot_rom_file)
  */
 void eon2_init (const char *boot_rom_file)
 {
-	struct hw_device *dev, *mmudev, *iodev, *intdev;
+	struct hw_device *dev, *ram_dev, *mmudev, *iodev, *intdev;
 
 	/* Create a 1MB RAM */
-	dev = ram_create (0x100000);
+	ram_dev = ram_create (0x100000);
 
 	/* Place the RAM behind a small MMU, which dynamically remaps
 	portions of the RAM into the processor address space */
-	mmudev = small_mmu_create (dev);
+	mmudev = small_mmu_create (ram_dev);
 
 	/* Create and map in the ROM */
 	dev = rom_create (boot_rom_file, 0x800);
@@ -71,19 +72,21 @@ void eon2_init (const char *boot_rom_file)
 	Each device is allocated only 8 bytes. */
 	iodev = ioexpand_create ();
 	device_define (iodev, 0, 0xFF00, 128, MAP_READWRITE);
-	ioexpand_attach (iodev, 0, console_create ());
-	ioexpand_attach (iodev, 1, disk_create ("disk.bin"));
+	ioexpand_attach (iodev, 0, serial_create ());
+	ioexpand_attach (iodev, 1, disk_create ("disk.bin", ram_dev));
 	ioexpand_attach (iodev, 2, mmudev);
-	ioexpand_attach (iodev, 3, intdev = imux_create ());
+	ioexpand_attach (iodev, 3, intdev = imux_create (1));
 	/* 4 = config EEPROM */
 	/* 5 = video display */
 	/* 6 = battery-backed clock */
 	/* 7 = power control (reboot/off) */
-	/* 8 = timer(s) */
+	/* 8 = periodic timer/oscillator */
+	/* 9 = hostfile (for debug only) */
+	ioexpand_attach (iodev, 9, hostfile_create ("hostfile", O_RDWR));
 	/* etc. up to device 15 */
 	/* May need to define an I/O _multiplexer_ to support more than 16 devices */
 
-	/* Bind interrupting devices to the interrupt multiplexor. */
+	dev = oscillator_create (intdev, 0);
 }
 
 
