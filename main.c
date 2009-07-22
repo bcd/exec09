@@ -161,7 +161,6 @@ int do_help (const char *arg __attribute__((unused)));
 #define NO_ARG    0
 #define HAS_ARG   1
 
-int do_help (const char *arg __attribute__((unused)));
 
 struct option
 {
@@ -224,7 +223,7 @@ do_help (const char *arg __attribute__((unused)))
 		}
 		opt++;
 	}
-	return -1;
+	exit (0);
 }
 
 
