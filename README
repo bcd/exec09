@@ -2,10 +2,25 @@ This is a rewrite of Arto Salmi's 6809 simulator.  Many changes
 have been made to it.  This program remains licensed under the
 GNU General Public License.
 
+-----------------------------------------------------------------
+Build and install (on Linux)
+
+you will need make, gcc, aclocal, automake and probably some other
+stuff. Then:
+
+> ./configure
+> make
+
+There is one executable, m6809-run. You can install it (make install) or
+simply reference it explicitly.
+
+-----------------------------------------------------------------
 Input Files
 
 
+-----------------------------------------------------------------
 Machines
+
 
 The simulator now has the notion of different 'machines':
 which says what types of I/O devices are mapped into the 6809's
@@ -40,10 +55,13 @@ that wants to have persistence.
 TODO : Would anyone be interested in a CoCo machine type?
 
 
+-----------------------------------------------------------------
 Faults
+======
 
-
+-----------------------------------------------------------------
 Debugging
+=========
 
 The simulator supports interactive debugging similar to that
 provided by 'gdb'.
@@ -120,7 +138,6 @@ x <expr>
 
 
 -----------------------------------------------------------------
-
 Original README text from Arto:
 
 
