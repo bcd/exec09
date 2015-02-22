@@ -20,6 +20,7 @@
 
 /* The interrupt multiplexer */
 
+#include <stdlib.h>
 #include "machine.h"
 #include "eon.h"
 

@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "machine.h"
 
 /* Emulate a serial port.  Basically this driver can be used for any byte-at-a-time
