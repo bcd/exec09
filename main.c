@@ -268,7 +268,9 @@ process_option (struct option *opt, const char *arg)
 	else
 	{
 		if (arg)
+		{
 			//printf ("  Takes no argument but one given, ignored.\n");
+		}
 
 		if (opt->int_value)
 		{
@@ -365,7 +367,7 @@ main (int argc, char *argv[])
   int argn = 1;
   unsigned int loops = 0;
 
-	gettimeofday (&time_started, NULL);
+  gettimeofday (&time_started, NULL);
 
   exename = argv[0];
   /* TODO - enable different options by default
@@ -402,14 +404,18 @@ main (int argc, char *argv[])
 
 	/* Enable debugging if no executable given yet. */
 	if (!prog_name)
+	{
 		debug_enabled = 1;
+	}
 	else
+	{
 		/* OK, ready to run.  Reset the CPU first. */
 		cpu_reset ();
+	}
 
 	monitor_init ();
 	command_init ();
-   keybuffering (0);
+	keybuffering (0);
 
 	/* Now, iterate through the instructions.
 	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()
