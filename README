@@ -57,11 +57,11 @@ TODO : Would anyone be interested in a CoCo machine type?
 
 -----------------------------------------------------------------
 Faults
-======
+
 
 -----------------------------------------------------------------
 Debugging
-=========
+
 
 The simulator supports interactive debugging similar to that
 provided by 'gdb'.
@@ -70,7 +70,7 @@ b <expr>
 	Set a breakpoint at the given address.
 
 bl
-	List all breakpoints.
+	List all breakpoints/watchpoints.
 
 c
 	Continue running.
