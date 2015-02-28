@@ -876,7 +876,12 @@ void cmd_break_list (void)
 
 void cmd_step (void)
 {
-   auto_break_insn_count = 1;
+   char *arg = getarg ();
+   if (arg)
+       auto_break_insn_count = atoi(arg);
+   else
+       auto_break_insn_count = 1;
+
    exit_command_loop = 0;
 }
 
@@ -1145,7 +1150,7 @@ struct command_name
    { "d", "delete", cmd_delete,
       "Delete a breakpoint/watchpoint" },
    { "s", "step", cmd_step,
-      "Step one instruction" },
+      "Step one (or more) instructions" },
    { "n", "next", cmd_next,
       "Break at the next instruction" },
    { "c", "continue", cmd_continue,

@@ -109,8 +109,8 @@ re
 runfor <expr>
 	Continue but break after a certain period of (simulated) time.
 
-s
-	Step one CPU instruction.
+s  <expr>
+	Step for a certain number of CPU instructions (1 by default).
 
 set <expr>
 	Sets the value of an internal variable or target memory.
