@@ -11,8 +11,18 @@ stuff. Then:
 > ./configure
 > make
 
-There is one executable, m6809-run. You can install it (make install) or
-simply reference it explicitly.
+There is one executable, m6809-run. You can install it
+("make install") or simply reference it explicitly.
+
+To see configure options:
+
+> ./configure --help
+
+Enable readline libraries if you have them installed; this will
+allow you to use command-line recall and other shortcuts at the
+debugger command-line:
+
+> ./configure --enable-readline
 
 -----------------------------------------------------------------
 Input Files
@@ -136,6 +146,8 @@ wa <expr>
 x <expr>
 	Examine target memory at the address given.
 
+info
+        Describe machine, devices and address mapping.
 
 -----------------------------------------------------------------
 Original README text from Arto:

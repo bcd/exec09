@@ -144,6 +144,7 @@ void oscillator_reset (struct hw_device *dev)
 
 struct hw_class hwtimer_class =
 {
+	.name = "hwtimer",
 	.readonly = 0,
 	.reset = hwtimer_reset,
 	.read = hwtimer_read,

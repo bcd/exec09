@@ -118,6 +118,7 @@ void serial_reset (struct hw_device *dev)
 
 struct hw_class serial_class =
 {
+	.name = "serial",
 	.readonly = 0,
 	.reset = serial_reset,
 	.read = serial_read,
@@ -138,7 +139,7 @@ struct hw_device *serial_create (void)
 struct hw_device *hostfile_create (const char *filename, int flags)
 {
 	struct serial_port *port = malloc (sizeof (struct serial_port));
-	port->fin = port->fout = open (filename, O_CREAT | flags);
+	port->fin = port->fout = open (filename, O_CREAT | flags, S_IRUSR | S_IWUSR);
 	return device_attach (&serial_class, 4, port);
 }
 

@@ -30,9 +30,6 @@
 #define MISSING 0xff
 #define mmu_device (device_table[0])
 
-extern void eon_init (const char *);
-extern void wpc_init (const char *);
-
 struct machine *machine;
 
 unsigned int device_count = 0;
@@ -282,24 +279,56 @@ to_absolute (unsigned long cpuaddr)
 	return absolute_from_reladdr (map->devid, phy_addr);
 }
 
-
+// Describe machine, devices and mapping.
 void dump_machine (void)
 {
+	unsigned int devno;
 	unsigned int mapno;
+	unsigned int prev_devid = -1;
+	unsigned int prev_offset;
+	unsigned int prev_flags;
+	unsigned int dot_dot = 0;
 	unsigned int n;
 
+	/* machine */
+	printf("Machine: %s\n", machine->name);
+
+	/* devices */
+	for (devno = 0; devno < device_count; devno++)
+	{
+		printf("Device %2d: %s\n",devno, device_table[devno]->class_ptr->name);
+	}
+
+	/* Mapping */
 	for (mapno = 0; mapno < NUM_BUS_MAPS; mapno++)
 	{
 		struct bus_map *map = &busmaps[mapno];
-		printf ("Map %d  addr=%04X  dev=%d  offset=%04X  size=%06X  flags=%02X\n",
-			mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
-			0 /* device_table[map->devid]->size */, map->flags);
-
+		if ((map->devid == prev_devid) && (map->offset == prev_offset)
+			&& (map->flags == prev_flags))
+		{
+			/* nothing interesting to report */
+			if (! dot_dot)
+			{
+				printf("..\n");
+				dot_dot = 1;
+			}
+		}
+		else
+		{
+			dot_dot = 0;
+			printf ("Map %3d:  addr=%04X  dev=%d  offset=%04X  size=%06X  flags=%02X\n",
+				mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
+				0 /* device_table[map->devid]->size */, map->flags);
 #if 0
-		for (n = 0; n < BUS_MAP_SIZE; n++)
-			printf ("%02X ", cpu_read8 (mapno * BUS_MAP_SIZE + n));
-		printf ("\n");
+			for (n = 0; n < BUS_MAP_SIZE; n++)
+				printf ("%02X ", cpu_read8 (mapno * BUS_MAP_SIZE + n));
+			printf ("\n");
 #endif
+		}
+		/* ready for next time */
+		prev_devid = map->devid;
+		prev_offset = map->offset + BUS_MAP_SIZE;
+		prev_flags = map->flags;
 	}
 }
 
@@ -321,6 +350,7 @@ void null_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 struct hw_class null_class =
 {
+	.name = "null-device",
 	.readonly = 0,
 	.reset = null_reset,
 	.read = null_read,
@@ -354,6 +384,7 @@ void ram_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 struct hw_class ram_class =
 {
+	.name = "RAM",
 	.readonly = 0,
 	.reset = ram_reset,
 	.read = ram_read,
@@ -370,6 +401,7 @@ struct hw_device *ram_create (unsigned long size)
 
 struct hw_class rom_class =
 {
+	.name = "ROM",
 	.readonly = 1,
 	.reset = null_reset,
 	.read = ram_read,
@@ -440,6 +472,7 @@ void console_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 struct hw_class console_class =
 {
+	.name = "console",
 	.readonly = 0,
 	.reset = null_reset,
 	.read = console_read,
@@ -523,6 +556,7 @@ void mmu_reset_complete (struct hw_device *dev)
 
 struct hw_class mmu_class =
 {
+	.name = "mmu",
 	.readonly = 0,
 	.reset = mmu_reset,
 	.read = mmu_read,

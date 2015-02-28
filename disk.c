@@ -140,6 +140,7 @@ void disk_format (struct hw_device *dev)
 
 struct hw_class disk_class =
 {
+	.name = "disk",
 	.readonly = 0,
 	.reset = disk_reset,
 	.read = disk_read,

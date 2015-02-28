@@ -627,6 +627,7 @@ void wpc_asic_reset (struct hw_device *dev)
 
 struct hw_class wpc_asic_class =
 {
+	.name = "wpc_asic",
 	.reset = wpc_asic_reset,
 	.read = wpc_asic_read,
 	.write = wpc_asic_write,

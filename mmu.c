@@ -94,6 +94,7 @@ void small_mmu_reset (struct hw_device *dev)
 
 struct hw_class small_mmu_class =
 {
+	.name = "small_mmu",
 	.readonly = 0,
 	.reset = small_mmu_reset,
 	.read = small_mmu_read,

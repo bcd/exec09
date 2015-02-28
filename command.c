@@ -1,4 +1,3 @@
-
 #include "6809.h"
 #include "monitor.h"
 #include "machine.h"
@@ -1126,6 +1125,11 @@ void cmd_restore (void)
 {
 }
 
+void cmd_info (void)
+{
+   dump_machine();
+}
+
 /****************** Parser ************************/
 
 void cmd_help (void);
@@ -1192,9 +1196,10 @@ struct command_name
       "Dump contents of memory to a file" },
    { "restore", "res", cmd_restore,
       "Restore contents of memory from a file" },
+   { "i", "info", cmd_info,
+      "Describe machine, devices and address mapping" },
 #if 0
    { "cl", "clear", cmd_clear },
-   { "i", "info", cmd_info },
    { "co", "condition", cmd_condition },
    { "tr", "trace", cmd_trace },
    { "di", "disable", cmd_disable },

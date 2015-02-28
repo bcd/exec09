@@ -88,6 +88,9 @@ a single "ROM" class and multiple ROM device objects. */
 
 struct hw_class
 {
+	/* Descriptive */
+	char *name;
+
 	/* Nonzero if the device is readonly */
 	int readonly;
 
