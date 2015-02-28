@@ -22,8 +22,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
 #include "machine.h"
 
 /* Emulate a serial port.  Basically this driver can be used for any byte-at-a-time
@@ -71,6 +72,7 @@ void serial_update (struct serial_port *port)
 U8 serial_read (struct hw_device *dev, unsigned long addr)
 {
 	struct serial_port *port = (struct serial_port *)dev->priv;
+	int retval;
 	serial_update (port);
 	switch (addr)
 	{
@@ -79,7 +81,8 @@ U8 serial_read (struct hw_device *dev, unsigned long addr)
 			U8 val;
 			if (!(port->status & SER_STAT_READOK))
 				return 0xFF;
-			read (port->fin, &val, 1);
+			retval = read (port->fin, &val, 1);
+			assert(retval != -1);
 			return val;
 		}
 		case SER_CTL_STATUS:
@@ -90,12 +93,14 @@ U8 serial_read (struct hw_device *dev, unsigned long addr)
 void serial_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
 	struct serial_port *port = (struct serial_port *)dev->priv;
+	int retval;
 	switch (addr)
 	{
 		case SER_DATA:
 		{
 			U8 v = val;
-			write (port->fout, &v, 1);
+			retval = write (port->fout, &v, 1);
+			assert(retval != -1);
 			break;
 		}
 		case SER_CTL_STATUS:
