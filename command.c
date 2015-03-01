@@ -1019,9 +1019,9 @@ void cmd_source (void)
       fprintf (stderr, "can't open %s\n", arg);
 }
 
-
 void cmd_regs (void)
 {
+   print_regs();
 }
 
 void cmd_vars (void)

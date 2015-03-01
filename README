@@ -23,6 +23,7 @@ allow you to use command-line recall and other shortcuts at the
 debugger command-line:
 
 > ./configure --enable-readline
+> make
 
 -----------------------------------------------------------------
 Input Files

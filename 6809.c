@@ -2464,7 +2464,7 @@ cpu_execute (int cycles)
 	  indexed ();
 	  cpu_clk += 1;
 	  PC = ea;
-     check_pc ();
+	  check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP indexed */
 	case 0x6f:
@@ -2539,7 +2539,7 @@ cpu_execute (int cycles)
 	  extended ();
 	  cpu_clk -= 4;
 	  PC = ea;
-     check_pc ();
+	  check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP extended */
 	case 0x7f:
@@ -3126,13 +3126,13 @@ cpu_execute (int cycles)
 
 	default:
 	  cpu_clk -= 2;
-     sim_error ("invalid opcode '%02X'\n", opcode);
-     PC = iPC;
+	  sim_error ("invalid opcode '%02X'\n", opcode);
+	  PC = iPC;
 	  break;
 	}
 
 	if (cc_changed)
-		cc_modified ();
+	  cc_modified ();
     }
   while (cpu_clk > 0);
 
@@ -3145,14 +3145,38 @@ cpu_exit:
 void
 cpu_reset (void)
 {
-  X = Y = S = U = A = B = DP = 0;
-  H = N = OV = C = 0;
-  Z = 1;
-  EFI = F_FLAG | I_FLAG;
+   X = Y = S = U = A = B = DP = 0;
+   H = N = OV = C = 0;
+   Z = 1;
+   EFI = F_FLAG | I_FLAG;
 #ifdef H6309
-  MD = E = F = V = 0;
+   MD = E = F = V = 0;
 #endif
 
-  change_pc (read16 (0xfffe));
-  cpu_is_running ();
+   change_pc (read16 (0xfffe));
+   cpu_is_running ();
+}
+
+void
+print_regs (void)
+{
+   char flags[8] = "        ";
+   if (get_cc() & C_FLAG) flags[0] = 'C';
+   if (get_cc() & V_FLAG) flags[1] = 'V';
+   if (get_cc() & Z_FLAG) flags[2] = 'Z';
+   if (get_cc() & N_FLAG) flags[3] = 'N';
+   if (get_cc() & I_FLAG) flags[4] = 'I';
+   if (get_cc() & H_FLAG) flags[5] = 'H';
+   if (get_cc() & F_FLAG) flags[6] = 'F';
+   if (get_cc() & E_FLAG) flags[7] = 'E';
+
+   printf (" X: 0x%04x  [X]: 0x%04x    Y: 0x%04x  [Y]: 0x%04x    ",
+            get_x(), read16(get_x()), get_y(), read16(get_y()) );
+   printf ("PC: 0x%04x [PC]: 0x%04x\n",
+            get_pc(), read16(get_pc()) );
+   printf (" U: 0x%04x  [U]: 0x%04x    S: 0x%04x  [S]: 0x%04x    ",
+            get_u(), read16(get_u()), get_s(), read16(get_s()) );
+   printf ("DP: 0x%02x\n", get_dp() );
+   printf (" A: 0x%02x      B: 0x%02x    [D]: 0x%04x   CC: %s\n",
+            get_a(), get_b(), read16(get_d()), flags );
 }
