@@ -23,10 +23,6 @@
 #include <sys/time.h>
 #include "6809.h"
 
-enum
-{ HEX, S19, BIN };
-
-
 /* The total number of cycles that have executed */
 unsigned long total = 0;
 
@@ -63,7 +59,7 @@ int machine_persistent = 0;
 processor would run like. */
 int machine_realtime = 0;
 
-static int type = S19;
+static int binary = 0;
 
 char *exename;
 
@@ -170,7 +166,7 @@ struct option
 	unsigned int can_negate : 1;
 	unsigned int takes_arg : 1;
 	int *int_value;
-	int default_value;
+	int default_value; /* value to set if option is present */
 	const char **string_value;
 	int (*handler) (const char *arg);
 } option_table[] = {
@@ -179,7 +175,7 @@ struct option
 	{ 'h', "help", NULL,
 		NO_NEG, NO_ARG, NULL, 0, 0, do_help },
 	{ 'b', "binary", "",
-		NO_NEG, NO_ARG, &type, BIN, NULL, NULL },
+		NO_NEG, NO_ARG, &binary, 1, NULL, NULL },
 	{ 'M', "mhz", "", NO_NEG, HAS_ARG },
 	{ '-', "68a09", "Emulate the 68A09 variation (1.5Mhz)" },
 	{ '-', "68b09", "Emulate the 68B09 variation (2Mhz)" },
@@ -377,25 +373,18 @@ main (int argc, char *argv[])
 
 	sym_init ();
 
-	switch (type)
+	if (binary)
 	{
-		case HEX:
-			if (prog_name && load_hex (prog_name))
-				usage ();
-			break;
-
-		case S19:
-			/* The machine loader cannot deal with S-record files.
-			So initialize the machine first, passing it a NULL
-			filename, then load the S-record file afterwards. */
-			machine_init (machine_name, NULL);
-			if (prog_name && load_s19 (prog_name))
-				usage ();
-			break;
-
-		default:
-			machine_init (machine_name, prog_name);
-			break;
+		machine_init (machine_name, prog_name);
+	}
+	else
+	{
+		/* The machine loader cannot deal with image files,
+		so initialize the machine first, passing it a NULL
+		filename, then load the image file afterwards. */
+		machine_init (machine_name, NULL);
+		if (prog_name && load_image (prog_name))
+			usage ();
 	}
 
 	/* Try to load a map file */

@@ -1168,21 +1168,47 @@ load_map_file (const char *name)
 }
 
 
+/* Auto-detect image file type and load it. For this to work,
+   the machine must already be initialized.
+*/
 int
-load_hex (const char *name)
+load_image (const char *name)
 {
+  int count, addr, type;
   FILE *fp;
-  int count, addr, type, data, checksum;
-  int done = 1;
-  int line = 0;
 
   fp = file_open (NULL, name, "r");
 
   if (fp == NULL)
     {
-      printf ("failed to open hex record file %s.\n", name);
+      printf ("failed to open image file %s.\n", name);
       return 1;
     }
+
+  if (fscanf (fp, "S%1x%2x%4x", &type, &count, &addr) == 3)
+    {
+        rewind(fp);
+        return load_s19(fp);
+    }
+  else if (fscanf (fp, ":%2x%4x%2x", &count, &addr, &type) == 3)
+    {
+        rewind(fp);
+        return load_hex(fp);
+    }
+  else
+    {
+      printf ("unrecognised format in image file %s.\n", name);
+        return 1;
+    }
+}
+
+
+int
+load_hex (FILE *fp)
+{
+  int count, addr, type, data, checksum;
+  int done = 1;
+  int line = 0;
 
   while (done != 0)
     {
@@ -1193,7 +1219,6 @@ load_hex (const char *name)
 	  printf ("line %d: invalid hex record information.\n", line);
 	  break;
 	}
-
       checksum = count + (addr >> 8) + (addr & 0xff) + type;
 
       switch (type)
@@ -1201,26 +1226,33 @@ load_hex (const char *name)
 	case 0:
 	  for (; count != 0; count--, addr++, checksum += data)
 	    {
-	      fscanf (fp, "%2x", &data);
-	      write8 (addr, (UINT8) data);
+              if (fscanf (fp, "%2x", &data))
+                {
+		   write8 (addr, (UINT8) data);
+                }
+              else
+                {
+                  printf ("line %d: hex record data inconsistent with count field.\n", line);
+	          break;
+                }
 	    }
 
 	  checksum = (-checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
+
+          if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
 	    {
-	      printf ("line %d: invalid hex record checksum.\n", line);
+	      printf ("line %d: hex record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
 	    }
-	  (void) fgetc (fp);	/* skip CR/LF/NULL */
+          fscanf (fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
 	case 1:
 	  checksum = (-checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
-	    printf ("line %d: invalid hex record checksum \n", line);
+
+          if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
+	    printf ("line %d: hex record checksum missing or invalid.\n", line);
 	  done = 0;
 	  break;
 
@@ -1232,26 +1264,17 @@ load_hex (const char *name)
 	}
     }
 
-  fclose (fp);
+  (void) fclose (fp);
   return 0;
 }
 
 
 int
-load_s19 (const char *name)
+load_s19 (FILE *fp)
 {
-  FILE *fp;
   int count, addr, type, data, checksum;
   int done = 1;
   int line = 0;
-
-  fp = file_open (NULL, name, "r");
-
-  if (fp == NULL)
-    {
-      printf ("failed to open S-record file %s.\n", name);
-      return 1;
-    }
 
   while (done != 0)
     {
@@ -1270,26 +1293,32 @@ load_s19 (const char *name)
 	case 1:
 	  for (count -= 3; count != 0; count--, addr++, checksum += data)
 	    {
-	      fscanf (fp, "%2x", &data);
-	      write8 (addr, (UINT8) data);
+               if (fscanf (fp, "%2x", &data))
+                  {
+                     write8 (addr, (UINT8) data);
+                  }
+               else
+                  {
+                    printf ("line %d: S record data inconsistent with count field.\n", line);
+	            break;
+                  }
 	    }
 
 	  checksum = (~checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
+
+	  if ( (fscanf (fp, "%2x", &data)) || (data != checksum) )
 	    {
-	      printf ("line %d: invalid S record checksum.\n", line);
+	      printf ("line %d: S record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
 	    }
-	  (void) fgetc (fp);	/* skip CR/LF/NULL */
+          fscanf (fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
 	case 9:
 	  checksum = (~checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
-	    printf ("line %d: invalid S record checksum.\n", line);
+	  if ( (fscanf (fp, "%2x", &data)) || (data != checksum) )
+	    printf ("line %d: S record checksum missing or invalid.\n", line);
 	  done = 0;
 	  break;
 
@@ -1300,10 +1329,9 @@ load_s19 (const char *name)
 	}
     }
 
-  fclose (fp);
+  (void) fclose (fp);
   return 0;
 }
-
 
 
 void
@@ -1352,10 +1380,10 @@ monitor_return (void)
 const char *
 absolute_addr_name (absolute_address_t addr)
 {
-	static char buf[256], *bufptr;
-	const char *name;
+   static char buf[256], *bufptr;
+   const char *name;
 
-	bufptr = buf;
+   bufptr = buf;
 
    bufptr += sprintf (bufptr, "%02X:0x%04X", addr >> 28, addr & 0xFFFFFF);
 
@@ -1363,19 +1391,18 @@ absolute_addr_name (absolute_address_t addr)
    if (name)
       bufptr += sprintf (bufptr, "  <%-16.16s>", name);
 
-	return buf;
-
+   return buf;
 }
 
 
 const char *
 monitor_addr_name (target_addr_t target_addr)
 {
-	static char buf[256], *bufptr;
-	const char *name;
-	absolute_address_t addr = to_absolute (target_addr);
+   static char buf[256], *bufptr;
+   const char *name;
+   absolute_address_t addr = to_absolute (target_addr);
 
-	bufptr = buf;
+   bufptr = buf;
 
    bufptr += sprintf (bufptr, "0x%04X", target_addr);
 
@@ -1383,33 +1410,33 @@ monitor_addr_name (target_addr_t target_addr)
    if (name)
       bufptr += sprintf (bufptr, "  <%s>", name);
 
-	return buf;
+   return buf;
 }
 
 
 static void
 monitor_signal (int sigtype)
 {
-  (void) sigtype;
-  putchar ('\n');
-  monitor_on = 1;
+   (void) sigtype;
+   putchar ('\n');
+   monitor_on = 1;
 }
 
 
 void
 monitor_init (void)
 {
-	int tmp;
-	extern int debug_enabled;
-	target_addr_t a;
+   int tmp;
+   extern int debug_enabled;
+   target_addr_t a;
 
-	fctab[0].entry_point = read16 (0xfffe);
-	memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
-	current_function_call = &fctab[0];
+   fctab[0].entry_point = read16 (0xfffe);
+   memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
+   current_function_call = &fctab[0];
 
-  auto_break_insn_count = 0;
-  monitor_on = debug_enabled;
-  signal (SIGINT, monitor_signal);
+   auto_break_insn_count = 0;
+   monitor_on = debug_enabled;
+   signal (SIGINT, monitor_signal);
 }
 
 
