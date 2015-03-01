@@ -303,8 +303,8 @@ void dump_machine (void)
 	for (mapno = 0; mapno < NUM_BUS_MAPS; mapno++)
 	{
 		struct bus_map *map = &busmaps[mapno];
-		if ((map->devid == prev_devid) && (map->offset == prev_offset)
-			&& (map->flags == prev_flags))
+		if ( (map->devid == prev_devid) && (map->flags == prev_flags) &&
+                    ((map->offset == prev_offset) || (map->devid == INVALID_DEVID)) )
 		{
 			/* nothing interesting to report */
 			if (! dot_dot)
