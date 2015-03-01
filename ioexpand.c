@@ -73,6 +73,7 @@ void ioexpand_write (struct hw_device *dev, unsigned long addr, U8 val)
 
 struct hw_class ioexpand_class =
 {
+	.name = "ioexpand",
 	.readonly = 0,
 	.reset = ioexpand_reset,
 	.read = ioexpand_read,

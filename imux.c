@@ -120,6 +120,7 @@ void imux_assert (struct hw_device *dev, unsigned int sig)
 
 struct hw_class imux_class =
 {
+	.name = "imux",
 	.readonly = 0,
 	.reset = imux_reset,
 	.read = imux_read,
