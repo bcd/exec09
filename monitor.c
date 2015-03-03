@@ -1306,7 +1306,7 @@ load_s19 (FILE *fp)
 
 	  checksum = (~checksum) & 0xff;
 
-	  if ( (fscanf (fp, "%2x", &data)) || (data != checksum) )
+	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
 	    {
 	      printf ("line %d: S record checksum missing or invalid.\n", line);
 	      done = 0;
@@ -1317,7 +1317,7 @@ load_s19 (FILE *fp)
 
 	case 9:
 	  checksum = (~checksum) & 0xff;
-	  if ( (fscanf (fp, "%2x", &data)) || (data != checksum) )
+	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
 	    printf ("line %d: S record checksum missing or invalid.\n", line);
 	  done = 0;
 	  break;
