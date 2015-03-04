@@ -38,8 +38,9 @@ which says what types of I/O devices are mapped into the 6809's
 address space and how they can be accessed.  Adding support for
 a new machine is fairly easy.
 
-There are 3 builtin machine types at present.  The default,
-called 'simple', assumes that you have a full 64KB of RAM,
+There are 5 builtin machine types at present:
+
+* 'simple' - assumes that you have a full 64KB of RAM,
 minus some input/output functions mapped at $FF00 (see I/O below).
 If you compile a program with gcc6809 with no special linker
 option, you'll get an S-record file that is suitable for running
@@ -53,18 +54,21 @@ gcc6809 also has a builtin notion of which addresses are used
 for text and data.  The simple machine enforces this and will
 "fault" on invalid accesses.
 
-The second machine is 'wpc', and is an emulation of the
+* 'wpc' - an emulation of the
 Williams Pinball Controller which was the impetus for me
 working on the compiler in the first place.
 
-The third machine, still in development, is called 'eon'
+* 'eon' (and 'eon2') - still in development, is called 'eon'
 (for Eight-O-Nine).  It is similar to simple but has some
 more advanced I/O capabilities, like a larger memory space
 that can be paged in/out, and a disk emulation for programs
 that wants to have persistence.
 
-TODO : Would anyone be interested in a CoCo machine type?
+* 'multicomp09' - see miscsbc.c for details
 
+* 'smii' - see miscsbc.c for details
+
+TODO : Would anyone be interested in a CoCo machine type?
 
 -----------------------------------------------------------------
 Faults

@@ -1,23 +1,6 @@
-
 #include <fcntl.h>
 #include "machine.h"
 #include "eon.h"
-
-extern int system_running;
-
-
-void eon_fault (unsigned int addr, unsigned char type)
-{
-	if (system_running)
-	{
-		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
-#if 0
-		fault_addr = addr;
-		fault_type = type;
-		irq ();
-#endif
-	}
-}
 
 
 /**
@@ -106,7 +89,7 @@ void simple_init (const char *boot_rom_file)
 struct machine eon_machine =
 {
 	.name = "eon",
-	.fault = eon_fault,
+	.fault = fault,
 	.init = eon_init,
 	.periodic = 0,
 };
@@ -114,7 +97,7 @@ struct machine eon_machine =
 struct machine eon2_machine =
 {
 	.name = "eon2",
-	.fault = eon_fault,
+	.fault = fault,
 	.init = eon2_init,
 	.periodic = 0,
 };
@@ -122,9 +105,7 @@ struct machine eon2_machine =
 struct machine simple_machine =
 {
 	.name = "simple",
-	.fault = eon_fault,
+	.fault = fault,
 	.init = simple_init,
 	.periodic = 0,
 };
-
-

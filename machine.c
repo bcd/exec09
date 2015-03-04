@@ -333,6 +333,24 @@ void dump_machine (void)
 }
 
 
+/**********************************************************
+ * Simple fault handler
+ **********************************************************/
+
+void fault (unsigned int addr, unsigned char type)
+{
+	if (system_running)
+	{
+		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
+#if 0
+		fault_addr = addr;
+		fault_type = type;
+		irq ();
+#endif
+	}
+}
+
+
 /**********************************************************/
 
 void null_reset (struct hw_device *dev)
@@ -600,6 +618,8 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 	extern struct machine eon_machine;
 	extern struct machine eon2_machine;
 	extern struct machine wpc_machine;
+	extern struct machine smii_machine;
+	extern struct machine multicomp09_machine;
 	int i;
 
 	/* Initialize CPU maps, so that no CPU addresses map to
@@ -613,6 +633,8 @@ void machine_init (const char *machine_name, const char *boot_rom_file)
 	else if (machine_match (machine_name, boot_rom_file, &eon_machine));
 	else if (machine_match (machine_name, boot_rom_file, &eon2_machine));
 	else if (machine_match (machine_name, boot_rom_file, &wpc_machine));
+	else if (machine_match (machine_name, boot_rom_file, &smii_machine));
+	else if (machine_match (machine_name, boot_rom_file, &multicomp09_machine));
 	else exit (1);
 
 	/* Save the default busmap configuration, before the

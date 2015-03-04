@@ -151,4 +151,6 @@ struct hw_device *rom_create (const char *filename, unsigned int maxsize);
 struct hw_device *console_create (void);
 struct hw_device *disk_create (const char *backing_file, struct hw_device *ram_dev);
 
+void fault (unsigned int addr, unsigned char type);
+
 #endif /* _M6809_MACHINE_H */
