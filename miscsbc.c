@@ -21,6 +21,7 @@ int smii_o_busy = 0;
 // console input is blocking.
 U8 smii_console_read (struct hw_device *dev, unsigned long addr)
 {
+    unsigned char ch;
     switch (addr)
     {
     case 0x02: // SCCACMD
@@ -29,7 +30,11 @@ U8 smii_console_read (struct hw_device *dev, unsigned long addr)
         //        printf("02 smii_o_busy = %d return 0x%02x\n",smii_o_busy,(smii_i_avail & 1) | (smii_o_busy == 0 ? 4 : 0));
         return (smii_i_avail & 1) | (smii_o_busy == 0 ? 4 : 0);
     case 0x03: // SCCADTA
-        return getchar();
+        ch = getchar();
+        // key conversions to make keyboard look DOS-like
+        if (ch == 127) ch = 8; //backspace
+        if (ch == 10) ch = 13;    //cr
+        return ch;
     default:
         printf("In smii_console_read with addr=0x%08x\n", addr);
         return 0x42;
@@ -41,6 +46,9 @@ void smii_console_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
     switch (addr)
 	{
+        case 0x00:
+            // UART setup. Not emulated; just ignore it.
+            break;
         case 0x03: // SCCADTA
             if(smii_o_busy != 0) printf("Oops! Write to busy UART\n");
             smii_o_busy = 1;
@@ -52,32 +60,81 @@ void smii_console_write (struct hw_device *dev, unsigned long addr, U8 val)
 }
 
 
+void quiet_reset (struct hw_device *dev)
+{
+}
+
+U8 quiet_read (struct hw_device *dev, unsigned long addr)
+{
+    char *buf = dev->priv;
+    char val = buf[addr];
+    //    printf("In quiet read with address 0x%x return data 0x%x\n",addr,val);
+    return val;
+}
+
+// BUG! For image file load, the quiet_write also needs to work, BUT it must
+// act like ROM for CPU access. Not sure if that is achieved here.
+void quiet_write (struct hw_device *dev, unsigned long addr, U8 val)
+{
+    char *buf = dev->priv;
+    //    printf("In quiet write with address 0x%x data 0x%x\n",addr,val);
+    buf[addr]= val;
+}
+
+struct hw_class quiet_class =
+{
+	.name = "quiet-device",
+	.readonly = 0,
+	.reset = quiet_reset,
+	.read = quiet_read,
+	.write = quiet_write,
+};
+
+struct hw_device *quiet_create (void)
+{
+	return device_attach (&quiet_class, 0, NULL);
+}
+
+
 void smii_init (const char *boot_rom_file)
 {
-    struct hw_device *smii_console;
+    struct hw_device *smii_console, *rom, *quiet;
 
     /* RAM from 0 to 7BFF */
     device_define ( ram_create (0x7C00), 0,
                     0x0000, 0x7C00, MAP_READWRITE );
 
+    /* ROM from E000 to FFFF */
+    rom = rom_create (boot_rom_file, 0x2000);
+    device_define (rom , 0,
+                   0xE000, 0x2000, MAP_READABLE);
+
     /* The address space 8000-DFFF provides aliases of the ROM
        There is write-only mapping logic for 8 RAM pages and this
        is usually accessed by writes to addresses 8000,9000..F000
 
-       TODO at the moment the CamelForth image does writes to
-       these addresses at startup. Since the model is strict
-       these addresses are read-only and the write causes a
-       trap. Either need to implement a device on each page
-       to capture them OR adjust the CamelForth image. The
-       former would be the most sound approach.
+       The CamelForth image does writes to those addresses at
+       in order to initialise the mapping hardware, but makes
+       no further use of it. Since the model is strict the ROM
+       is read-only and the write causes a trap.
 
-       Before doing this, though, clean up the exception
-       handling.
+       To avoid the trap, assign a device that ignores writes
+       without error, and maps reads to the ROM.
     */
+    quiet = quiet_create();
+    /* Allow quiet device to access ROM storage */
+    quiet->priv = rom->priv;
 
-    /* ROM from E000 to FFFF */
-    device_define (rom_create (boot_rom_file, 0x2000), 0,
-                   0xE000, 0x2000, MAP_READABLE);
+    device_define(quiet, 0, 0x8000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0, 0x9000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0, 0xA000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0, 0xB000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0, 0xC000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0, 0xD000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0x0000, 0xE000, BUS_MAP_SIZE, MAP_READWRITE);
+    device_define(quiet, 0x1000, 0xF000, BUS_MAP_SIZE, MAP_READWRITE);
+
+
 
     /* Make debug output more informative */
     // ?? haven't seen this work yet..
@@ -142,13 +199,17 @@ struct machine smii_machine =
 // console input is blocking.
 U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
 {
+    unsigned char ch;
     switch (addr)
     {
     case 00:
         // status bit
         return 0xff;
     case 01:
-        return getchar();
+        ch = getchar();
+        if (ch == 127) return 8; // rubout->backspace
+        if (ch == 10) return 13; // LF->CR
+        return ch;
     default:
         printf("In console_read with addr=0x%08x\n", addr);
         return 0x42;
