@@ -1349,11 +1349,9 @@ void
 keybuffering (int flag)
 {
     if (flag) {
-        printf("**BUFFERED**");
         tcsetattr(STDIN_FILENO,TCSANOW,&old_tio);
     }
     else {
-        printf("**UNBUFFERED**");
         tcsetattr(STDIN_FILENO,TCSANOW,&new_tio);
     }
 }
