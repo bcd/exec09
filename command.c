@@ -2,11 +2,14 @@
 #include "monitor.h"
 #include "machine.h"
 #include <sys/errno.h>
+#include <unistd.h>
 #ifdef HAVE_TERMIOS_H
 # include <termios.h>
 #else
 #error
 #endif
+
+struct termios old_tio, new_tio;
 
 typedef struct
 {
@@ -1326,16 +1329,33 @@ command_exec (FILE *infile)
 
 
 void
+keybuffering_defaults (void)
+{
+    /* Extract and save defaults associated with buffered io, create
+       settings associated with unbuffered io
+    */
+
+    /* get the terminal settings for stdin */
+    tcgetattr(STDIN_FILENO,&old_tio);
+
+    /* start with the current settings */
+    new_tio=old_tio;
+
+    /* disable canonical mode (buffered i/o) and local echo */
+    new_tio.c_lflag &=(~ICANON & ~ECHO);
+}
+
+void
 keybuffering (int flag)
 {
-   struct termios tio;
-
-   tcgetattr (0, &tio);
-   if (!flag) /* 0 = no buffering = not default */
-      tio.c_lflag &= ~ICANON;
-   else /* 1 = buffering = default */
-      tio.c_lflag |= ICANON;
-   tcsetattr (0, TCSANOW, &tio);
+    if (flag) {
+        printf("**BUFFERED**");
+        tcsetattr(STDIN_FILENO,TCSANOW,&old_tio);
+    }
+    else {
+        printf("**UNBUFFERED**");
+        tcsetattr(STDIN_FILENO,TCSANOW,&new_tio);
+    }
 }
 
 

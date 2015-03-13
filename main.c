@@ -404,6 +404,7 @@ main (int argc, char *argv[])
 
 	monitor_init ();
 	command_init ();
+        keybuffering_defaults ();
 	keybuffering (0);
 
 	/* Now, iterate through the instructions.
@@ -448,5 +449,6 @@ main (int argc, char *argv[])
 	}
 
 	sim_exit (0);
+	keybuffering (1);
 	return 0;
 }
