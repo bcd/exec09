@@ -121,8 +121,10 @@ sim_error (const char *format, ...)
 
 	if (debug_enabled)
 		monitor_on = 1;
-	else
+	else {
+		keybuffering (1);
 		exit (2);
+        }
 }
 
 
@@ -163,7 +165,7 @@ sim_exit (uint8_t exit_code)
 			fclose (fp);
 		}
 	}
-
+	keybuffering (1);
 	exit (exit_code);
 }
 
@@ -177,6 +179,7 @@ change_pc (unsigned newPC)
   {
 	  fprintf (stderr, "m6809-run: invalid PC = %04X, previous was %s\n",
 	  	newPC, monitor_addr_name (PC));
+	  keybuffering (1);
 	  exit (2);
   }
 
