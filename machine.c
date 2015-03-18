@@ -45,17 +45,19 @@ U16 fault_addr;
 
 U8 fault_type;
 
-int system_running = 0;
+/* set after CPU reset and never cleared; shows that
+   system initialisation has completed */
+int cpu_running = 0;
 
 
 void cpu_is_running (void)
 {
-	system_running = 1;
+	cpu_running = 1;
 }
 
 void do_fault (unsigned int addr, unsigned int type)
 {
-	if (system_running)
+	if (cpu_running)
 		machine->fault (addr, type);
 }
 
@@ -222,7 +224,7 @@ U8 cpu_read8 (unsigned int addr)
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 
-	if (system_running && !(map->flags & MAP_READABLE))
+	if (cpu_running && !(map->flags & MAP_READABLE))
 		machine->fault (addr, FAULT_NOT_READABLE);
 	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
 	return (*class_ptr->read) (dev, phy_addr);
@@ -235,7 +237,7 @@ U16 cpu_read16 (unsigned int addr)
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 
-	if (system_running && !(map->flags & MAP_READABLE))
+	if (cpu_running && !(map->flags & MAP_READABLE))
 		do_fault (addr, FAULT_NOT_READABLE);
 	command_read_hook (absolute_from_reladdr (map->devid, phy_addr));
 	return ((*class_ptr->read) (dev, phy_addr) << 8)
@@ -253,10 +255,26 @@ void cpu_write8 (unsigned int addr, U8 val)
 	struct hw_class *class_ptr = dev->class_ptr;
 	unsigned long phy_addr = map->offset + addr % BUS_MAP_SIZE;
 
-	if (system_running && !(map->flags & MAP_WRITABLE))
+        /* Unlike the read case, where we still return data on
+           an access error, ignore write data on access error.
+           The cpu_running check allows ROMs to be loaded at
+           startup (but maybe it would be better if ROM load
+           used absolute access so that this routine was not
+           used at all for that purpose) */
+	if (!cpu_running || (map->flags & MAP_WRITABLE))
+            {
+                (*class_ptr->write) (dev, phy_addr, val);
+            }
+        else if (map->flags & MAP_IGNOREWRITE)
+            {
+                /* silently ignore the write */
+            }
+        else if (cpu_running)
+            {
 		do_fault (addr, FAULT_NOT_WRITABLE);
-	(*class_ptr->write) (dev, phy_addr, val);
-	command_write_hook (absolute_from_reladdr (map->devid, phy_addr), val);
+            }
+        /* do this regardless (may trigger watchpoint) */
+        command_write_hook (absolute_from_reladdr (map->devid, phy_addr), val);
 }
 
 void abs_write8 (absolute_address_t addr, U8 val)
@@ -339,7 +357,7 @@ void dump_machine (void)
 
 void fault (unsigned int addr, unsigned char type)
 {
-	if (system_running)
+	if (cpu_running)
 	{
 		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
 #if 0

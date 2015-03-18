@@ -47,6 +47,7 @@ void smii_console_write (struct hw_device *dev, unsigned long addr, U8 val)
     switch (addr)
 	{
         case 0x00:
+        case 0x02:
             // UART setup. Not emulated; just ignore it.
             break;
         case 0x03: // SCCADTA
@@ -57,42 +58,6 @@ void smii_console_write (struct hw_device *dev, unsigned long addr, U8 val)
         default:
             printf("In smii_console_write with addr=0x%08x val=0x%02x\n",addr, val);
         }
-}
-
-
-void quiet_reset (struct hw_device *dev)
-{
-}
-
-U8 quiet_read (struct hw_device *dev, unsigned long addr)
-{
-    char *buf = dev->priv;
-    char val = buf[addr];
-    //    printf("In quiet read with address 0x%x return data 0x%x\n",addr,val);
-    return val;
-}
-
-// BUG! For image file load, the quiet_write also needs to work, BUT it must
-// act like ROM for CPU access. Not sure if that is achieved here.
-void quiet_write (struct hw_device *dev, unsigned long addr, U8 val)
-{
-    char *buf = dev->priv;
-    //    printf("In quiet write with address 0x%x data 0x%x\n",addr,val);
-    buf[addr]= val;
-}
-
-struct hw_class quiet_class =
-{
-	.name = "quiet-device",
-	.readonly = 0,
-	.reset = quiet_reset,
-	.read = quiet_read,
-	.write = quiet_write,
-};
-
-struct hw_device *quiet_create (void)
-{
-	return device_attach (&quiet_class, 0, NULL);
 }
 
 
@@ -115,25 +80,25 @@ void smii_init (const char *boot_rom_file)
 
        The CamelForth image does writes to those addresses at
        in order to initialise the mapping hardware, but makes
-       no further use of it. Since the model is strict the ROM
+       no further use of it. Since the model is strict, the ROM
        is read-only and the write causes a trap.
 
-       To avoid the trap, assign a device that ignores writes
-       without error, and maps reads to the ROM.
+       To avoid the trap, create 1-page dummy devices at each
+       location in order to silently ignore the writes.
+
+       For locations that alias to ROM, change the attribute so
+       that writes are ignored.
     */
-    quiet = quiet_create();
-    /* Allow quiet device to access ROM storage */
-    quiet->priv = rom->priv;
+    quiet = null_create();
+    device_define(quiet, 0,    0x8000, BUS_MAP_SIZE, MAP_IGNOREWRITE);
+    device_define(quiet, 0,    0x9000, BUS_MAP_SIZE, MAP_IGNOREWRITE);
+    device_define(quiet, 0,    0xA000, BUS_MAP_SIZE, MAP_IGNOREWRITE);
+    device_define(quiet, 0,    0xB000, BUS_MAP_SIZE, MAP_IGNOREWRITE);
+    device_define(quiet, 0,    0xC000, BUS_MAP_SIZE, MAP_IGNOREWRITE);
+    device_define(quiet, 0,    0xD000, BUS_MAP_SIZE, MAP_IGNOREWRITE);
 
-    device_define(quiet, 0, 0x8000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0, 0x9000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0, 0xA000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0, 0xB000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0, 0xC000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0, 0xD000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0x0000, 0xE000, BUS_MAP_SIZE, MAP_READWRITE);
-    device_define(quiet, 0x1000, 0xF000, BUS_MAP_SIZE, MAP_READWRITE);
-
+    device_define(rom, 0x0000, 0xE000, BUS_MAP_SIZE, MAP_IGNOREWRITE | MAP_READABLE);
+    device_define(rom, 0x1000, 0xF000, BUS_MAP_SIZE, MAP_IGNOREWRITE | MAP_READABLE);
 
 
     /* Make debug output more informative */

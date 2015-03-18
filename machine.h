@@ -42,6 +42,10 @@ typedef unsigned long absolute_address_t;
 #define MAP_WRITABLE 0x2
 #define MAP_READWRITE 0x3
 
+/* Usually, an attempt to write without MAP_WRITABLE will cause a fault.
+   This allows a write and the data silently ignored (no fault) */
+#define MAP_IGNOREWRITE 0x8
+
 /* A fixed map cannot be reprogrammed.  Attempts to
 bus_map something differently will silently be
 ignored. */
