@@ -170,7 +170,7 @@ struct hw_class oscillator_class =
 	.update = hwtimer_update,
 };
 
-struct hw_device *oscillator_create (struct hw_device *int_dev, unsigned int int_line)
+struct hw_device *oscillator_create(struct hw_device *int_dev, unsigned int int_line)
 {
 	struct hwtimer *timer = malloc (sizeof (struct hwtimer));
 	timer->reload = 2048; /* cycles per pulse */

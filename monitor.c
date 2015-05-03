@@ -19,12 +19,10 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
 #include "6809.h"
 #include "monitor.h"
 #include <ctype.h>
 #include <signal.h>
-
 
 /* The function call stack */
 struct function_call fctab[MAX_FUNCTION_CALLS];
@@ -38,7 +36,6 @@ int auto_break_insn_count = 0;
 int monitor_on = 0;
 
 int dump_every_insn = 0;
-
 
 enum addr_mode
 {
@@ -888,11 +885,9 @@ char *off4[] = {
   "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1"
 };
 
-
 /* Disassemble the current instruction.  Returns the number of bytes that
 compose it. */
-int
-dasm (char *buf, absolute_address_t opc)
+int dasm (char *buf, absolute_address_t opc)
 {
   UINT8 op, am;
   char *op_str;
@@ -900,17 +895,17 @@ dasm (char *buf, absolute_address_t opc)
   char R;
   int fetch1;			/* the first (MSB) fetched byte, used in macro RDWORD */
 
-  op = fetch8 ();
+  op = fetch8();
 
   if (op == 0x10)
     {
-      op = fetch8 ();
+      op = fetch8();
       am = codes10[op].mode;
       op = codes10[op].code;
     }
   else if (op == 0x11)
     {
-      op = fetch8 ();
+      op = fetch8();
       am = codes11[op].mode;
       op = codes11[op].code;
     }
@@ -1076,8 +1071,7 @@ dasm (char *buf, absolute_address_t opc)
   return pc - opc;
 }
 
-int
-sizeof_file (FILE * file)
+int sizeof_file(FILE * file)
 {
   int size;
 
@@ -1087,7 +1081,6 @@ sizeof_file (FILE * file)
 
   return size;
 }
-
 
 int
 load_map_file (const char *name)
@@ -1111,7 +1104,7 @@ load_map_file (const char *name)
 		if (s)
 		{
 			sprintf (s+1, "map");
-			fp = file_open (NULL, map_filename, "r");
+			fp = file_open(NULL, map_filename, "r");
 		}
 
 		if (!fp)
@@ -1131,7 +1124,7 @@ load_map_file (const char *name)
 		value_ptr = buf;
 		if (!strncmp (value_ptr, "page", 4))
 		{
-			unsigned char page = strtoul (value_ptr+4, NULL, 10);
+                    unsigned char page = (unsigned char) strtoul(value_ptr+4, NULL, 10);
 			if (!strcmp (machine->name, "wpc"))
 				wpc_set_rom_page (page);
 			sym = NULL;
@@ -1144,7 +1137,7 @@ load_map_file (const char *name)
 		while (*value_ptr == ' ')
 			value_ptr++;
 
-		value = strtoul (value_ptr, &id_ptr, 16);
+		value = (target_addr_t) strtoul(value_ptr, &id_ptr, 16);
 		if (id_ptr == value_ptr)
 			continue;
 
@@ -1167,17 +1160,15 @@ load_map_file (const char *name)
 	return 0;
 }
 
-
 /* Auto-detect image file type and load it. For this to work,
    the machine must already be initialized.
 */
-int
-load_image (const char *name)
+int load_image (const char *name)
 {
   int count, addr, type;
   FILE *fp;
 
-  fp = file_open (NULL, name, "r");
+  fp = file_open(NULL, name, "r");
 
   if (fp == NULL)
     {
@@ -1202,9 +1193,7 @@ load_image (const char *name)
     }
 }
 
-
-int
-load_hex (FILE *fp)
+int load_hex (FILE *fp)
 {
   int count, addr, type, data, checksum;
   int done = 1;
@@ -1268,9 +1257,7 @@ load_hex (FILE *fp)
   return 0;
 }
 
-
-int
-load_s19 (FILE *fp)
+int load_s19 (FILE *fp)
 {
   int count, addr, type, data, checksum;
   int done = 1;
@@ -1333,9 +1320,7 @@ load_s19 (FILE *fp)
   return 0;
 }
 
-
-void
-monitor_call (unsigned int flags)
+void monitor_call (unsigned int flags)
 {
 #ifdef CALL_STACK
 	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1])
@@ -1354,9 +1339,7 @@ monitor_call (unsigned int flags)
 #endif
 }
 
-
-void
-monitor_return (void)
+void monitor_return (void)
 {
 #ifdef CALL_STACK
 	if (current_function_call > &fctab[MAX_FUNCTION_CALLS-1])
@@ -1376,9 +1359,7 @@ monitor_return (void)
 #endif
 }
 
-
-const char *
-absolute_addr_name (absolute_address_t addr)
+const char* absolute_addr_name (absolute_address_t addr)
 {
    static char buf[256], *bufptr;
    const char *name;
@@ -1394,9 +1375,7 @@ absolute_addr_name (absolute_address_t addr)
    return buf;
 }
 
-
-const char *
-monitor_addr_name (target_addr_t target_addr)
+const char* monitor_addr_name (target_addr_t target_addr)
 {
    static char buf[256], *bufptr;
    const char *name;
@@ -1413,22 +1392,16 @@ monitor_addr_name (target_addr_t target_addr)
    return buf;
 }
 
-
-static void
-monitor_signal (int sigtype)
+static void monitor_signal (int sigtype)
 {
    (void) sigtype;
    putchar ('\n');
    monitor_on = 1;
 }
 
-
-void
-monitor_init (void)
+void monitor_init (void)
 {
-   int tmp;
    extern int debug_enabled;
-   target_addr_t a;
 
    fctab[0].entry_point = read16 (0xfffe);
    memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
@@ -1439,9 +1412,7 @@ monitor_init (void)
    signal (SIGINT, monitor_signal);
 }
 
-
-int
-check_break (void)
+int check_break (void)
 {
 	if (dump_every_insn)
 		print_current_insn ();
@@ -1452,9 +1423,7 @@ check_break (void)
 	return 0;
 }
 
-
-void
-monitor_backtrace (void)
+void monitor_backtrace (void)
 {
 	struct function_call *fc = current_function_call;
 	while (fc >= &fctab[0]) {
@@ -1463,8 +1432,7 @@ monitor_backtrace (void)
 	}
 }
 
-int
-monitor6809 (void)
+int monitor6809 (void)
 {
 	int rc;
 

@@ -55,7 +55,6 @@ void imux_refresh (struct imux *mux)
 	}
 }
 
-
 void imux_reset (struct hw_device *dev)
 {
 	struct imux *mux = (struct imux *)dev->priv;
@@ -78,7 +77,6 @@ U8 imux_read (struct hw_device *dev, unsigned long addr)
 	}
 	return -1;
 }
-
 
 void imux_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
@@ -117,7 +115,6 @@ void imux_assert (struct hw_device *dev, unsigned int sig)
 	imux_refresh (mux);
 }
 
-
 struct hw_class imux_class =
 {
 	.name = "imux",
@@ -133,5 +130,3 @@ struct hw_device *imux_create (unsigned int cpu_line)
 	imux->src = cpu_line;
 	return device_attach (&imux_class, BUS_MAP_SIZE, imux);
 }
-
-

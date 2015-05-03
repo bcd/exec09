@@ -86,9 +86,7 @@ FILE *command_input;
 /******************** 6809 Functions **********************/
 /**********************************************************/
 
-
-void
-print_addr (absolute_address_t addr)
+void print_addr (absolute_address_t addr)
 {
    const char *name;
 
@@ -108,29 +106,22 @@ print_addr (absolute_address_t addr)
 /*********************** Functions ************************/
 /**********************************************************/
 
-void
-syntax_error (const char *string)
+void syntax_error (const char *string)
 {
    fprintf (stderr, "error: %s\n", string);
 }
 
-
-void
-save_value (unsigned long val)
+void save_value (unsigned long val)
 {
    historytab[history_count++ % MAX_HISTORY] = val;
 }
 
-
-unsigned long
-eval_historical (unsigned int id)
+unsigned long eval_historical (unsigned int id)
 {
    return historytab[id % MAX_HISTORY];
 }
 
-
-void
-assign_virtual (const char *name, unsigned long val)
+void assign_virtual (const char *name, unsigned long val)
 {
    unsigned long v_val;
 
@@ -154,9 +145,7 @@ assign_virtual (const char *name, unsigned long val)
    }
 }
 
-
-unsigned long
-eval_virtual (const char *name)
+unsigned long eval_virtual (const char *name)
 {
 	unsigned long val;
 
@@ -180,24 +169,20 @@ eval_virtual (const char *name)
 	return val;
 }
 
-
-void
-eval_assign (char *expr, unsigned long val)
+void eval_assign (char *expr, unsigned long val)
 {
 	if (*expr == '$')
 	{
 		assign_virtual (expr+1, val);
 	}
-   else
-   {
-      absolute_address_t dst = eval_mem (expr, LVALUE);
-      abs_write8 (dst, val);
-   }
+	else
+	{
+		absolute_address_t dst = eval_mem(expr, LVALUE);
+		abs_write8(dst, (U8) val);
+	}
 }
 
-
-unsigned long
-target_read (absolute_address_t addr, unsigned int size)
+unsigned long target_read (absolute_address_t addr, unsigned int size)
 {
 	switch (size)
 	{
@@ -208,9 +193,7 @@ target_read (absolute_address_t addr, unsigned int size)
 	}
 }
 
-
-void
-parse_format_flag (const char *flags, unsigned char *formatp)
+void parse_format_flag (const char *flags, unsigned char *formatp)
 {
    while (*flags)
    {
@@ -229,9 +212,7 @@ parse_format_flag (const char *flags, unsigned char *formatp)
    }
 }
 
-
-void
-parse_size_flag (const char *flags, unsigned int *sizep)
+void parse_size_flag (const char *flags, unsigned int *sizep)
 {
    while (*flags)
    {
@@ -247,9 +228,7 @@ parse_size_flag (const char *flags, unsigned int *sizep)
    }
 }
 
-
-char *
-match_binary (char *expr, const char *op, char **secondp)
+char* match_binary (char *expr, const char *op, char **secondp)
 {
    char *p;
    p = strstr (expr, op);
@@ -261,9 +240,7 @@ match_binary (char *expr, const char *op, char **secondp)
    return expr;
 }
 
-
-int
-fold_comparisons (char *expr, unsigned long *value)
+int fold_comparisons (char *expr, unsigned long *value)
 {
    char *p;
    if (match_binary (expr, "==", &p))
@@ -275,9 +252,7 @@ fold_comparisons (char *expr, unsigned long *value)
    return 1;
 }
 
-
-int
-fold_binary (char *expr, const char op, unsigned long *valp)
+int fold_binary (char *expr, const char op, unsigned long *valp)
 {
 	char *p;
 	unsigned long val1, val2;
@@ -307,8 +282,7 @@ fold_binary (char *expr, const char op, unsigned long *valp)
 /**
  * Evaluate a memory expression, as an lvalue or rvalue.
  */
-unsigned long
-eval_mem (char *expr, eval_mode_t mode)
+unsigned long eval_mem (char *expr, eval_mode_t mode)
 {
    char *p;
    unsigned long val;
@@ -338,7 +312,6 @@ eval_mem (char *expr, eval_mode_t mode)
    return val;
 }
 
-
 /**
  * Evaluate an expression, given as a string.
  * The return is the value (rvalue) of the expression.
@@ -347,8 +320,7 @@ eval_mem (char *expr, eval_mode_t mode)
  * - Support typecasts ( {TYPE}ADDR )
  *
  */
-unsigned long
-eval (char *expr)
+unsigned long eval(char *expr)
 {
    char *p;
    unsigned long val;
@@ -391,8 +363,7 @@ eval (char *expr)
    return val;
 }
 
-
-void brk_enable (breakpoint_t *br, int flag)
+void brk_enable(breakpoint_t *br, int flag)
 {
 	if (br->enabled != flag)
 	{
@@ -404,9 +375,7 @@ void brk_enable (breakpoint_t *br, int flag)
 	}
 }
 
-
-breakpoint_t *
-brkalloc (void)
+breakpoint_t* brkalloc (void)
 {
    unsigned int n;
    for (n = 0; n < MAX_BREAKS; n++)
@@ -426,17 +395,13 @@ brkalloc (void)
 	return NULL;
 }
 
-
-void
-brkfree (breakpoint_t *br)
+void brkfree (breakpoint_t *br)
 {
    brk_enable (br, 0);
    br->used = 0;
 }
 
-
-void
-brkfree_temps (void)
+void brkfree_temps (void)
 {
    unsigned int n;
    for (n = 0; n < MAX_BREAKS; n++)
@@ -446,9 +411,7 @@ brkfree_temps (void)
       }
 }
 
-
-breakpoint_t *
-brkfind_by_addr (absolute_address_t addr)
+breakpoint_t* brkfind_by_addr (absolute_address_t addr)
 {
    unsigned int n;
    for (n = 0; n < MAX_BREAKS; n++)
@@ -457,15 +420,12 @@ brkfind_by_addr (absolute_address_t addr)
 	return NULL;
 }
 
-breakpoint_t *
-brkfind_by_id (unsigned int id)
+breakpoint_t* brkfind_by_id (unsigned int id)
 {
 	return &breaktab[id];
 }
 
-
-void
-brkprint (breakpoint_t *brkpt)
+void brkprint (breakpoint_t *brkpt)
 {
    if (!brkpt->used)
       return;
@@ -498,9 +458,7 @@ brkprint (breakpoint_t *brkpt)
    putchar ('\n');
 }
 
-
-display_t *
-display_alloc (void)
+display_t* display_alloc (void)
 {
    unsigned int n;
 	for (n = 0; n < MAX_DISPLAYS; n++)
@@ -514,15 +472,11 @@ display_alloc (void)
    }
 }
 
-
-void
-display_free (display_t *ds)
+void display_free (display_t *ds)
 {
 }
 
-
-void
-print_value (unsigned long val, datatype_t *typep)
+void print_value (unsigned long val, datatype_t *typep)
 {
    char f[8];
 
@@ -564,9 +518,7 @@ print_value (unsigned long val, datatype_t *typep)
    printf (f, val);
 }
 
-
-void
-display_print (void)
+void display_print (void)
 {
    unsigned int n;
    char comma = '\0';
@@ -588,10 +540,7 @@ display_print (void)
       putchar ('\n');
 }
 
-
-
-int
-print_insn (absolute_address_t addr)
+int print_insn (absolute_address_t addr)
 {
 	char buf[64];
 	int size = dasm (buf, addr);
@@ -599,9 +548,7 @@ print_insn (absolute_address_t addr)
 	return size;
 }
 
-
-void
-do_examine (void)
+void do_examine (void)
 {
    unsigned int n;
 	unsigned int objs_per_line = 16;
@@ -654,8 +601,7 @@ do_examine (void)
    putchar ('\n');
 }
 
-void
-do_print (char *expr)
+void do_print (char *expr)
 {
    unsigned long val = eval (expr);
    printf ("$%d = ", history_count);
@@ -667,8 +613,7 @@ do_print (char *expr)
    save_value (val);
 }
 
-void
-do_set (char *expr)
+void do_set (char *expr)
 {
 	(void)eval (expr);
 }
@@ -677,8 +622,7 @@ do_set (char *expr)
 #define THREAD_DATA_PC 3
 #define THREAD_DATA_ROMBANK 9
 
-void
-print_thread_data (absolute_address_t th)
+void print_thread_data (absolute_address_t th)
 {
    U8 b;
    U16 w;
@@ -695,11 +639,9 @@ print_thread_data (absolute_address_t th)
    //printf ("{ <%04X,%02X>", w, b);
 }
 
-
-void
-command_change_thread (void)
+void command_change_thread (void)
 {
-   target_addr_t addr = target_read (thread_current, thread_id_size);
+   target_addr_t addr = (target_addr_t) target_read(thread_current, thread_id_size);
    absolute_address_t th = to_absolute (addr);
 
    if (th == thread_id)
@@ -723,35 +665,26 @@ command_change_thread (void)
    }
 }
 
-
-void
-command_stack_push (unsigned int reason)
+void command_stack_push (unsigned int reason)
 {
    cmdqueue_t *q = &command_stack[++command_stack_depth];
 }
 
-
-void
-command_stack_pop (void)
+void command_stack_pop (void)
 {
    cmdqueue_t *q = &command_stack[command_stack_depth];
    --command_stack_depth;
 }
 
-
-void
-command_stack_add (const char *cmd)
+void command_stack_add (const char *cmd)
 {
    cmdqueue_t *q = &command_stack[command_stack_depth];
 }
 
-
-char *
-getarg (void)
+char* getarg (void)
 {
    return strtok (NULL, " \t\n");
 }
-
 
 /****************** Command Handlers ************************/
 
@@ -763,7 +696,6 @@ void cmd_print (void)
    else
       do_print ("$");
 }
-
 
 void cmd_set (void)
 {
@@ -777,7 +709,6 @@ void cmd_set (void)
    else
       do_set ("$");
 }
-
 
 void cmd_examine (void)
 {
@@ -812,7 +743,6 @@ void cmd_break (void)
 
    brkprint (br);
 }
-
 
 void cmd_watch1 (int on_read, int on_write)
 {
@@ -851,12 +781,10 @@ void cmd_watch1 (int on_read, int on_write)
    brkprint (br);
 }
 
-
 void cmd_watch (void)
 {
    cmd_watch1 (0, 1);
 }
-
 
 void cmd_rwatch (void)
 {
@@ -867,7 +795,6 @@ void cmd_awatch (void)
 {
    cmd_watch1 (1, 1);
 }
-
 
 void cmd_break_list (void)
 {
@@ -924,7 +851,6 @@ void cmd_delete (void)
 
    if (!arg)
    {
-      int n;
       printf ("Deleting all breakpoints.\n");
       for (id = 0; id < MAX_BREAKS; id++)
       {
@@ -974,14 +900,12 @@ void cmd_list (void)
    lastaddr = addr;
 }
 
-
 void cmd_symbol_file (void)
 {
    char *arg = getarg ();
    if (arg)
       load_map_file (arg);
 }
-
 
 void cmd_display (void)
 {
@@ -997,7 +921,6 @@ void cmd_display (void)
    }
 }
 
-
 int command_exec_file (const char *filename)
 {
    FILE *infile;
@@ -1010,7 +933,6 @@ int command_exec_file (const char *filename)
    command_input = infile;
    return 1;
 }
-
 
 void cmd_source (void)
 {
@@ -1027,11 +949,23 @@ void cmd_regs (void)
    print_regs();
 }
 
+void cmd_pc(void)
+{
+	char* arg = getarg();
+	if (!arg)
+	{
+		cmd_regs();
+		return;
+	}
+
+	set_pc(eval_mem(arg, LVALUE));
+	cmd_list();
+}
+
 void cmd_vars (void)
 {
    for_each_var (NULL);
 }
-
 
 void cmd_runfor (void)
 {
@@ -1046,7 +980,6 @@ void cmd_runfor (void)
       stop_after_ms = val * 1000;
    exit_command_loop = 0;
 }
-
 
 void cmd_measure (void)
 {
@@ -1087,7 +1020,6 @@ void cmd_measure (void)
    exit_command_loop = 0;
 }
 
-
 void cmd_dump_insns (void)
 {
    extern int dump_every_insn;
@@ -1099,9 +1031,7 @@ void cmd_dump_insns (void)
       dump_every_insn ? "on" : "off");
 }
 
-
-void
-cmd_trace_dump (void)
+void cmd_trace_dump (void)
 {
    unsigned int off = (trace_offset + 1) % MAX_TRACE;
    do {
@@ -1121,11 +1051,12 @@ cmd_trace_dump (void)
 
 void cmd_dump (void)
 {
+	printf("not implemented\n");
 }
-
 
 void cmd_restore (void)
 {
+	printf("not implemented\n");
 }
 
 void cmd_info (void)
@@ -1201,6 +1132,8 @@ struct command_name
       "Restore contents of memory from a file" },
    { "i", "info", cmd_info,
       "Describe machine, devices and address mapping" },
+   { "pc", "pc", cmd_pc,
+		"Set program counter" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "co", "condition", cmd_condition },
@@ -1227,8 +1160,7 @@ void cmd_help (void)
    }
 }
 
-command_handler_t
-command_lookup (const char *cmd)
+command_handler_t command_lookup (const char *cmd)
 {
    struct command_name *cn;
    char *p;
@@ -1256,9 +1188,38 @@ command_lookup (const char *cmd)
    return NULL;
 }
 
+int print_insn_long (absolute_address_t addr)
+{
+	char buf[64];
+	int i;
+	int size = dasm(buf, addr);
 
-void
-print_current_insn (void)
+	const char* name;
+
+	print_device_name(addr >> 28);
+	putchar(':');
+	printf("0x%04X ", addr & 0xFFFFFF);
+
+	for (i = 0; i < size; i++)
+		printf("%02X", abs_read8(addr + i));
+
+	for (i = 0; i < 4 - size; i++)
+		printf("  ");
+
+	name = sym_lookup(&program_symtab, addr);
+	if (name)
+		printf("  %-12.12s", name);
+	else
+		printf("%-14.14s", "");
+
+	printf("%s", buf);
+
+	putchar ('\n');
+
+	return size;
+}
+
+void print_current_insn (void)
 {
 	absolute_address_t addr = to_absolute (get_pc ());
 	print_addr (addr);
@@ -1267,15 +1228,12 @@ print_current_insn (void)
 	putchar ('\n');
 }
 
-
-int
-command_exec (FILE *infile)
+int command_exec (FILE *infile)
 {
    char buffer[256];
    static char prev_buffer[256];
    char *cmd;
    command_handler_t handler;
-   int rc;
 
    do {
       errno = 0;
@@ -1327,10 +1285,9 @@ command_exec (FILE *infile)
    return 0;
 }
 
-
-void
-keybuffering_defaults (void)
+void keybuffering_defaults (void)
 {
+#ifndef _MSC_VER
     /* Extract and save defaults associated with buffered io, create
        settings associated with unbuffered io
     */
@@ -1343,22 +1300,22 @@ keybuffering_defaults (void)
 
     /* disable canonical mode (buffered i/o) and local echo */
     new_tio.c_lflag &=(~ICANON & ~ECHO);
+#endif
 }
 
-void
-keybuffering (int flag)
+void keybuffering (int flag)
 {
+#ifndef _MSC_VER
     if (flag) {
         tcsetattr(STDIN_FILENO,TCSANOW,&old_tio);
     }
     else {
         tcsetattr(STDIN_FILENO,TCSANOW,&new_tio);
     }
+#endif
 }
 
-
-int
-command_loop (void)
+int command_loop (void)
 {
    keybuffering (1);
    brkfree_temps ();
@@ -1390,9 +1347,7 @@ restart:
    return (exit_command_loop);
 }
 
-
-void
-breakpoint_hit (breakpoint_t *br)
+void breakpoint_hit (breakpoint_t *br)
 {
    if (br->threaded && (thread_id != br->tid))
       return;
@@ -1412,17 +1367,13 @@ breakpoint_hit (breakpoint_t *br)
    monitor_on = !br->keep_running;
 }
 
-
-void
-command_trace_insn (target_addr_t addr)
+void command_trace_insn (target_addr_t addr)
 {
    trace_buffer[trace_offset++] = addr;
    trace_offset %= MAX_TRACE;
 }
 
-
-void
-command_insn_hook (void)
+void command_insn_hook (void)
 {
    target_addr_t pc;
    absolute_address_t abspc;
@@ -1448,9 +1399,7 @@ command_insn_hook (void)
 	}
 }
 
-
-void
-command_read_hook (absolute_address_t addr)
+void command_read_hook (absolute_address_t addr)
 {
 	breakpoint_t *br;
 
@@ -1467,9 +1416,7 @@ command_read_hook (absolute_address_t addr)
    }
 }
 
-
-void
-command_write_hook (absolute_address_t addr, U8 val)
+void command_write_hook (absolute_address_t addr, U8 val)
 {
 	breakpoint_t *br;
 
@@ -1506,9 +1453,7 @@ command_write_hook (absolute_address_t addr, U8 val)
    }
 }
 
-
-void
-command_periodic (void)
+void command_periodic (void)
 {
    if (stop_after_ms)
    {
@@ -1521,7 +1466,6 @@ command_periodic (void)
       }
    }
 }
-
 
 void pc_virtual (unsigned long *val, int writep) {
 	writep ? set_pc (*val) : (*val = get_pc ());
@@ -1558,13 +1502,11 @@ void irq_load_virtual (unsigned long *val, int writep) {
       *val = irq_cycles / IRQ_CYCLE_COUNTS;
 }
 
-
 void cycles_virtual (unsigned long *val, int writep)
 {
    if (!writep)
       *val = get_cycles ();
 }
-
 
 void et_virtual (unsigned long *val, int writep)
 {
@@ -1574,14 +1516,12 @@ void et_virtual (unsigned long *val, int writep)
    last_cycles = get_cycles ();
 }
 
-
 /**
  * Update the $irqload virtual register, which tracks the
  * average number of cycles spent in IRQ.  This function
  * maintains a rolling history of IRQ_CYCLE_COUNTS entries.
  */
-void
-command_exit_irq_hook (unsigned long cycles)
+void command_exit_irq_hook (unsigned long cycles)
 {
    irq_cycles -= irq_cycle_tab[irq_cycle_entry];
    irq_cycles += cycles;
@@ -1589,12 +1529,8 @@ command_exit_irq_hook (unsigned long cycles)
    irq_cycle_entry = (irq_cycle_entry + 1) % IRQ_CYCLE_COUNTS;
 }
 
-
-void
-command_init (void)
+void command_init (void)
 {
-   int rc;
-
    /* Install virtual registers.  These are referenced in expressions
     * using a dollar-sign prefix (e.g. $pc).  The value of the
     * symbol is a pointer to a function (e.g. pc_virtual) which
@@ -1622,6 +1558,3 @@ command_init (void)
    command_input = stdin;
    (void)command_exec_file (".dbinit");
 }
-
-/* vim: set ts=3: */
-/* vim: set expandtab: */

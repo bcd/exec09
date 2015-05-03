@@ -18,7 +18,6 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -49,7 +48,6 @@ U8 fault_type;
    system initialisation has completed */
 int cpu_running = 0;
 
-
 void cpu_is_running (void)
 {
 	cpu_running = 1;
@@ -61,14 +59,12 @@ void do_fault (unsigned int addr, unsigned int type)
 		machine->fault (addr, type);
 }
 
-
 void exit_fault (unsigned int addr, unsigned int type)
 {
 	monitor_on = debug_enabled;
 	sim_error ("Fault: addr=%04X type=%02X\n", addr, type);
 	exit (1);
 }
-
 
 /**
  * Attach a new device to the bus.  Only called during init.
@@ -87,7 +83,6 @@ struct hw_device *device_attach (struct hw_class *class_ptr, unsigned int size, 
 	return dev;
 };
 
-
 /**
  * Map a portion of a device into the CPU's address space.
  */
@@ -103,8 +98,8 @@ void bus_map (unsigned int addr,
 	/* Warn if trying to map too much */
 	if (addr + len > MAX_CPU_ADDR)
 	{
-		fprintf (stderr, "warning: mapping %04X bytes into %04X causes overflow\n",
-			len, addr);
+		fprintf(stderr, "warning: mapping %04X bytes into %04X causes overflow\n",
+				len, addr);
 	}
 
 	/* Round address and length to be multiples of the map unit size. */
@@ -139,13 +134,11 @@ void device_define (struct hw_device *dev,
 	unsigned int flags)
 {
 	/* Note: len must be a multiple of BUS_MAP_SIZE */
-	bus_map (addr, dev->devid, offset, len, flags);
+	bus_map(addr, dev->devid, offset, len, flags);
 }
-
 
 void bus_unmap (unsigned int addr, unsigned int len)
 {
-	struct bus_map *map;
 	unsigned int start, count;
 
 	/* Round address and length to be multiples of the map unit size. */
@@ -160,7 +153,6 @@ void bus_unmap (unsigned int addr, unsigned int len)
 	memcpy (&busmaps[start], &default_busmaps[start],
 		sizeof (struct bus_map) * count);
 }
-
 
 /**
  * Generate a page fault.  ADDR says which address was accessed
@@ -183,21 +175,16 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 	return device_table[id];
 }
 
-
-void
-print_device_name (unsigned int devno)
+void print_device_name (unsigned int devno)
 {
    struct hw_device *dev = device_table[devno];
    printf ("%02X", devno);
 }
 
-
-absolute_address_t
-absolute_from_reladdr (unsigned int device, unsigned long reladdr)
+absolute_address_t absolute_from_reladdr (unsigned int device, unsigned long reladdr)
 {
    return (device * 0x10000000L) + reladdr;
 }
-
 
 U8 abs_read8 (absolute_address_t addr)
 {
@@ -207,7 +194,6 @@ U8 abs_read8 (absolute_address_t addr)
 	struct hw_class *class_ptr = dev->class_ptr;
 	return (*class_ptr->read) (dev, phy_addr);
 }
-
 
 /**
  * Called by the CPU to read a byte.
@@ -244,7 +230,6 @@ U16 cpu_read16 (unsigned int addr)
 			| (*class_ptr->read) (dev, phy_addr+1);
 }
 
-
 /**
  * Called by the CPU to write a byte.
  */
@@ -279,17 +264,14 @@ void cpu_write8 (unsigned int addr, U8 val)
 
 void abs_write8 (absolute_address_t addr, U8 val)
 {
-   unsigned int id = addr >> 28;
-   unsigned long phy_addr = addr & 0xFFFFFFF;
+	unsigned int id = addr >> 28;
+	unsigned long phy_addr = addr & 0xFFFFFFF;
 	struct hw_device *dev = device_table[id];
 	struct hw_class *class_ptr = dev->class_ptr;
-	class_ptr->write (dev, phy_addr, val);
+	class_ptr->write(dev, phy_addr, val);
 }
 
-
-
-absolute_address_t
-to_absolute (unsigned long cpuaddr)
+absolute_address_t to_absolute (unsigned long cpuaddr)
 {
 	struct bus_map *map = find_map (cpuaddr);
 	struct hw_device *dev = find_device (cpuaddr, map->devid);
@@ -306,7 +288,6 @@ void dump_machine (void)
 	unsigned int prev_offset;
 	unsigned int prev_flags;
 	unsigned int dot_dot = 0;
-	unsigned int n;
 
 	/* machine */
 	printf("Machine: %s\n", machine->name);
@@ -350,7 +331,6 @@ void dump_machine (void)
 	}
 }
 
-
 /**********************************************************
  * Simple fault handler
  **********************************************************/
@@ -367,7 +347,6 @@ void fault (unsigned int addr, unsigned char type)
 #endif
 	}
 }
-
 
 /**********************************************************/
 
@@ -397,7 +376,6 @@ struct hw_device *null_create (void)
 {
 	return device_attach (&null_class, 0, NULL);
 }
-
 
 /**********************************************************/
 
@@ -444,7 +422,6 @@ struct hw_class rom_class =
 	.write = ram_write,
 };
 
-
 struct hw_device *rom_create (const char *filename, unsigned int maxsize)
 {
 	FILE *fp;
@@ -453,7 +430,7 @@ struct hw_device *rom_create (const char *filename, unsigned int maxsize)
 	char *buf;
 
 	if (filename)
-	{	
+	{
 		fp = file_open (NULL, filename, "rb");
 		if (!fp)
 			return NULL;
@@ -522,7 +499,6 @@ struct hw_device *console_create (void)
 
 /**********************************************************/
 
-
 U8 mmu_regs[MMU_PAGECOUNT][MMU_PAGEREGS];
 
 U8 mmu_read (struct hw_device *dev, unsigned long addr)
@@ -581,14 +557,13 @@ void mmu_reset_complete (struct hw_device *dev)
 	{
 		map = &busmaps[4 + page * (MMU_PAGESIZE / BUS_MAP_SIZE)];
 		mmu_regs[page][0] = map->devid;
-		mmu_regs[page][1] = map->offset / MMU_PAGESIZE;
+		mmu_regs[page][1] = (U8) (map->offset / MMU_PAGESIZE);
 		mmu_regs[page][2] = map->flags & MAP_READWRITE;
 		/* printf ("%02X %02X %02X\n",
 			map->devid, map->offset / MMU_PAGESIZE,
 			map->flags); */
 	}
 }
-
 
 struct hw_class mmu_class =
 {
@@ -603,7 +578,6 @@ struct hw_device *mmu_create (void)
 {
 	return device_attach (&mmu_class, BUS_MAP_SIZE, NULL);
 }
-
 
 /**********************************************************/
 
@@ -628,7 +602,6 @@ int machine_match (const char *machine_name, const char *boot_rom_file, struct m
 	}
 	return 0;
 }
-
 
 void machine_init (const char *machine_name, const char *boot_rom_file)
 {

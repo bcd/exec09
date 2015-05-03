@@ -286,8 +286,7 @@ void wpc_dmd_set_visible (U8 val)
 {
 	char *p;
 	struct wpc_message msg;
-	int rc;
-	int i, n;
+	int i;
 	static unsigned long last_firq_time = 0;
 	unsigned long now;
 	static int no_change_count = 0;
@@ -333,7 +332,7 @@ void wpc_dmd_set_visible (U8 val)
 	wpc_msg_init (CODE_DMD_PAGE, &msg);
 	for (i=0; i < 3; i++)
 	{
-		p = wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
+		p = (U8*) wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
 		msg.u.dmdpage.phases[i].page = wpc->dmd_visibles[i];
 		memcpy (&msg.u.dmdpage.phases[i].data, p, 512);
 	}
@@ -497,7 +496,6 @@ void wpc_update_ram (void)
 		bus_map (WPC_RAM_BASE + size_writable, wpc->ram_dev->devid, size_writable,
 			WPC_RAM_SIZE - size_writable, MAP_READABLE);
 }
-
 
 void wpc_set_rom_page (unsigned char val)
 {
@@ -665,8 +663,6 @@ void io_sym_add (const char *name, unsigned long cpuaddr)
 void wpc_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
-	int rc;
-	struct sockaddr_in myaddr;
 
 	device_define ( dev = wpc_asic_create (), 0,
 		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);

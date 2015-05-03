@@ -37,7 +37,6 @@ struct ioexpand
 	unsigned long offset[NR_IOEXPAND];
 };
 
-
 void ioexpand_attach (struct hw_device *expander_dev, int slot, unsigned long offset, struct hw_device *io_dev)
 {
 	struct ioexpand *iom = (struct ioexpand *)expander_dev->priv;

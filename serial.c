@@ -127,8 +127,7 @@ struct hw_class serial_class =
 
 extern U8 null_read (struct hw_device *dev, unsigned long addr);
 
-
-struct hw_device *serial_create (void)
+struct hw_device* serial_create (void)
 {
 	struct serial_port *port = malloc (sizeof (struct serial_port));
 	port->fin = STDIN_FILENO;
@@ -136,10 +135,9 @@ struct hw_device *serial_create (void)
 	return device_attach (&serial_class, 4, port);
 }
 
-struct hw_device *hostfile_create (const char *filename, int flags)
+struct hw_device* hostfile_create (const char *filename, int flags)
 {
 	struct serial_port *port = malloc (sizeof (struct serial_port));
-	port->fin = port->fout = open (filename, O_CREAT | flags, S_IRUSR | S_IWUSR);
+	port->fin = port->fout = open(filename, O_CREAT | flags, S_IRUSR | S_IWUSR);
 	return device_attach (&serial_class, 4, port);
 }
-

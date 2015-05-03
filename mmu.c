@@ -1,4 +1,3 @@
-
 #include <stdlib.h>
 #include "machine.h"
 
@@ -101,7 +100,7 @@ struct hw_class small_mmu_class =
 	.write = small_mmu_write,
 };
 
-struct hw_device *small_mmu_create (struct hw_device *realdev)
+struct hw_device* small_mmu_create (struct hw_device *realdev)
 {
 	struct small_mmu *mmu = malloc (sizeof (struct small_mmu));
 	mmu->realdev = realdev;
