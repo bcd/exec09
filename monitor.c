@@ -1124,7 +1124,7 @@ load_map_file (const char *name)
 		value_ptr = buf;
 		if (!strncmp (value_ptr, "page", 4))
 		{
-                    unsigned char page = (unsigned char) strtoul(value_ptr+4, NULL, 10);
+			unsigned char page = (unsigned char) strtoul(value_ptr+4, NULL, 10);
 			if (!strcmp (machine->name, "wpc"))
 				wpc_set_rom_page (page);
 			sym = NULL;
@@ -1169,10 +1169,9 @@ int load_image (const char *name)
   FILE *fp;
 
   fp = file_open(NULL, name, "r");
-
   if (fp == NULL)
     {
-      printf ("failed to open image file %s.\n", name);
+      printf("failed to open image file %s.\n", name);
       return 1;
     }
 
@@ -1215,39 +1214,39 @@ int load_hex (FILE *fp)
 	case 0:
 	  for (; count != 0; count--, addr++, checksum += data)
 	    {
-              if (fscanf (fp, "%2x", &data))
+              if (fscanf(fp, "%2x", &data))
                 {
-		   write8 (addr, (UINT8) data);
+		   write8(addr, (UINT8) data);
                 }
               else
                 {
-                  printf ("line %d: hex record data inconsistent with count field.\n", line);
+                  printf("line %d: hex record data inconsistent with count field.\n", line);
 	          break;
                 }
 	    }
 
 	  checksum = (-checksum) & 0xff;
 
-          if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
+          if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) )
 	    {
-	      printf ("line %d: hex record checksum missing or invalid.\n", line);
+	      printf("line %d: hex record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
 	    }
-          fscanf (fp, "%*[\r\n]"); /* skip any form of line ending */
+          fscanf(fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
 	case 1:
 	  checksum = (-checksum) & 0xff;
 
-          if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
-	    printf ("line %d: hex record checksum missing or invalid.\n", line);
+          if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) )
+	    printf("line %d: hex record checksum missing or invalid.\n", line);
 	  done = 0;
 	  break;
 
 	case 2:
 	default:
-	  printf ("line %d: not supported hex type %d.\n", line, type);
+	  printf("line %d: not supported hex type %d.\n", line, type);
 	  done = 0;
 	  break;
 	}
@@ -1257,7 +1256,7 @@ int load_hex (FILE *fp)
   return 0;
 }
 
-int load_s19 (FILE *fp)
+int load_s19(FILE *fp)
 {
   int count, addr, type, data, checksum;
   int done = 1;
@@ -1267,9 +1266,9 @@ int load_s19 (FILE *fp)
     {
       line++;
 
-      if (fscanf (fp, "S%1x%2x%4x", &type, &count, &addr) != 3)
+      if (fscanf(fp, "S%1x%2x%4x", &type, &count, &addr) != 3)
 	{
-	  printf ("line %d: invalid S record information.\n", line);
+	  printf("line %d: invalid S record information.\n", line);
 	  break;
 	}
 
@@ -1316,7 +1315,7 @@ int load_s19 (FILE *fp)
 	}
     }
 
-  (void) fclose (fp);
+  (void) fclose(fp);
   return 0;
 }
 

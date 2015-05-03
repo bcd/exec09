@@ -889,12 +889,9 @@ void cmd_list (void)
          lastaddr = lastpc = addr;
    }
 
-   for (n = 0; n < 10; n++)
+   for (n = 0; n < 16; n++)
    {
-      print_addr (addr);
-      printf (" : ");
-      addr += print_insn (addr);
-      putchar ('\n');
+      addr += print_insn_long(addr);
    }
 
    lastaddr = addr;
@@ -1039,10 +1036,7 @@ void cmd_trace_dump (void)
       absolute_address_t addr = to_absolute (pc);
       //const char *name = sym_lookup (&program_symtab, addr);
       //printf ("%04X ", pc);
-      print_addr (addr);
-      putchar (':');
-      print_insn (addr);
-      putchar ('\n');
+      print_insn_long(addr);
       //putchar (name ? '\n' : ' ');
       off = (off + 1) % MAX_TRACE;
    } while (off != trace_offset);
@@ -1221,11 +1215,7 @@ int print_insn_long (absolute_address_t addr)
 
 void print_current_insn (void)
 {
-	absolute_address_t addr = to_absolute (get_pc ());
-	print_addr (addr);
-	printf (" : ");
-	print_insn (addr);
-	putchar ('\n');
+	print_insn_long(to_absolute(get_pc()));
 }
 
 int command_exec (FILE *infile)
