@@ -1011,13 +1011,13 @@ int dasm (char *buf, absolute_address_t opc)
 	  sprintf (buf, "[D,%c]", R);
 	  break;
 	case 0x1C:
-	  sprintf (buf, "[$%02X,PC]", fetch8 ());
+	  sprintf (buf, "[$%02X,PC]", fetch8());
 	  break;
 	case 0x1D:
-	  sprintf (buf, "[$%04X,PC]", fetch16 ());
+	  sprintf (buf, "[$%04X,PC]", fetch16());
 	  break;
 	case 0x1F:
-	  sprintf (buf, "[%s]", monitor_addr_name (fetch16 ()));
+	  sprintf (buf, "[%s]", monitor_addr_name (fetch16()));
 	  break;
 	default:
 	  sprintf (buf, "???");
@@ -1031,7 +1031,7 @@ int dasm (char *buf, absolute_address_t opc)
       break;
 
     case _rel_word:
-	   sprintf (buf, "%s", absolute_addr_name (fetch16 () + pc));
+	   sprintf (buf, "%s", absolute_addr_name (fetch16() + pc));
       break;
 
     case _reg_post:
@@ -1082,8 +1082,7 @@ int sizeof_file(FILE * file)
   return size;
 }
 
-int
-load_map_file (const char *name)
+int load_map_file (const char *name)
 {
 	FILE *fp;
 	char map_filename[256];
@@ -1369,7 +1368,7 @@ const char* absolute_addr_name (absolute_address_t addr)
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
-      bufptr += sprintf (bufptr, "  <%-16.16s>", name);
+      sprintf (bufptr, "  <%-16.16s>", name);
 
    return buf;
 }
@@ -1382,11 +1381,11 @@ const char* monitor_addr_name (target_addr_t target_addr)
 
    bufptr = buf;
 
-   bufptr += sprintf (bufptr, "0x%04X", target_addr);
+   bufptr += sprintf (bufptr, "$%04X", target_addr);
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
-      bufptr += sprintf (bufptr, "  <%s>", name);
+      sprintf (bufptr, "  <%s>", name);
 
    return buf;
 }

@@ -96,7 +96,7 @@ void print_addr (absolute_address_t addr)
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
-      printf ("  <%-16.16s>", name);
+      printf ("  %-18.18s", name);
    else
       printf ("%-20.20s", "");
 }
@@ -588,7 +588,7 @@ void do_examine (void)
             break;
 
          case 'i': /* instruction */
-				examine_addr += print_insn (examine_addr);
+            examine_addr += print_insn (examine_addr);
             break;
 
          default:
@@ -1034,10 +1034,7 @@ void cmd_trace_dump (void)
    do {
       target_addr_t pc = trace_buffer[off];
       absolute_address_t addr = to_absolute (pc);
-      //const char *name = sym_lookup (&program_symtab, addr);
-      //printf ("%04X ", pc);
       print_insn_long(addr);
-      //putchar (name ? '\n' : ' ');
       off = (off + 1) % MAX_TRACE;
    } while (off != trace_offset);
    fflush (stdout);
