@@ -35,7 +35,6 @@ POST_INSTALL = :
 NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
-LIBOBJDIR =
 bin_PROGRAMS = m6809-run$(EXEEXT)
 subdir = .
 DIST_COMMON = README $(am__configure_deps) $(srcdir)/Makefile.am \
@@ -54,10 +53,11 @@ am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(bindir)"
 binPROGRAMS_INSTALL = $(INSTALL_PROGRAM)
 PROGRAMS = $(bin_PROGRAMS)
 am_m6809_run_OBJECTS = 6809.$(OBJEXT) main.$(OBJEXT) monitor.$(OBJEXT) \
-	machine.$(OBJEXT) eon.$(OBJEXT) wpc.$(OBJEXT) symtab.$(OBJEXT) \
-	command.$(OBJEXT) fileio.$(OBJEXT) wpclib.$(OBJEXT) \
-	imux.$(OBJEXT) ioexpand.$(OBJEXT) mmu.$(OBJEXT) \
-	timer.$(OBJEXT) serial.$(OBJEXT) disk.$(OBJEXT)
+	machine.$(OBJEXT) eon.$(OBJEXT) wpc.$(OBJEXT) \
+	miscsbc.$(OBJEXT) symtab.$(OBJEXT) command.$(OBJEXT) \
+	fileio.$(OBJEXT) wpclib.$(OBJEXT) imux.$(OBJEXT) \
+	ioexpand.$(OBJEXT) mmu.$(OBJEXT) timer.$(OBJEXT) \
+	serial.$(OBJEXT) disk.$(OBJEXT)
 m6809_run_OBJECTS = $(am_m6809_run_OBJECTS)
 m6809_run_LDADD = $(LDADD)
 binSCRIPT_INSTALL = $(INSTALL_SCRIPT)
@@ -121,6 +121,7 @@ PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
 PACKAGE_NAME = @PACKAGE_NAME@
 PACKAGE_STRING = @PACKAGE_STRING@
 PACKAGE_TARNAME = @PACKAGE_TARNAME@
+PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 READLINE_LIBS = @READLINE_LIBS@
@@ -164,7 +165,7 @@ sharedstatedir = @sharedstatedir@
 sysconfdir = @sysconfdir@
 target_alias = @target_alias@
 m6809_run_SOURCES = \
-	6809.c main.c monitor.c machine.c eon.c wpc.c \
+	6809.c main.c monitor.c machine.c eon.c wpc.c miscsbc.c \
 	symtab.c command.c fileio.c wpclib.c imux.c \
 	ioexpand.c mmu.c timer.c serial.c disk.c \
 	6809.h config.h eon.h machine.h monitor.h wpclib.h
@@ -286,6 +287,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ioexpand.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/machine.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/miscsbc.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mmu.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/serial.Po@am__quote@
@@ -386,7 +388,8 @@ distdir: $(DISTFILES)
 	    || exit 1; \
 	  fi; \
 	done
-	-find $(distdir) -type d ! -perm -777 -exec chmod a+rwx {} \; -o \
+	-find "$(distdir)" -type d ! -perm -755 \
+		-exec chmod u+rwx,go+rx {} \; -o \
 	  ! -type d ! -perm -444 -links 1 -exec chmod a+r {} \; -o \
 	  ! -type d ! -perm -400 -exec chmod a+r {} \; -o \
 	  ! -type d ! -perm -444 -exec $(SHELL) $(install_sh) -c -m a+r {} {} \; \
@@ -432,7 +435,7 @@ distcheck: dist
 	*.zip*) \
 	  unzip $(distdir).zip ;;\
 	esac
-	chmod -R a-w $(distdir); chmod a+w $(distdir)
+	chmod -R a-w $(distdir); chmod u+w $(distdir)
 	mkdir $(distdir)/_build
 	mkdir $(distdir)/_inst
 	chmod a-w $(distdir)

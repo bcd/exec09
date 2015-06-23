@@ -1082,6 +1082,7 @@ int sizeof_file(FILE * file)
   return size;
 }
 
+// nac it would be nice to have an intelligent map file reader..
 int load_map_file (const char *name)
 {
 	FILE *fp;

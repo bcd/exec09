@@ -59,6 +59,7 @@ void do_fault (unsigned int addr, unsigned int type)
 		machine->fault (addr, type);
 }
 
+// nac never used.
 void exit_fault (unsigned int addr, unsigned int type)
 {
 	monitor_on = debug_enabled;
@@ -188,9 +189,53 @@ absolute_address_t absolute_from_reladdr (unsigned int device, unsigned long rel
 
 U8 abs_read8 (absolute_address_t addr)
 {
-   unsigned int id = addr >> 28;
-   unsigned long phy_addr = addr & 0xFFFFFFF;
-	struct hw_device *dev = device_table[id];
+	// nac come here on dbg examine. Core dump on access to nxm.
+	// nac what is "id" and how is it extracted from top 4 bits and
+	// why does this need addr to be 64 bits?
+	unsigned int id = addr >> 28;
+	unsigned long phy_addr = addr & 0xFFFFFFF;
+	// printf("In abs_read8 with address 0x%x, id 0x%x and phy_addr 0x%x\n",addr,id,phy_addr);
+        // nac BUG! should not be doing this directly:
+        // an attempt to access a non-existent location (a location whose device ID is FF)
+        // results in an attempt to access a non-existent value in the device_table.
+        // Actually it's doubly bad: there are 32 devices (max) but access to non-existent
+        // device seems to yield an ID of 0xf rather than 0xff which, based on the 28-bit
+        // shift, implies that the address was bad in the first place: it only had f instead of ff
+        // In any case, the table should not be indexed with f or ff becasue neither are valid
+        // devices.
+        // BUT! my "fix" below is bad; the fault gets reported 2ce and
+        // the data value gets reported as a 32-bit value instead of a U8
+        // eg, if null_read is set up to return 0xab it returns 0xffffffab
+        // and if it's set up to return 0x3b it returns 0x3b -- ie, it is
+        // being sign extended. Not sure why, though, becasue it looks identical
+        // to the normal read; must be due to a path taken in the error handling?
+        //
+        // 2 scenarios: access to 0:0 ie direct access device 0 even though
+        // that device is not mapped into the bus anywhere. Currently does not
+        // report any error but does return 0xffffffff (sign extended). Not reporting an error
+        // is fine (I suppose) because the access is not really being checked
+        // -- it doesn't correspond to a CPU address.
+        // Other scenario is access to 0x7c80 in smii. This is a real CPU
+        // address but is mapped to a non-existent device. Currently get 2
+        // errors reported: the first is due to an access through cpu_read8
+        // and the error is a page fault, address 0x7c80 -- the error is
+        // triggered by a check of the map entry. The second is due
+        // to an access through abs_read8 and the error is a page fault,
+        // address 0xf000.0000 -- thinks it's device 0xff but truncated.
+        // For this one the data comes back as 0xffffffff (sign-extended).
+        //
+        // Maybe need to switch to using CPU addresses everywhere user-facing
+        // and allow device:offset addressing only on the command line?
+        //
+        // Another option that might help a fix is to switch to initialising
+        // the map with device 0 rather than with non-such-device. Then,
+        // no-such-device can be a more fatal error...
+
+        // orig: -- core dumps!!
+        //struct hw_device *dev = device_table[id];
+        // replacement: -- still not right.
+	struct hw_device *dev = find_device (addr, id);
+
 	struct hw_class *class_ptr = dev->class_ptr;
 	return (*class_ptr->read) (dev, phy_addr);
 }
@@ -235,6 +280,7 @@ U16 cpu_read16 (unsigned int addr)
  */
 void cpu_write8 (unsigned int addr, U8 val)
 {
+        //printf("write 0x%04x<-0x%02x\n", addr, val);
 	struct bus_map *map = find_map (addr);
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
@@ -298,7 +344,7 @@ void dump_machine (void)
 		printf("Device %2d: %s\n",devno, device_table[devno]->class_ptr->name);
 	}
 
-	/* Mapping */
+	/* mapping */
 	for (mapno = 0; mapno < NUM_BUS_MAPS; mapno++)
 	{
 		struct bus_map *map = &busmaps[mapno];
@@ -317,12 +363,7 @@ void dump_machine (void)
 			dot_dot = 0;
 			printf ("Map %3d:  addr=%04X  dev=%d  offset=%04X  size=%06X  flags=%02X\n",
 				mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
-				0 /* device_table[map->devid]->size */, map->flags);
-#if 0
-			for (n = 0; n < BUS_MAP_SIZE; n++)
-				printf ("%02X ", cpu_read8 (mapno * BUS_MAP_SIZE + n));
-			printf ("\n");
-#endif
+				device_table[map->devid]->size, map->flags);
 		}
 		/* ready for next time */
 		prev_devid = map->devid;
