@@ -325,8 +325,20 @@ absolute_address_t to_absolute (unsigned long cpuaddr)
 	return absolute_from_reladdr (map->devid, phy_addr);
 }
 
+
+// Dump machine (if supported)
+void dump_machine(void)
+{
+    if (machine->dump) {
+        machine->dump();
+    }
+    else {
+        printf("This machine does not provide a dump capability\n");
+    }
+}
+
 // Describe machine, devices and mapping.
-void dump_machine (void)
+void describe_machine (void)
 {
 	unsigned int devno;
 	unsigned int mapno;

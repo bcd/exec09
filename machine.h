@@ -145,6 +145,7 @@ struct machine
 	void (*fault) (unsigned int addr, unsigned char type);
 	void (*dump_thread) (unsigned int thread_id);
 	void (*periodic) (void);
+	void (*dump) (void);
 	unsigned long cycles_per_sec;
 };
 

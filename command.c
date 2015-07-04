@@ -1042,7 +1042,7 @@ void cmd_trace_dump (void)
 
 void cmd_dump (void)
 {
-	printf("not implemented\n");
+    dump_machine();
 }
 
 void cmd_restore (void)
@@ -1052,7 +1052,7 @@ void cmd_restore (void)
 
 void cmd_info (void)
 {
-   dump_machine();
+    describe_machine();
 }
 
 /****************** Parser ************************/

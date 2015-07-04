@@ -9,6 +9,7 @@ int smii_i_avail = 1;
 int smii_o_busy = 0;
 
 // for multicomp09 sdmapper
+#define MULTICOMP09_RAMMAX (0x20000)
 char mc_protect = 0x00;
 char mc_romdis  = 0x00;
 char mc_mapper  = 0x76;
@@ -20,11 +21,13 @@ int  mc_addr;
 int  mc_state;
 int  mc_poll;
 int  mc_dindex;
-FILE *sd_file;
 // [NAC HACK 2015May07] to allow remap of io. Really nasty hack.
+// [NAC HACK 2015May07] also needed to allow dump.
 struct hw_device *mc_rom, *mc_ram, *mc_iodev;
 
+FILE *sd_file;
 FILE *batch_file;
+FILE *dump_file;
 
 /********************************************************************
  * The Scroungemaster II machine, a platform
@@ -181,7 +184,7 @@ struct machine smii_machine =
 
 /********************************************************************
  * The Multicomp 6809 machine, a platform for Dragon BASIC.
- * This version has 1 serial port, 56K RAM and 8K ROM, SDCARD if
+ * This version has 1 serial port, 56K RAM and 8K ROM, SDCARD i/f.
  * The serial port is in a "hole" at 0xFFD0/0xFFD1
  * See:
  * Grant Searle http://searle.hostei.com/grant/Multicomp/index.html
@@ -551,7 +554,7 @@ void multicomp09_init (const char *boot_rom_file)
        windows into any of the 16, 8K chunks via the mc_mapping
        register.
     */
-    ramdev = ram_create(0x20000);
+    ramdev = ram_create(MULTICOMP09_RAMMAX);
 
     /* ROM is 8Kbytes. Usually sits from E000 to FFFF but can be disabled
        by writing 1 to mc_romdis.
@@ -603,7 +606,7 @@ void multicomp09_init (const char *boot_rom_file)
     mc_ram = ramdev;
     mc_iodev = iodev;
 
-    /* Now map all the devices into he address space, in accordance
+    /* Now map all the devices into the address space, in accordance
        with the settings of the memory mapper.
     */
     sdmapper_remap();
@@ -626,11 +629,28 @@ void multicomp09_init (const char *boot_rom_file)
 }
 
 
+/* Dump just does a binary dump of the RAM space. Properly it should also dump
+   the memory mapper state. The dump is only intended to aid debug/analysis. To
+   be used for (eg) persistence there's lots more state that would be needed.
+*/
+void multicomp09_dump (void)
+{
+    int i;
+    char byte;
+    dump_file = file_open(NULL, "multicomp09.dmp", "w+b");
+    for (i=0; i<MULTICOMP09_RAMMAX; i=i+1) {
+        byte = ram_read(mc_ram,i);
+        /* inefficient!! */
+        fwrite(&byte, 1, 1, dump_file);
+    }
+    fclose(dump_file);
+}
+
 struct machine multicomp09_machine =
 {
 	.name = "multicomp09",
 	.fault = fault,
 	.init = multicomp09_init,
 	.periodic = 0,
+        .dump = multicomp09_dump,
 };
-
