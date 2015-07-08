@@ -8,11 +8,12 @@
 int smii_i_avail = 1;
 int smii_o_busy = 0;
 
-// for multicomp09 sdmapper
+// for multicomp09 sdmapper: values most-recently written to these registers
 #define MULTICOMP09_RAMMAX (0x20000)
-char mc_protect = 0x00;
-char mc_romdis  = 0x00;
-char mc_mapper  = 0x76;
+unsigned char mc_mmuadr = 0x00;
+unsigned char mc_mmudat = 0x00;
+unsigned char mc_timer  = 0x00;
+unsigned char mc_pblk[16]; // [7] is protect, [6:0] is physical block
 unsigned char mc_sdlba2; // because we're doing maths on them
 unsigned char mc_sdlba1;
 unsigned char mc_sdlba0;
@@ -27,6 +28,7 @@ struct hw_device *mc_rom, *mc_ram, *mc_iodev;
 
 FILE *sd_file;
 FILE *batch_file;
+FILE *log_file;
 FILE *dump_file;
 
 /********************************************************************
@@ -60,7 +62,7 @@ U8 smii_console_read (struct hw_device *dev, unsigned long addr)
         if (ch == 10) ch = 13; //cr
         return ch;
     default:
-        printf("In smii_console_read with addr=0x%08x\n", addr);
+        printf("In smii_console_read with addr=0x%08x\n", (unsigned int)addr);
         return 0x42;
     }
 }
@@ -79,7 +81,7 @@ void smii_console_write (struct hw_device *dev, unsigned long addr, U8 val)
         putchar(val);
         break;
     default:
-        printf("In smii_console_write with addr=0x%08x val=0x%02x\n",addr, val);
+        printf("In smii_console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
     }
 }
 
@@ -211,16 +213,17 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
         if (ch == 10) return 13; // LF->CR
         return ch;
     default:
-        printf("In console_read with addr=0x%08x\n", addr);
+        printf("In console_read with addr=0x%08x\n", (unsigned int)addr);
         return 0x42;
     }
 }
 
 void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
+    fprintf(log_file,"%02x~%02x\n",(unsigned char)(addr&0xff),val);
     switch (addr) {
     case 0:
-        printf("In console_write with addr=0x%08x val=0x%02x\n",addr, val);
+        printf("In console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
         break;
 
     case 1:
@@ -231,14 +234,47 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         break;
 
     default:
-        printf("In console_write with addr=0x%08x val=0x%02x\n",addr, val);
+        printf("In console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
     }
 }
 
+// given a physical block number (0-7) return the offset into physical memory
+int mmu_offset(int blk) {
+    int tmp;
+    int idx;
+    if (mc_mmuadr & 0x20) {
+        // mmu enabled
+        // 0-7 if tr=0, 8-15 if tr=1
+        idx = blk | ((mc_mmuadr & 0x40) >> 3);
+        tmp = mc_pblk[idx];
+        return (tmp & 0x7f) << 13;
+    }
+    else {
+        return blk << 13;
+    }
+}
+
+// given a physical block number (0-7) return the flags
+int mmu_flags(int blk) {
+    int tmp;
+    int idx;
+    if (mc_mmuadr & 0x20) {
+        // mmu enabled
+        // 0-7 if tr=0, 8-15 if tr=1
+        idx = blk | ((mc_mmuadr & 0x40) >> 3);
+        tmp = mc_pblk[idx];
+        return (tmp >> 7) == 1 ? MAP_READABLE : MAP_READWRITE;
+    }
+    else {
+        return MAP_READWRITE;
+    }
+}
+
+
 /* SDCARD and memory mapper
-   FFDF SDCARD MAPPER  wo remaps 2 RAM windows
-   FFDE SDCARD ROMDIS  wo bit 0 disables ROM when 1
-   FFDD SDCARD PROTECT wo write protect in resolution of 8KByte
+   FFDF SDCARD MMUDAT  wo
+   FFDE SDCARD MMUADR  wo
+   FFDD SDCARD TIMER   rw
    FFDC SDCARD SDLBA2  wo
    FFDB SDCARD SDLBA1  wo
    FFDA SDCARD SDLBA0  wo
@@ -277,41 +313,35 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
    error if too much data written or read or if command while
    not idle.
  */
-// Use values of mc_protect, mc_romdis, mc_mapper to set up address mappings.
-void sdmapper_remap()
+void sdmapper_remap(int update_table)
 {
     int i;
+
+    if (update_table) {
+        // MMUDAT write, so update appropriate mapping register
+        mc_pblk[mc_mmuadr & 0xf] = mc_mmudat;
+    }
+
+    // now update mapping based on mc_mmuadr, mc_pblk[]
+
     //[NAC HACK 2015May06] Yeuch. Horrible how I have had to hardwire the device numbers.
     //overall, it would be better if I could pick them in the first place.
 
 
-    //      addr    dev  offset  len  flags
+    //      addr    dev  offset         len     flags
 
-    // 0x0000-0x1FFF always direct mapped to RAM
-    bus_map(0x0000, 1,   0x0000, 0x2000, (mc_protect & 1) ? MAP_READABLE : MAP_READWRITE);
-
-    // 0x2000-0x3FFF always direct mapped to RAM
-    bus_map(0x2000, 1,   0x2000, 0x2000, (mc_protect & 2) ? MAP_READABLE : MAP_READWRITE);
-
-    // 0x4000-0x5FFF always direct mapped to RAM
-    bus_map(0x4000, 1,   0x4000, 0x2000, (mc_protect & 4) ? MAP_READABLE : MAP_READWRITE);
-
-    // 0x6000-0x7FFF always direct mapped to RAM
-    bus_map(0x6000, 1,   0x6000, 0x2000, (mc_protect & 8) ? MAP_READABLE : MAP_READWRITE);
-
-    // 0x8000-0x9FFF always direct mapped to RAM
-    bus_map(0x8000, 1,   0x8000, 0x2000, (mc_protect & 16) ? MAP_READABLE : MAP_READWRITE);
-
-    // 0xA000-0xBFFF always direct mapped to RAM
-    bus_map(0xA000, 1,   0xA000, 0x2000, (mc_protect & 32) ? MAP_READABLE : MAP_READWRITE);
-
-    // 0xC000-0xDFFF remappable RAM
-    bus_map(0xC000, 1,   (mc_mapper & 0xf)<<13, 0x2000, (mc_protect & 64) ? MAP_READABLE : MAP_READWRITE);
+    bus_map(0x0000, 1,   mmu_offset(0), 0x2000, mmu_flags(0));
+    bus_map(0x2000, 1,   mmu_offset(1), 0x2000, mmu_flags(1));
+    bus_map(0x4000, 1,   mmu_offset(2), 0x2000, mmu_flags(2));
+    bus_map(0x6000, 1,   mmu_offset(3), 0x2000, mmu_flags(3));
+    bus_map(0x8000, 1,   mmu_offset(4), 0x2000, mmu_flags(4));
+    bus_map(0xA000, 1,   mmu_offset(5), 0x2000, mmu_flags(5));
+    bus_map(0xC000, 1,   mmu_offset(6), 0x2000, mmu_flags(6));
 
     // 0xE000-0xFFFF ROM or remappable RAM
-    if (mc_romdis & 1) {
-        // ROM disabled; map RAM
-        bus_map(0xE000, 1,   (mc_mapper & 0xf0)<<9, 0x2000, (mc_protect & 128) ? MAP_READABLE : MAP_READWRITE);
+    if (mc_mmuadr & 0x80) {
+        // ROM disabled; map RAM.
+        bus_map(0xE000, 1,   mmu_offset(7), 0x2000, mmu_flags(7));
     }
     else {
         // ROM
@@ -333,9 +363,11 @@ void sdmapper_remap()
             // bus address of the location.
             // Access permission inherited from underlying
             // device, which is exactly what I want.
-            if (mc_romdis) {
-                // RAM. Offset is a function of paging register
-                ioexpand_attach(mc_iodev, i, ((mc_mapper & 0xf0)<<9) + 0x1F80 + (i*8), mc_ram);
+            if (mc_mmuadr & 0x80) {
+                // ROM is disabled; map RAM. Offset is a function of paging register
+                // [NAC HACK 2015Jun26] was:
+                //                ioexpand_attach(mc_iodev, i, ((mc_mapper & 0xf0)<<9) + 0x1F80 + (i*8), mc_ram);
+                ioexpand_attach(mc_iodev, i, mmu_offset(7) + 0x1F80 + (i*8), mc_ram);
             }
             else {
                 // ROM
@@ -354,6 +386,7 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
     case 0: // SDDATA
         switch (mc_state) {
         case 0: case 1: case 2:
+            fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
             return 0xff;
         case 3: // in read
             if (mc_poll == 3) {
@@ -362,19 +395,23 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
                     mc_state = 2; // final read then back to idle
                 }
                 if (mc_dindex < 512) {
+                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_data[mc_dindex]);
                     return mc_data[mc_dindex++];
                 }
                 else {
                     printf("ERROR attempt to read too much data from sd block\n");
+                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
                     return 0xff;
                 }
             }
             else {
                 printf("ERROR attempt to read sd block when data not yet available\n");
+                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
                 return 0xff;
             }
         case 4: // in write
             printf("ERROR attempt to read sd data during write command\n");
+            fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
             return 0xff;
         }
         break; // unreachable
@@ -382,32 +419,47 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
         switch (mc_state)
             {
             case 0: // busy and always will remain so
+                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x90);
                 return 0x90;
             case 1: // count polls and initialise
                 mc_poll++;
                 if (mc_poll == 16)
                     mc_state = 2;
+                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x90);
                 return 0x90;
             case 2: // idle.
+                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x80);
                 return 0x80;
             case 3: // in read
                 if (mc_poll < 3)
                     mc_poll++;
-                if (mc_poll == 3)
+                if (mc_poll == 3) {
+                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xe0);
                     return 0xe0; // data available
-                else
+                }
+                else {
+                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xa0);
                     return 0xa0; // still waiting TODO maybe 20
+                }
             case 4: // in write
                 if (mc_poll < 3)
                     mc_poll++;
-                if (mc_poll == 3)
+                if (mc_poll == 3) {
+                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xa0);
                     return 0xa0; // space available
-                else
+                }
+                else {
+                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x20);
                     return 0x20; // still waiting
+                }
             }
         break; // unreachable
+    case 5: // TIMER
+        fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_timer);
+        return mc_timer;
     default:
-        printf("INFO In sdmapper_read with addr=0x%08x\n", addr);
+        printf("INFO In sdmapper_read with addr=0x%08x\n", (unsigned char)addr);
+        fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x42);
         return 0x42;
     }
 }
@@ -417,6 +469,7 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
     int retvar;
     //printf("INFO In sdmapper_write with addr=0x%08x, mc_state=%d mc_poll=%d mc_dindex=%d\n", addr, mc_state, mc_poll, mc_dindex);
+    fprintf(log_file,"%02x>%02x\n",(unsigned char)(addr&0xff),val);
     switch (addr) {
     case 0: // SDDATA
         switch (mc_state) {
@@ -503,17 +556,16 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
     case 4: // SDLBA2
         mc_sdlba2 = val;
         break;
-    case 5: // PROTECT
-        mc_protect = val;
-        sdmapper_remap();
+    case 5: // TIMER
+        mc_timer = val;
         break;
-    case 6: // ROMDIS
-        mc_romdis = val;
-        sdmapper_remap();
+    case 6: // MMUADR
+        mc_mmuadr = val;
+        sdmapper_remap(0); // 0=> remap memory based on mc_mmuadr
         break;
-    case 7: // MAPPER
-        mc_mapper = val;
-        sdmapper_remap();
+    case 7: // MMUDAT
+        mc_mmudat = val;
+        sdmapper_remap(1); // 1=> update mc_pblk[] then remap memory based on mc_mmuadr
         break;
     }
 }
@@ -549,15 +601,14 @@ void multicomp09_init (const char *boot_rom_file)
     struct hw_device* romdev;
     int i;
 
-    /* RAM is 128Kbytes. Low 6, 8K chunks are always mapped into
-       the address space. The upper 2, 8K chunks (CD, EF) are
-       windows into any of the 16, 8K chunks via the mc_mapping
-       register.
+    /* RAM is 128Kbytes. With MMU disabled low 64K is mapped linearly
+       otherwise, it is mapped in 8K chunks. Each chunk has a separate
+       write protect.
     */
     ramdev = ram_create(MULTICOMP09_RAMMAX);
 
     /* ROM is 8Kbytes. Usually sits from E000 to FFFF but can be disabled
-       by writing 1 to mc_romdis.
+       by writing 0x80 to MMUADR
     */
     romdev = rom_create (boot_rom_file, 0x2000);
 
@@ -609,7 +660,7 @@ void multicomp09_init (const char *boot_rom_file)
     /* Now map all the devices into the address space, in accordance
        with the settings of the memory mapper.
     */
-    sdmapper_remap();
+    sdmapper_remap(0);
 
 
     /* If a file multicomp09.bat exists, supply input from it until
@@ -626,6 +677,11 @@ void multicomp09_init (const char *boot_rom_file)
         mc_state = 1;
     else
         mc_state = 0;
+    /*
+      log file
+    */
+    log_file = file_open(NULL, "multicomp09.log", "w+b");
+    fprintf(log_file, "===Log file\n");
 }
 
 
