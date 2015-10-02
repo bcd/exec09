@@ -563,8 +563,12 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
         mc_timer = val;
         break;
     case 6: // MMUADR
-        mc_mmuadr = val;
-        sdmapper_remap(0); // 0=> remap memory based on mc_mmuadr
+        // ignore writes where bit(4) is set; this is the single-step/nmi control
+        // and it forces the other write data to be ignored
+        if ((val & 0x10) == 0) {
+            mc_mmuadr = val;
+            sdmapper_remap(0); // 0=> remap memory based on mc_mmuadr
+        }
         break;
     case 7: // MMUDAT
         mc_mmudat = val;
