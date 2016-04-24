@@ -185,26 +185,35 @@ struct machine smii_machine =
 
 
 /********************************************************************
- * The Multicomp 6809 machine, a platform for Dragon BASIC.
- * This version has 1 serial port, 56K RAM and 8K ROM, SDCARD i/f.
- * The serial port is in a "hole" at 0xFFD0/0xFFD1
+ * The Multicomp 6809 machine
+ * This version has 3 serial ports, 56K RAM and 8K ROM, SDCARD i/f.
+ * GPIO, memory-mapper and timer interrupt.
+ * The I/O is all at 0xFFD0-0xFFDF
  * See:
  * Grant Searle http://searle.hostei.com/grant/Multicomp/index.html
+ * and:
+ * https://www.retrobrewcomputers.org/doku.php?id=boards:sbc:multicomp:cycloneii-c:start
  *
  ********************************************************************/
 
 /* UART-style console. Console input is blocking (but should not be)
+   offset 0,1 - 1st UART - virtual UART. Main console
+   offset 2,3 - 2nd UART
+   offset 4,5 - 3rd UART
+   offset 6,7 - GPIO unit
  */
 U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
 {
     //printf("In console_read with addr=0x%08x pc=0x%04x\n", (unsigned int)addr, get_pc());
     unsigned char ch;
     switch (addr) {
-    case 00:
+    case 0:
+    case 2:
+    case 4:
         // status bit
         // hardware supports bits [7], [1], [0]
         return 0x03;
-    case 01:
+    case 1:
         if (batch_file && fread( &ch, 1, 1, batch_file)) {
         }
         else {
@@ -214,6 +223,10 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
         if (ch == 127) return 8; // rubout->backspace
         if (ch == 10) return 13; // LF->CR
         return ch;
+    case 6:
+    case 7:
+        printf("[gpio rd addr=0x%08x]\n", (unsigned int)addr);
+        return 0x42;
     default:
         printf("In console_read with addr=0x%08x\n", (unsigned int)addr);
         return 0x42;
@@ -226,14 +239,23 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
     fprintf(log_file,"%02x~%02x\n",(unsigned char)(addr&0xff),val);
     switch (addr) {
     case 0:
-        printf("In console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
+    case 2:
+    case 4:
+        if (val==3) {
+            printf("[uart%1d reset]", (unsigned int)(1 + addr>>1));
+        }
+        else {
+            printf("[uart%1d status write of 0x%02x\n", (unsigned int)(1 + addr>>1), val);
+        }
         break;
 
     case 1:
-        //if ((val != 0x0d) && (val != 0x20) && (val != 0x0a) && (val < '0')) {
-        //    printf("Char 0x%02x", val);
-        //}
-        putchar(val);
+        putchar(val); /* UART 1*/
+        break;
+
+    case 6:
+    case 7:
+        printf("[gpio wr addr=0x%08x val=0x%02x]\n", (unsigned int)addr, val);
         break;
 
     default:
@@ -640,7 +662,7 @@ void multicomp09_init (const char *boot_rom_file)
 
     for (i=0; i<16; i++) {
         if (i==10) {
-            // 0xFFD0-0xFFD7 -- VDU and UART
+            // 0xFFD0-0xFFD7 -- VDU/UART and GPIO
             ioexpand_attach(iodev, i, 0, multicomp09_console);
         }
         else if (i==11) {
