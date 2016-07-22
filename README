@@ -84,44 +84,102 @@ The simulator supports interactive debugging similar to that
 provided by 'gdb'.
 
 b <expr>
-	Set a breakpoint at the given address.
+	Set a breakpoint on EXECUTION at the given address. Eg:
+	break 0xf003
+	- break next time
+	break 0xf000 ignore 4
+	- ignore 4 times then break on 5th time
+	break 0x1200 if <expression>
+	break 0x1200 if $s==02:0x0043
+	- break if the S register has the value shown.
+
+wa <expr>
+	Set a watchpoint on WRITE to the given address. Eg:
+	wa 0xf003
+	- break and report on each write to this address.
+	wa 0xf003 print
+	- on each write to this address report but do not stop
+	  execution.
+	wa 0xf003 mask 0x10
+	- break and report on each write to this address but
+	  only if the write data ANDed with the mask value is
+	  non-zero.
+
+rwa <expr>
+	Set a watchpoint on READ from the given address. See
+	examples above for 'wa'.
+
+awa <expr>
+	Set a watchpoint on ACCESS (read or write) at the given
+	address. See examples above for 'wa'.
 
 bl
 	List all breakpoints/watchpoints.
 
-c
-	Continue running.
-
 d <num>
 	Delete a breakpoint/watchpoint.
 
-di <expr>
-	Add a display expression.  The value of the expression
-	is display anytime the CPU breaks.
+c
+	Continue execution.
 
-h
+di <expr>
+	Add a display expression. The value of the expression
+	is displayed any time that the CPU breaks. Eg:
+	di $d $x $y
+	- print current value of D X and Y registers each time
+	  the CPU breaks.
+
+dump
+	Save machine-specific state information to a file,
+	typically named <machine>.dmp. The dump might be
+	in readable or in binary format.
+
+dumpi <1 | 0>
+	Turn instruction dump on or off. With no argument, report
+	the current instruction dump state (on or off).
+	With instruction dump off, the 'c', 'n', 's' commands
+        will report the last instruction that was executed before
+	control returned to the prompt. With instruction dump on,
+	those commands report each instruction as it is executed.
+	Instruction dump is OFF by default.
+
+h or ?
 	Display help.
 
 l <expr>
-	List CPU instructions.
+	List (disassemble) CPU instructions. Default is to start
+	at the current value of the PC.
 
 me <expr>
 	Measure the amount of time that a function named by
 	<expr> takes.
 
 n
-	Continue until the next instruction is reached.
-	If the current instruction is a call, then
-	the debugger resumes after control returns.
+	Continue execution until the Next instruction is reached.
+	If the current instruction is a call, then the debugger
+	resumes after control returns.
 
 p <expr>
-	Print the value of an expression.  See "Expressions" below.
+	Print the value of an expression. See "Expressions" below.
+
+pc <expr>
+	Set the CPU program counter to <expr> and list
+	(disassemble) CPU instructions at that address. Without
+	<expr>, acts like 'regs'.
 
 q
 	Quit the simulator.
 
+regs
+	Display the current value of the CPU registers.
+
+
 re
 	Reset the CPU/machine.
+
+restore
+	Restore machine state from a 'dump' file. NOT CURRENTLY
+	IMPLEMENTED.
 
 runfor <expr>
 	Continue but break after a certain period of (simulated) time.
@@ -141,20 +199,84 @@ so <file>
 
 sym <file>
 	Load a symbol table file.  Currently, the only format
-	supported is an aslink map file.
+	supported is lwlink map file.
 
 td
-	Dump the last 256 instructions that were executed.
+	Trace Dump. Display the last 256 instructions that were
+	executed.
 
-wa <expr>
-	Add a watchpoint.  The CPU will break when the
-	memory given by <expr> is modified.
+vars
+	Show all program variables.
 
 x <expr>
-	Examine target memory at the address given.
+	Examine target memory at the address given. Eg:
+	x/nfu addr
+	- nfu specifies number, format, unit respectively. See
+          below.
+	x/nfu
+	- continue from previous address, in new format.
+	x addr
+	- use previous format, continue from previous address.
+	x
+	- use previous format, continue from previous address.
+
+	n is the repeat count (default 1). It specifies how much
+	  memory (counting by units u to display. Display is
+	  formated multi-line if necessary.
+	f is the display format (default x for hex). Options:
+	  x X d u o a s (match printf) and i (instructions).
+	u is the unit size (default b for byte). Options:
+	  b (byte) w (word: 2 bytes)
+
+	The addr can be specified as an expression. Eg:
+	x $pc
+	x $pc+8
+
+	white-space is not supported in the expression, so
+	that '$pc +8' is treated in the same way as '$pc'.
 
 info
         Describe machine, devices and address mapping.
+
+-----------------------------------------------------------------
+Symbol Tables
+
+Exec09 maintains variables, in 3 separate symbol tables:
+
+- The program table. This is loaded automatically at startup or
+  using the 'sym' command. The contents of this table is
+  displayed by the 'vars' command.
+  Entries in the program table are annotated onto 'list', 'step'
+  'x' output.
+
+- The auto table. The variables in this table are pre-defined.
+  The following variables refer to CPU registers:
+    pc a y u s d a b dp cc
+  The following variables refer to simulator state:
+    cycles - number of cycles since reset.
+    et - number of cycles elapsed since et was last inspected.
+    irqload - the average number of cycles spent in IRQ.
+
+  Auto variables can be referenced in expressions using a $ prefix.
+
+- The internal table. The ...
+
+
+
+
+-----------------------------------------------------------------
+Expressions
+
+set
+        does nothing
+
+set foo
+        do_set foo
+set var
+        do_set $
+
+set var foo
+        do_set foo (ie, same as 'set foo')
 
 -----------------------------------------------------------------
 Original README text from Arto:
