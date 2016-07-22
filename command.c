@@ -184,13 +184,13 @@ void eval_assign (char *expr, unsigned long val)
 
 unsigned long target_read (absolute_address_t addr, unsigned int size)
 {
-	switch (size)
-	{
-		case 1:
-			return abs_read8 (addr);
-		case 2:
-			return abs_read16 (addr);
-	}
+   switch (size)
+   {
+      case 1:
+         return abs_read8 (addr);
+      case 2:
+         return abs_read16 (addr);
+   }
 }
 
 void parse_format_flag (const char *flags, unsigned char *formatp)
@@ -199,6 +199,7 @@ void parse_format_flag (const char *flags, unsigned char *formatp)
    {
       switch (*flags)
       {
+         case 'X':
          case 'x':
          case 'd':
          case 'u':
@@ -266,17 +267,17 @@ int fold_binary (char *expr, const char op, unsigned long *valp)
       return 0;
 
    *p++ = '\0';
-	val1 = eval (expr);
-	val2 = eval (p);
+   val1 = eval (expr);
+   val2 = eval (p);
 
-	switch (op)
-	{
-		case '+': *valp = val1 + val2; break;
-		case '-': *valp = val1 - val2; break;
-		case '*': *valp = val1 * val2; break;
-		case '/': *valp = val1 / val2; break;
-	}
-	return 1;
+   switch (op)
+   {
+      case '+': *valp = val1 + val2; break;
+      case '-': *valp = val1 - val2; break;
+      case '*': *valp = val1 * val2; break;
+      case '/': *valp = val1 / val2; break;
+   }
+   return 1;
 }
 
 /**
@@ -389,6 +390,7 @@ breakpoint_t* brkalloc (void)
          br->keep_running = 0;
          br->ignore_count = 0;
          br->temp = 0;
+         br->on_execute = 0;
          brk_enable (br, 1);
          return br;
       }
@@ -454,7 +456,7 @@ void brkprint (breakpoint_t *brkpt)
    if (brkpt->ignore_count)
       printf (", ignore %d times\n", brkpt->ignore_count);
    if (brkpt->write_mask)
-      printf (", mask %02X\n", brkpt->write_mask);
+      printf (", mask 0x%02X\n", brkpt->write_mask);
    putchar ('\n');
 }
 
@@ -503,18 +505,19 @@ void print_value (unsigned long val, datatype_t *typep)
          break;
    }
 
-	if (typep->format == 'x')
+   if ((typep->format == 'x') | (typep->format == 'X'))
    {
-		printf ("0x");
+      printf ("0x");
       sprintf (f, "%%0%d%c", typep->size * 2, typep->format);
    }
-	else if (typep->format == 'o')
+   else if (typep->format == 'o')
    {
-		printf ("0");
+      printf ("0");
       sprintf (f, "%%%c", typep->format);
    }
    else
       sprintf (f, "%%%c", typep->format);
+
    printf (f, val);
 }
 
@@ -523,18 +526,18 @@ void display_print (void)
    unsigned int n;
    char comma = '\0';
 
-	for (n = 0; n < MAX_DISPLAYS; n++)
-	{
-		display_t *ds = &displaytab[n];
-		if (ds->used)
-		{
+   for (n = 0; n < MAX_DISPLAYS; n++)
+   {
+      display_t *ds = &displaytab[n];
+      if (ds->used)
+      {
          char expr[256];
          strcpy (expr, ds->expr);
          printf ("%c %s = ", comma, expr);
          print_value (eval (expr), &ds->type);
          comma = ',';
-		}
-	}
+      }
+   }
 
    if (comma)
       putchar ('\n');
@@ -542,45 +545,46 @@ void display_print (void)
 
 int print_insn (absolute_address_t addr)
 {
-	char buf[64];
-	int size = dasm (buf, addr);
-	printf ("%s", buf);
-	return size;
+   char buf[64];
+   int size = dasm (buf, addr);
+   printf ("%s", buf);
+   return size;
 }
 
 void do_examine (void)
 {
    unsigned int n;
-	unsigned int objs_per_line = 16;
+   unsigned int objs_per_line = 16;
 
    if (isdigit (*command_flags))
       examine_repeat = strtoul (command_flags, &command_flags, 0);
 
-	if (*command_flags == 'i')
-		examine_type.format = *command_flags;
-	else
+   if (*command_flags == 'i')
+      examine_type.format = *command_flags;
+   else
       parse_format_flag (command_flags, &examine_type.format);
+
    parse_size_flag (command_flags, &examine_type.size);
 
-	switch (examine_type.format)
+   switch (examine_type.format)
    {
       case 'i':
-		   objs_per_line = 1;
+         objs_per_line = 1;
          break;
 
       case 'w':
-		   objs_per_line = 8;
+         objs_per_line = 8;
          break;
    }
 
    for (n = 0; n < examine_repeat; n++)
    {
-		if ((n % objs_per_line) == 0)
-		{
-			putchar ('\n');
-			print_addr (examine_addr);
-			printf (": ");
-		}
+      if ((n % objs_per_line) == 0)
+      {
+         putchar ('\n');
+         print_addr (examine_addr);
+         printf (": ");
+      }
 
       switch (examine_type.format)
       {
@@ -615,7 +619,8 @@ void do_print (char *expr)
 
 void do_set (char *expr)
 {
-	(void)eval (expr);
+   printf("In do_set with %s\n",expr);
+   (void)eval (expr);
 }
 
 /* TODO - WPC */
@@ -701,6 +706,8 @@ void cmd_set (void)
 {
    char *arg = getarg ();
 
+   if (!arg)
+      return;
    if (!strcmp (arg, "var"))
       arg = getarg ();
 
@@ -761,7 +768,7 @@ void cmd_watch1 (int on_read, int on_write)
    {
       arg = getarg ();
       if (!arg)
-         return;
+         break;
 
       if (!strcmp (arg, "print"))
          br->keep_running = 1;
@@ -948,15 +955,15 @@ void cmd_regs (void)
 
 void cmd_pc(void)
 {
-	char* arg = getarg();
-	if (!arg)
-	{
-		cmd_regs();
-		return;
-	}
+   char* arg = getarg();
+   if (!arg)
+   {
+      cmd_regs();
+      return;
+   }
 
-	set_pc(eval_mem(arg, LVALUE));
-	cmd_list();
+   set_pc(eval_mem(arg, LVALUE));
+   cmd_list();
 }
 
 void cmd_vars (void)
@@ -1181,38 +1188,36 @@ command_handler_t command_lookup (const char *cmd)
 
 int print_insn_long (absolute_address_t addr)
 {
-	char buf[64];
-	int i;
-	int size = dasm(buf, addr);
+   char buf[64];
+   int i;
+   int size = dasm(buf, addr);
 
-	const char* name;
+   const char* name;
 
-	print_device_name(addr >> 28);
-	putchar(':');
-	printf("0x%04X ", addr & 0xFFFFFF);
+   print_device_name(addr >> 28);
+   putchar(':');
+   printf("0x%04X ", addr & 0xFFFFFF);
 
-	for (i = 0; i < size; i++)
-		printf("%02X", abs_read8(addr + i));
+   for (i = 0; i < size; i++)
+      printf("%02X", abs_read8(addr + i));
 
-	for (i = 0; i < 4 - size; i++)
-		printf("  ");
+   for (i = 0; i < 4 - size; i++)
+      printf("  ");
 
-	name = sym_lookup(&program_symtab, addr);
-	if (name)
-		printf("  %-12.12s", name);
-	else
-		printf("%-14.14s", "");
+   name = sym_lookup(&program_symtab, addr);
+   if (name)
+      printf("  %-12.12s", name);
+   else
+      printf("%-14.14s", "");
 
-	printf("%s", buf);
-
-	putchar ('\n');
-
-	return size;
+   printf("%s", buf);
+   putchar ('\n');
+   return size;
 }
 
 void print_current_insn (void)
 {
-	print_insn_long(to_absolute(get_pc()));
+   print_insn_long(to_absolute(get_pc()));
 }
 
 int command_exec (FILE *infile)
@@ -1364,37 +1369,37 @@ void command_insn_hook (void)
 {
    target_addr_t pc;
    absolute_address_t abspc;
-	breakpoint_t *br;
+   breakpoint_t *br;
 
    pc = get_pc ();
    command_trace_insn (pc);
 
-	if (active_break_count == 0)
-		return;
+   if (active_break_count == 0)
+       return;
 
-	abspc = to_absolute (pc);
-	br = brkfind_by_addr (abspc);
-	if (br && br->enabled && br->on_execute)
-	{
-      breakpoint_hit (br);
-      if (monitor_on == 0)
-         return;
-      if (br->temp)
-         brkfree (br);
-      else
-		   printf ("Breakpoint %d reached.\n", br->id);
-	}
+   abspc = to_absolute (pc);
+   br = brkfind_by_addr (abspc);
+   if (br && br->enabled && br->on_execute)
+   {
+       breakpoint_hit (br);
+       if (monitor_on == 0)
+           return;
+       if (br->temp)
+           brkfree (br);
+       else
+           printf ("Breakpoint %d reached.\n", br->id);
+   }
 }
 
 void command_read_hook (absolute_address_t addr)
 {
-	breakpoint_t *br;
+   breakpoint_t *br;
 
    if (active_break_count == 0)
       return;
 
    br = brkfind_by_addr (addr);
-	if (br && br->enabled && br->on_read)
+   if (br && br->enabled && br->on_read)
    {
       printf ("Watchpoint %d triggered. [", br->id);
       print_addr (addr);
@@ -1405,7 +1410,7 @@ void command_read_hook (absolute_address_t addr)
 
 void command_write_hook (absolute_address_t addr, U8 val)
 {
-	breakpoint_t *br;
+   breakpoint_t *br;
 
    if (active_break_count != 0)
    {
@@ -1416,15 +1421,13 @@ void command_write_hook (absolute_address_t addr, U8 val)
          {
             int mask_ok = ((br->last_write & br->write_mask) !=
                (val & br->write_mask));
-
             br->last_write = val;
             if (!mask_ok)
                return;
          }
 
          breakpoint_hit (br);
-         if (monitor_on == 0)
-            return;
+
          printf ("Watchpoint %d triggered. [", br->id);
          print_addr (addr);
          printf (" = 0x%02X", val);
@@ -1455,37 +1458,37 @@ void command_periodic (void)
 }
 
 void pc_virtual (unsigned long *val, int writep) {
-	writep ? set_pc (*val) : (*val = get_pc ());
+   writep ? set_pc (*val) : (*val = get_pc ());
 }
 void x_virtual (unsigned long *val, int writep) {
-	writep ? set_x (*val) : (*val = get_x ());
+   writep ? set_x (*val) : (*val = get_x ());
 }
 void y_virtual (unsigned long *val, int writep) {
-	writep ? set_y (*val) : (*val = get_y ());
+   writep ? set_y (*val) : (*val = get_y ());
 }
 void u_virtual (unsigned long *val, int writep) {
-	writep ? set_u (*val) : (*val = get_u ());
+   writep ? set_u (*val) : (*val = get_u ());
 }
 void s_virtual (unsigned long *val, int writep) {
-	writep ? set_s (*val) : (*val = get_s ());
+   writep ? set_s (*val) : (*val = get_s ());
 }
 void d_virtual (unsigned long *val, int writep) {
-	writep ? set_d (*val) : (*val = get_d ());
+   writep ? set_d (*val) : (*val = get_d ());
 }
 void a_virtual (unsigned long *val, int writep) {
-	writep ? set_a (*val) : (*val = get_a ());
+   writep ? set_a (*val) : (*val = get_a ());
 }
 void b_virtual (unsigned long *val, int writep) {
-	writep ? set_b (*val) : (*val = get_b ());
+   writep ? set_b (*val) : (*val = get_b ());
 }
 void dp_virtual (unsigned long *val, int writep) {
-	writep ? set_dp (*val) : (*val = get_dp ());
+   writep ? set_dp (*val) : (*val = get_dp ());
 }
 void cc_virtual (unsigned long *val, int writep) {
-	writep ? set_cc (*val) : (*val = get_cc ());
+   writep ? set_cc (*val) : (*val = get_cc ());
 }
 void irq_load_virtual (unsigned long *val, int writep) {
-	if (!writep)
+   if (!writep)
       *val = irq_cycles / IRQ_CYCLE_COUNTS;
 }
 
@@ -1536,10 +1539,10 @@ void command_init (void)
    sym_add (&auto_symtab, "et", (unsigned long)et_virtual, SYM_AUTO);
    sym_add (&auto_symtab, "irqload", (unsigned long)irq_load_virtual, SYM_AUTO);
 
-   examine_type.format = 'x';
+   examine_type.format = 'X'; /* hex with upper-case A-F */
    examine_type.size = 1;
 
-   print_type.format = 'x';
+   print_type.format = 'X';
    print_type.size = 1;
 
    command_input = stdin;
