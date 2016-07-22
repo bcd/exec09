@@ -1088,7 +1088,7 @@ int load_map_file (const char *name)
 	FILE *fp;
 	char map_filename[256];
 	char buf[256];
-	char *value_ptr, *id_ptr;
+	char *tok_ptr, *value_ptr, *id_ptr;
 	target_addr_t value;
 	char *file_ptr;
 	struct symbol *sym = NULL;
@@ -1121,39 +1121,20 @@ int load_map_file (const char *name)
 		if (feof (fp))
 			break;
 
-		value_ptr = buf;
-		if (!strncmp (value_ptr, "page", 4))
-		{
-			unsigned char page = (unsigned char) strtoul(value_ptr+4, NULL, 10);
-			if (!strcmp (machine->name, "wpc"))
-				wpc_set_rom_page (page);
-			sym = NULL;
-			continue;
-		}
+                tok_ptr = strtok (buf, " \t\n");
+                if (0 != strcmp(tok_ptr, "Symbol:"))
+                    continue;
 
-		if (strncmp (value_ptr, "      ", 6))
-			continue;
+                id_ptr =  strtok(NULL, " \t\n");
+                // skip over filename
+                tok_ptr = strtok (NULL, " \t\n");
+                // skip over "="
+                tok_ptr = strtok (NULL, " \t\n");
+                value_ptr = strtok (NULL, " \t\n");
+                // get value as hex string
+                value = (target_addr_t) strtoul(value_ptr, NULL, 16);
 
-		while (*value_ptr == ' ')
-			value_ptr++;
-
-		value = (target_addr_t) strtoul(value_ptr, &id_ptr, 16);
-		if (id_ptr == value_ptr)
-			continue;
-
-		while (*id_ptr == ' ')
-			id_ptr++;
-
-		id_ptr = strtok (id_ptr, " \t\n");
-		if (((*id_ptr == 'l') || (*id_ptr == 's')) && (id_ptr[1] == '_'))
-			continue;
-		++id_ptr;
-
-		file_ptr = strtok (NULL, " \t\n");
-
-		if (sym)
-			sym->ty.size = to_absolute (value) - sym->value;
-		sym = sym_add (&program_symtab, id_ptr, to_absolute (value), 0); /* file_ptr? */
+		sym_add (&program_symtab, id_ptr, to_absolute (value), 0);
 	}
 
 	fclose (fp);
