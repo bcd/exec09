@@ -29,6 +29,7 @@
 #define MISSING 0xff
 #define mmu_device (device_table[0])
 
+extern FILE *log_file;
 struct machine *machine;
 
 unsigned int device_count = 0;
@@ -281,6 +282,7 @@ U16 cpu_read16 (unsigned int addr)
 void cpu_write8 (unsigned int addr, U8 val)
 {
         //printf("write 0x%04x<-0x%02x\n", addr, val);
+        //fprintf(log_file,"wr 0x%04x<-0x%02x\n", addr, val);
 	struct bus_map *map = find_map (addr);
 	struct hw_device *dev = find_device (addr, map->devid);
 	struct hw_class *class_ptr = dev->class_ptr;
@@ -319,6 +321,13 @@ void abs_write8 (absolute_address_t addr, U8 val)
 
 absolute_address_t to_absolute (unsigned long cpuaddr)
 {
+	/* if it's greater than 0xffff, it's already absolute
+           and we cannot convert it again. If it's less than
+           0x10000 it might already be absolute but it's safe
+           to convert it a second time.
+        */
+	if (cpuaddr > 0xffff) return (absolute_address_t)cpuaddr;
+
 	struct bus_map *map = find_map (cpuaddr);
 	struct hw_device *dev = find_device (cpuaddr, map->devid);
 	unsigned long phy_addr = map->offset + cpuaddr % BUS_MAP_SIZE;

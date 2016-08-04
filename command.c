@@ -1,3 +1,5 @@
+/* -*- c-file-style: "ellemtel"  -*- */
+
 #include "6809.h"
 #include "monitor.h"
 #include "machine.h"
@@ -76,8 +78,8 @@ unsigned int irq_cycle_tab[IRQ_CYCLE_COUNTS] = { 0, };
 unsigned int irq_cycle_entry = 0;
 unsigned long irq_cycles = 0;
 
-unsigned long eval (char *expr);
-unsigned long eval_mem (char *expr, eval_mode_t mode);
+unsigned long eval (char *expr, char *eflag);
+unsigned long eval_mem (char *expr, eval_mode_t mode, char *eflag);
 extern int auto_break_insn_count;
 
 FILE *command_input;
@@ -111,6 +113,18 @@ void syntax_error (const char *string)
    fprintf (stderr, "error: %s\n", string);
 }
 
+void report_errors (const char eflag)
+{
+   if (eflag &    1) fprintf (stderr, "error: bad operator in expression\n");
+   if (eflag &    2) fprintf (stderr, "error: bad lvalue in expression\n");
+   if (eflag &    4) fprintf (stderr, "error: bad rvalue in expression\n");
+   if (eflag &    8) fprintf (stderr, "error: non-existent symbol in expression\n");
+   if (eflag & 0x10) fprintf (stderr, "error: non-existent $symbol in expression\n");
+   if (eflag & 0x20) fprintf (stderr, "error: bad numeric literal\n");
+   if (eflag & 0x40) fprintf (stderr, "error: unrecognised $symbol in assignment\n");
+   if (eflag & 0x80) fprintf (stderr, "error: missing assignment\n");
+}
+
 void save_value (unsigned long val)
 {
    historytab[history_count++ % MAX_HISTORY] = val;
@@ -121,65 +135,65 @@ unsigned long eval_historical (unsigned int id)
    return historytab[id % MAX_HISTORY];
 }
 
-void assign_virtual (const char *name, unsigned long val)
+void assign_virtual (const char *name, unsigned long val, char *eflag)
 {
    unsigned long v_val;
 
-   /* First check for a special variable with this name, and
-    * invoke its write handler.  Otherwise, store to the
-    * user table. */
    if (!sym_find (&auto_symtab, name, &v_val, 0))
    {
       virtual_handler_t virtual = (virtual_handler_t)v_val;
-	   virtual (&val, 1);
+      virtual (&val, 1);
       return;
    }
-   sym_set (&internal_symtab, name, val, 0);
-
-   if (!strcmp (name, "thread_current"))
+   else if (!strcmp (name, "thread_current"))
    {
       printf ("Thread pointer initialized to ");
       print_addr (val);
       putchar ('\n');
       thread_current = val;
    }
+   else
+   {
+      *eflag = *eflag | 0x40; /* not found */
+   }
 }
 
-unsigned long eval_virtual (const char *name)
+unsigned long eval_virtual (const char *name, char *eflag)
 {
-	unsigned long val;
+   unsigned long val;
 
-   /* The name of the virtual is looked up in the global
-    * symbol table, which holds the pointer to a
-    * variable in simulator memory, or to a function
-    * that can compute the value on-the-fly. */
-	if (!sym_find (&auto_symtab, name, &val, 0))
-	{
-	   virtual_handler_t virtual = (virtual_handler_t)val;
-	   virtual (&val, 0);
-	}
-	else if (!sym_find (&internal_symtab, name, &val, 0))
+   /* The name of the virtual is looked up in the auto
+    * symbol table, which holds a function that can
+    * compute the value on-the-fly. If not found there
+    * a value of 0 is returned along with an error flag.
+    */
+   if (!sym_find (&auto_symtab, name, &val, 0))
    {
+      virtual_handler_t virtual = (virtual_handler_t)val;
+      virtual (&val, 0);
    }
    else
    {
-		return 0;
+      *eflag = *eflag | 0x10;
+      val = 0;
    }
 
-	return val;
+   return val;
 }
 
-void eval_assign (char *expr, unsigned long val)
+void eval_assign (char *expr, unsigned long val, char *eflag)
 {
-	if (*expr == '$')
-	{
-		assign_virtual (expr+1, val);
-	}
-	else
-	{
-		absolute_address_t dst = eval_mem(expr, LVALUE);
-		abs_write8(dst, (U8) val);
-	}
+   if (*expr == '$')
+   {
+      assign_virtual (expr+1, val, eflag);
+   }
+   else
+   {
+      absolute_address_t dst = eval_mem(expr, LVALUE, eflag);
+
+      if (!*eflag)
+         abs_write8(dst, (U8) val);
+   }
 }
 
 unsigned long target_read (absolute_address_t addr, unsigned int size)
@@ -193,6 +207,10 @@ unsigned long target_read (absolute_address_t addr, unsigned int size)
    }
 }
 
+/* Extract any valid format flags - ignore anything else
+ * allows format and size flags to be mingled but provides no way
+ * to detect and report unrecognised flags)
+ */
 void parse_format_flag (const char *flags, unsigned char *formatp)
 {
    while (*flags)
@@ -213,6 +231,10 @@ void parse_format_flag (const char *flags, unsigned char *formatp)
    }
 }
 
+/* Extract any valid size flags - ignore anything else
+ * (allows format and size flags to be mingled but provides no way
+ * to detect and report unrecognised flags)
+ */
 void parse_size_flag (const char *flags, unsigned int *sizep)
 {
    while (*flags)
@@ -241,34 +263,36 @@ char* match_binary (char *expr, const char *op, char **secondp)
    return expr;
 }
 
-int fold_comparisons (char *expr, unsigned long *value)
+int fold_comparisons (char *expr, unsigned long *value, char *eflag)
 {
    char *p;
    if (match_binary (expr, "==", &p))
-      *value = (eval (expr) == eval (p));
+      *value = (eval (expr, eflag) == eval (p, eflag));
    else if (match_binary (expr, "!=", &p))
-      *value = (eval (expr) != eval (p));
+      *value = (eval (expr, eflag) != eval (p, eflag));
    else
       return 0;
+
    return 1;
 }
 
-int fold_binary (char *expr, const char op, unsigned long *valp)
+int fold_binary (char *expr, const char op, unsigned long *valp, char *eflag)
 {
-	char *p;
-	unsigned long val1, val2;
+   char *p;
+   unsigned long val1, val2;
 
-	if ((p = strchr (expr, op)) == NULL)
-		return 0;
+   if ((p = strchr (expr, op)) == NULL)
+      return 0;
 
    /* If the operator is the first character of the expression,
-    * then it's really a unary and shouldn't match here. */
+    * then it's really a unary and shouldn't match here.
+    */
    if (p == expr)
       return 0;
 
    *p++ = '\0';
-   val1 = eval (expr);
-   val2 = eval (p);
+   val1 = eval (expr, eflag);
+   val2 = eval (p, eflag);
 
    switch (op)
    {
@@ -280,10 +304,10 @@ int fold_binary (char *expr, const char op, unsigned long *valp)
    return 1;
 }
 
-/**
+/*
  * Evaluate a memory expression, as an lvalue or rvalue.
  */
-unsigned long eval_mem (char *expr, eval_mode_t mode)
+unsigned long eval_mem (char *expr, eval_mode_t mode, char *eflag)
 {
    char *p;
    unsigned long val;
@@ -292,18 +316,21 @@ unsigned long eval_mem (char *expr, eval_mode_t mode)
    if ((p = strchr (expr, ':')) != NULL)
    {
       *p++ = '\0';
-      val = MAKE_ADDR (eval (expr), eval (p));
+      val = MAKE_ADDR (eval (expr, eflag), eval (p, eflag));
    }
-   else if (isalpha (*expr))
+   else if (isalpha (*expr) || (*expr == '_'))
    {
-      if (sym_find (&program_symtab, expr, &val, 0))
+      if (!sym_find (&program_symtab, expr, &val, 0));
+      else if (!sym_find (&internal_symtab, expr, &val, 0));
+      else
+      {
          val = 0;
+         *eflag = *eflag | 8;
+      }
    }
    else
    {
-      /* TODO - if expr is already in absolute form,
-      this explodes ! */
-      val = to_absolute (eval (expr));
+      val = to_absolute (eval (expr, eflag));
    }
 
    /* If mode is RVALUE, then dereference it */
@@ -313,7 +340,7 @@ unsigned long eval_mem (char *expr, eval_mode_t mode)
    return val;
 }
 
-/**
+/*
  * Evaluate an expression, given as a string.
  * The return is the value (rvalue) of the expression.
  *
@@ -321,44 +348,58 @@ unsigned long eval_mem (char *expr, eval_mode_t mode)
  * - Support typecasts ( {TYPE}ADDR )
  *
  */
-unsigned long eval(char *expr)
+unsigned long eval(char *expr, char *eflag)
 {
    char *p;
    unsigned long val;
 
-   if (fold_comparisons (expr, &val));
+   if (fold_comparisons (expr, &val, eflag));
    else if ((p = strchr (expr, '=')) != NULL)
-	{
+   {
+      /* Assignment. Change = to 0 to break the string in two.
+       * Remainder of eval is the LHS, p is the RHS
+       */
       *p++ = '\0';
-		val = eval (p);
-		eval_assign (expr, val);
-	}
-	else if (fold_binary (expr, '+', &val));
-	else if (fold_binary (expr, '-', &val));
-	else if (fold_binary (expr, '*', &val));
-	else if (fold_binary (expr, '/', &val));
+      val = eval (p, eflag); /* Evaluate RHS */
+      eval_assign (expr, val, eflag); /* Evaluate LHS and assign RHS value */
+   }
+   else if (fold_binary (expr, '+', &val, eflag));
+   else if (fold_binary (expr, '-', &val, eflag));
+   else if (fold_binary (expr, '*', &val, eflag));
+   else if (fold_binary (expr, '/', &val, eflag));
    else if (*expr == '$')
    {
-      if (expr[1] == '$')
-         val = eval_historical (history_count - strtoul (expr+2, NULL, 10));
-      else if (isdigit (expr[1]))
+      if (expr[1] == '$') /* $$n */
+         val = eval_historical (history_count-1 - strtoul (expr+2, NULL, 10));
+      else if (isdigit (expr[1])) /* $n */
          val = eval_historical (strtoul (expr+1, NULL, 10));
-      else if (!expr[1])
-         val = eval_historical (0);
-      else
-         val = eval_virtual (expr+1);
+      else if (!expr[1]) /* $ */
+         val = eval_historical (history_count-1);
+      else /* variable from one of the symbol tables */
+         val = eval_virtual (expr+1, eflag);
    }
+   /* For a symbol 'fred' 'print fred' and 'set fred=4'
+    * treat fred as an RVALUE so they read and write memory
+    * at the address associated with the value of fred.
+    * 'print &fred' and 'set &fred=4' display and change
+    * the value of the symbol fred.
+    */
    else if (*expr == '&')
    {
-      val = eval_mem (expr+1, LVALUE);
+      val = eval_mem (expr+1, LVALUE, eflag);
    }
-   else if (isalpha (*expr))
+   else if (isalpha (*expr) || (*expr == '_'))
    {
-      val = eval_mem (expr, RVALUE);
+      val = eval_mem (expr, RVALUE, eflag);
    }
+   /* Try to interpet it as a numeric literal */
    else
    {
-      val = strtoul (expr, NULL, 0);
+      val = strtoul (expr, &p, 0);
+      if (expr==p)
+      {
+         *eflag = *eflag | 0x20;
+      }
    }
 
    return val;
@@ -366,14 +407,14 @@ unsigned long eval(char *expr)
 
 void brk_enable(breakpoint_t *br, int flag)
 {
-	if (br->enabled != flag)
-	{
-		br->enabled = flag;
-		if (flag)
-			active_break_count++;
-		else
-			active_break_count--;
-	}
+   if (br->enabled != flag)
+   {
+      br->enabled = flag;
+      if (flag)
+         active_break_count++;
+      else
+         active_break_count--;
+   }
 }
 
 breakpoint_t* brkalloc (void)
@@ -394,7 +435,7 @@ breakpoint_t* brkalloc (void)
          brk_enable (br, 1);
          return br;
       }
-	return NULL;
+   return NULL;
 }
 
 void brkfree (breakpoint_t *br)
@@ -417,14 +458,14 @@ breakpoint_t* brkfind_by_addr (absolute_address_t addr)
 {
    unsigned int n;
    for (n = 0; n < MAX_BREAKS; n++)
-		if (breaktab[n].addr == addr)
-			return &breaktab[n];
-	return NULL;
+      if (breaktab[n].addr == addr)
+         return &breaktab[n];
+   return NULL;
 }
 
 breakpoint_t* brkfind_by_id (unsigned int id)
 {
-	return &breaktab[id];
+   return &breaktab[id];
 }
 
 void brkprint (breakpoint_t *brkpt)
@@ -463,13 +504,13 @@ void brkprint (breakpoint_t *brkpt)
 display_t* display_alloc (void)
 {
    unsigned int n;
-	for (n = 0; n < MAX_DISPLAYS; n++)
+   for (n = 0; n < MAX_DISPLAYS; n++)
    {
-		display_t *ds = &displaytab[n];
-		if (!ds->used)
+      display_t *ds = &displaytab[n];
+      if (!ds->used)
       {
          ds->used = 1;
-         return ds;
+         return ds; /* TODO bug: missing return otherwise */
       }
    }
 }
@@ -523,6 +564,7 @@ void print_value (unsigned long val, datatype_t *typep)
 
 void display_print (void)
 {
+   char eflag = 0;
    unsigned int n;
    char comma = '\0';
 
@@ -534,13 +576,15 @@ void display_print (void)
          char expr[256];
          strcpy (expr, ds->expr);
          printf ("%c %s = ", comma, expr);
-         print_value (eval (expr), &ds->type);
+         print_value (eval (expr, &eflag), &ds->type);
          comma = ',';
       }
    }
 
    if (comma)
       putchar ('\n');
+   if (eflag)
+      report_errors(eflag);
 }
 
 int print_insn (absolute_address_t addr)
@@ -581,7 +625,7 @@ void do_examine (void)
    {
       if ((n % objs_per_line) == 0)
       {
-         putchar ('\n');
+         if (n > 0) putchar ('\n');
          print_addr (examine_addr);
          printf (": ");
       }
@@ -607,20 +651,31 @@ void do_examine (void)
 
 void do_print (char *expr)
 {
-   unsigned long val = eval (expr);
-   printf ("$%d = ", history_count);
+   char eflag = 0;
+   unsigned long val = eval (expr, &eflag);
 
    parse_format_flag (command_flags, &print_type.format);
    parse_size_flag (command_flags, &print_type.size);
-   print_value (val, &print_type);
-   putchar ('\n');
-   save_value (val);
+
+   if (eflag)
+      report_errors(eflag);
+   else
+   {
+      printf ("$%d = ", history_count);
+      print_value (val, &print_type);
+      putchar ('\n');
+      save_value (val);
+   }
 }
 
 void do_set (char *expr)
 {
-   printf("In do_set with %s\n",expr);
-   (void)eval (expr);
+   char eflag = 0;
+
+   (void)eval (expr, &eflag);
+   /* too late to prevent an assignment, but at least report problems */
+   if (eflag)
+      report_errors(eflag);
 }
 
 /* TODO - WPC */
@@ -641,11 +696,11 @@ void print_thread_data (absolute_address_t th)
       pc = (b * 0x4000) + (w - 0x4000);
    pc = MAKE_ADDR (1, pc);
    print_addr (pc);
-   //printf ("{ <%04X,%02X>", w, b);
 }
 
 void command_change_thread (void)
 {
+   char eflag = 0;
    target_addr_t addr = (target_addr_t) target_read(thread_current, thread_id_size);
    absolute_address_t th = to_absolute (addr);
 
@@ -653,7 +708,10 @@ void command_change_thread (void)
       return;
    thread_id = th;
 
-   if (machine->dump_thread && eval ("$thread_debug"))
+   /* TODO thread_debug does not exist by default
+      so this will return an error.. which we'll ignore.
+   */
+   if (machine->dump_thread && eval ("$thread_debug", &eflag))
    {
       if (addr)
       {
@@ -670,6 +728,7 @@ void command_change_thread (void)
    }
 }
 
+/* TODO command_stack and command_stack_* are unused */
 void command_stack_push (unsigned int reason)
 {
    cmdqueue_t *q = &command_stack[++command_stack_depth];
@@ -696,6 +755,7 @@ char* getarg (void)
 void cmd_print (void)
 {
    char *arg = getarg ();
+
    if (arg)
       do_print (arg);
    else
@@ -706,86 +766,128 @@ void cmd_set (void)
 {
    char *arg = getarg ();
 
-   if (!arg)
-      return;
    if (!strcmp (arg, "var"))
-      arg = getarg ();
+   {
+      /* this form allows the creation of entries
+       * in the user symbol table.
+       */
+      char *p;
+      char eflag = 0;
+      unsigned long val;
 
-   if (arg)
-      do_set (arg);
+      arg = getarg ();
+      if ((p = strchr (arg, '=')) != NULL)
+      {
+         *p++ = '\0';
+         val = eval (p, &eflag); /* Evaluate RHS */
+         if (eflag)
+            report_errors(eflag);
+         else
+            sym_set (&internal_symtab, arg, val, 0);
+      }
+      else
+      {
+         report_errors(0x80);
+      }
+   }
    else
-      do_set ("$");
+   {
+      /* this form is a memory write */
+      if (arg)
+         do_set (arg);
+   }
 }
 
 void cmd_examine (void)
 {
+   char eflag = 0;
    char *arg = getarg ();
    if (arg)
-      examine_addr = eval_mem (arg, LVALUE);
-   do_examine ();
+      examine_addr = eval_mem (arg, LVALUE, &eflag);
+
+   if (eflag)
+      report_errors(eflag);
+   else
+      do_examine ();
 }
 
 void cmd_break (void)
 {
+   char eflag = 0;
    char *arg = getarg ();
+
    if (!arg)
       return;
-   unsigned long val = eval_mem (arg, LVALUE);
-   breakpoint_t *br = brkalloc ();
-   br->addr = val;
-   br->on_execute = 1;
 
-   arg = getarg ();
-   if (!arg);
-   else if (!strcmp (arg, "if"))
+   unsigned long val = eval_mem (arg, LVALUE, &eflag);
+
+   if (eflag)
+      report_errors(eflag);
+   else
    {
-      br->conditional = 1;
+      breakpoint_t *br = brkalloc ();
+      br->addr = val;
+      br->on_execute = 1;
+
       arg = getarg ();
-      strcpy (br->condition, arg);
-   }
-   else if (!strcmp (arg, "ignore"))
-   {
-      br->ignore_count = atoi (getarg ());
-   }
+      if (!arg);
+      else if (!strcmp (arg, "if"))
+      {
+         br->conditional = 1;
+         arg = getarg ();
+         strcpy (br->condition, arg);
+      }
+      else if (!strcmp (arg, "ignore"))
+      {
+         br->ignore_count = atoi (getarg ());
+      }
 
-   brkprint (br);
+      brkprint (br);
+   }
 }
 
 void cmd_watch1 (int on_read, int on_write)
 {
-   char *arg;
+   char eflag = 0;
+   char *arg = getarg ();
 
-   arg = getarg ();
    if (!arg)
       return;
-   absolute_address_t addr = eval_mem (arg, LVALUE);
-   breakpoint_t *br = brkalloc ();
-   br->addr = addr;
-   br->on_read = on_read;
-   br->on_write = on_write;
 
-   for (;;)
+   absolute_address_t addr = eval_mem (arg, LVALUE, &eflag);
+
+   if (eflag)
+      report_errors(eflag);
+   else
    {
-      arg = getarg ();
-      if (!arg)
-         break;
+      breakpoint_t *br = brkalloc ();
+      br->addr = addr;
+      br->on_read = on_read;
+      br->on_write = on_write;
 
-      if (!strcmp (arg, "print"))
-         br->keep_running = 1;
-      else if (!strcmp (arg, "mask"))
+      for (;;)
       {
          arg = getarg ();
-         br->write_mask = strtoul (arg, NULL, 0);
+         if (!arg)
+            break;
+
+         if (!strcmp (arg, "print"))
+            br->keep_running = 1;
+         else if (!strcmp (arg, "mask"))
+         {
+            arg = getarg ();
+            br->write_mask = strtoul (arg, NULL, 0);
+         }
+         else if (!strcmp (arg, "if"))
+         {
+            arg = getarg ();
+            br->conditional = 1;
+            strcpy (br->condition, arg);
+         }
       }
-      else if (!strcmp (arg, "if"))
-      {
-         arg = getarg ();
-         br->conditional = 1;
-         strcpy (br->condition, arg);
-      }
+
+      brkprint (br);
    }
-
-   brkprint (br);
 }
 
 void cmd_watch (void)
@@ -813,10 +915,9 @@ void cmd_break_list (void)
 void cmd_step (void)
 {
    char *arg = getarg ();
-   if (arg)
-       auto_break_insn_count = atoi(arg);
+   if (arg && (auto_break_insn_count = atoi(arg)));
    else
-       auto_break_insn_count = 1;
+      auto_break_insn_count = 1;
 
    exit_command_loop = 0;
 }
@@ -835,7 +936,7 @@ void cmd_next (void)
    br->temp = 1;
 
    /* TODO - for conditional branches, should also set a
-   temp breakpoint at the branch target */
+      temp breakpoint at the branch target */
 
    exit_command_loop = 0;
 }
@@ -878,15 +979,15 @@ void cmd_delete (void)
 
 void cmd_list (void)
 {
-   char *arg;
+   char eflag = 0;
+   char *arg = getarg ();
    static absolute_address_t lastpc = 0;
    static absolute_address_t lastaddr = 0;
    absolute_address_t addr;
    int n;
 
-   arg = getarg ();
    if (arg)
-      addr = eval_mem (arg, LVALUE);
+      addr = eval_mem (arg, LVALUE, &eflag);
    else
    {
       addr = to_absolute (get_pc ());
@@ -896,12 +997,17 @@ void cmd_list (void)
          lastaddr = lastpc = addr;
    }
 
-   for (n = 0; n < 16; n++)
+   if (eflag)
+      report_errors(eflag);
+   else
    {
-      addr += print_insn_long(addr);
-   }
+      for (n = 0; n < 16; n++)
+      {
+         addr += print_insn_long(addr);
+      }
 
-   lastaddr = addr;
+      lastaddr = addr;
+   }
 }
 
 void cmd_symbol_file (void)
@@ -913,6 +1019,7 @@ void cmd_symbol_file (void)
 
 void cmd_display (void)
 {
+   char eflag = 0;
    char *arg;
 
    while ((arg = getarg ()) != NULL)
@@ -922,6 +1029,11 @@ void cmd_display (void)
       ds->type = print_type;
       parse_format_flag (command_flags, &ds->type.format);
       parse_size_flag (command_flags, &ds->type.size);
+      if (eflag)
+      {
+         report_errors(eflag);
+         break;
+      }
    }
 }
 
@@ -955,73 +1067,120 @@ void cmd_regs (void)
 
 void cmd_pc(void)
 {
+   char eflag = 0;
+   unsigned long val;
    char* arg = getarg();
-   if (!arg)
-   {
-      cmd_regs();
-      return;
-   }
 
-   set_pc(eval_mem(arg, LVALUE));
-   cmd_list();
+   if (!arg)
+      return;
+
+   val = eval_mem(arg, LVALUE, &eflag);
+
+   if (eflag)
+      report_errors(eflag);
+   else
+   {
+      set_pc(val);
+      cmd_list();
+   }
 }
 
 void cmd_vars (void)
 {
-   for_each_var (NULL);
+   struct symtab *symtab = &program_symtab; /* default */
+   char* arg = getarg();
+   if (arg && !strcmp(arg, "auto"))
+   {
+      symtab = &auto_symtab;
+      printf("Print auto\n");
+   }
+   else if (arg && !strcmp(arg, "internal"))
+   {
+      symtab = &internal_symtab;
+      printf("Print internal\n");
+   }
+   symtab_print (symtab);
 }
 
 void cmd_runfor (void)
 {
-   char *arg = getarg ();
+   char eflag = 0;
    char *units;
+   char *arg = getarg ();
+
+   if (!arg)
+      return;
+
    unsigned long val = atoi (arg);
+
+   /* do the check here because, even if there is
+      an error with the new args, we will abandon
+      any previous runfor that's in progress
+   */
+   if (stop_after_ms != 0)
+      printf ("Previous 'runfor' abandoned\n");
 
    units = getarg ();
    if (!units || !strcmp (units, "ms"))
       stop_after_ms = val;
    else if (!strcmp (units, "s"))
       stop_after_ms = val * 1000;
-   exit_command_loop = 0;
+   else
+      eflag = 1;
+
+   if (eflag)
+      fprintf (stderr, "error: bad time units\n");
+   else if (val == 0)
+      fprintf (stderr, "error: bad time value\n");
+   else
+      exit_command_loop = 0;
 }
 
 void cmd_measure (void)
 {
+   char eflag = 0;
    absolute_address_t addr;
    target_addr_t retaddr = get_pc ();
    breakpoint_t *br;
 
    /* Get the address of the function to be measured. */
    char *arg = getarg ();
+
    if (!arg)
       return;
-   addr = eval_mem (arg, LVALUE);
-   printf ("Measuring ");
-   print_addr (addr);
-   printf (" back to ");
-   print_addr (to_absolute (retaddr));
-   putchar ('\n');
 
-   /* Push the current PC onto the stack for the
-   duration of the measurement. */
-   set_s (get_s () - 2);
-   write16 (get_s (), retaddr);
+   addr = eval_mem (arg, LVALUE, &eflag);
+   if (eflag)
+      report_errors(eflag);
+   else
+   {
+      printf ("Measuring ");
+      print_addr (addr);
+      printf (" back to ");
+      print_addr (to_absolute (retaddr));
+      putchar ('\n');
 
-   /* Set a temp breakpoint at the current PC, so that
-   the measurement will halt. */
-   br = brkalloc ();
-   br->addr = to_absolute (retaddr);
-   br->on_execute = 1;
-   br->temp = 1;
+      /* Push the current PC onto the stack for the
+         duration of the measurement. */
+      set_s (get_s () - 2);
+      write16 (get_s (), retaddr);
 
-   /* Interrupts must be disabled for this to work ! */
-   set_cc (get_cc () | 0x50);
+      /* Set a temp breakpoint at the current PC, so that
+         the measurement will halt. */
+      br = brkalloc ();
+      br->addr = to_absolute (retaddr);
+      br->on_execute = 1;
+      br->temp = 1;
 
-   /* Change the PC to the function-under-test. */
-   set_pc (addr);
+      /* Interrupts must be disabled for this to work ! */
+      set_cc (get_cc () | 0x50);
 
-   /* Go! */
-   exit_command_loop = 0;
+      /* Change the PC to the function-under-test. */
+      set_pc (addr);
+
+      /* Go! */
+      exit_command_loop = 0;
+   }
 }
 
 void cmd_dump_insns (void)
@@ -1032,7 +1191,7 @@ void cmd_dump_insns (void)
    if (arg)
       dump_every_insn = strtoul (arg, NULL, 0);
    printf ("Instruction dump is %s\n",
-      dump_every_insn ? "on" : "off");
+           dump_every_insn ? "on" : "off");
 }
 
 void cmd_trace_dump (void)
@@ -1049,17 +1208,17 @@ void cmd_trace_dump (void)
 
 void cmd_dump (void)
 {
-    dump_machine();
+   dump_machine();
 }
 
 void cmd_restore (void)
 {
-	printf("not implemented\n");
+   printf("not implemented\n");
 }
 
 void cmd_info (void)
 {
-    describe_machine();
+   describe_machine();
 }
 
 /****************** Parser ************************/
@@ -1068,70 +1227,70 @@ void cmd_help (void);
 
 struct command_name
 {
-   const char *prefix;
-   const char *name;
-   command_handler_t handler;
-   const char *help;
+      const char *prefix;
+      const char *name;
+      command_handler_t handler;
+      const char *help;
 } cmdtab[] = {
    { "p", "print", cmd_print,
-      "Print the value of an expression" },
+     "Print the value of an expression" },
    { "set", "set", cmd_set,
-      "Set an internal variable/target memory" },
+     "Set an internal variable/target memory" },
    { "x", "examine", cmd_examine,
-      "Examine raw memory" },
+     "Examine raw memory" },
    { "b", "break", cmd_break,
-      "Set a breakpoint" },
+     "Set a breakpoint" },
    { "bl", "blist", cmd_break_list,
-      "List all breakpoints/watchpoints" },
+     "List all breakpoints/watchpoints" },
    { "d", "delete", cmd_delete,
-      "Delete a breakpoint/watchpoint" },
+     "Delete a breakpoint/watchpoint" },
    { "s", "step", cmd_step,
-      "Step one (or more) instructions" },
+     "Step one (or more) instructions" },
    { "n", "next", cmd_next,
-      "Break at the next instruction" },
+     "Break at the next instruction" },
    { "c", "continue", cmd_continue,
-      "Continue the program" },
+     "Continue the program" },
    { "fg", "foreground", cmd_continue, NULL },
    { "q", "quit", cmd_quit,
-      "Quit the simulator" },
+     "Quit the simulator" },
    { "re", "reset", cpu_reset,
-      "Reset the CPU" },
+     "Reset the CPU" },
    { "h", "help", cmd_help,
-      "Display this help" },
+     "Display this help" },
    { "wa", "watch", cmd_watch,
-      "Add a watchpoint on write" },
+     "Add a watchpoint on write" },
    { "rwa", "rwatch", cmd_rwatch,
-      "Add a watchpoint on read" },
+     "Add a watchpoint on read" },
    { "awa", "awatch", cmd_awatch,
-      "Add a watchpoint on read/write" },
+     "Add a watchpoint on read/write" },
    { "?", "?", cmd_help },
    { "l", "list", cmd_list },
    { "sym", "symbol-file", cmd_symbol_file,
-      "Open a symbol table file" },
+     "Open a symbol table file" },
    { "di", "display", cmd_display,
-      "Add a display expression" },
+     "Add a display expression" },
    { "so", "source", cmd_source,
-      "Run a command script" },
+     "Run a command script" },
    { "regs", "regs", cmd_regs,
-      "Show all CPU registers" },
+     "Show all CPU registers" },
    { "vars", "vars", cmd_vars,
-      "Show all program variables" },
+     "Show all program variables" },
    { "runfor", "runfor", cmd_runfor,
-      "Run for a certain amount of time" },
+     "Run for a certain amount of time" },
    { "me", "measure", cmd_measure,
-      "Measure time that a function takes" },
+     "Measure time that a function takes" },
    { "dumpi", "dumpi", cmd_dump_insns,
-      "Set dump-instruction flag" },
+     "Set dump-instruction flag" },
    { "td", "tracedump", cmd_trace_dump,
-      "Dump the trace buffer" },
+     "Dump the trace buffer" },
    { "dump", "du", cmd_dump,
-      "Dump contents of memory to a file" },
+     "Dump contents of memory to a file" },
    { "restore", "res", cmd_restore,
-      "Restore contents of memory from a file" },
+     "Restore contents of memory from a file" },
    { "i", "info", cmd_info,
-      "Describe machine, devices and address mapping" },
+     "Describe machine, devices and address mapping" },
    { "pc", "pc", cmd_pc,
-		"Set program counter" },
+     "Set program counter" },
 #if 0
    { "cl", "clear", cmd_clear },
    { "co", "condition", cmd_condition },
@@ -1139,9 +1298,9 @@ struct command_name
    { "di", "disable", cmd_disable },
    { "en", "enable", cmd_enable },
    { "f", "file", cmd_file,
-      "Choose the program to be debugged" },
+     "Choose the program to be debugged" },
    { "exe", "exec-file", cmd_exec_file,
-      "Open an executable" },
+     "Open an executable" },
 #endif
    { NULL, NULL },
 };
@@ -1153,7 +1312,7 @@ void cmd_help (void)
    {
       if (cn->help)
          printf ("%s (%s) - %s\n",
-            cn->name, cn->prefix, cn->help);
+                 cn->name, cn->prefix, cn->help);
       cn++;
    }
 }
@@ -1243,16 +1402,16 @@ int command_exec (FILE *infile)
       else
 #endif
       {
-      if (infile == stdin)
-         printf ("(dbg) ");
-      fgets (buffer, 255, infile);
-      if (feof (infile))
-         return -1;
+         if (infile == stdin)
+            printf ("(dbg) ");
+         fgets (buffer, 255, infile);
+         if (feof (infile))
+            return -1;
       }
    } while (errno != 0);
 
    /* In terminal mode, a blank line means to execute
-   the previous command. */
+      the previous command. */
    if (buffer[0] == '\n')
       strcpy (buffer, prev_buffer);
 
@@ -1280,30 +1439,30 @@ int command_exec (FILE *infile)
 void keybuffering_defaults (void)
 {
 #ifndef _MSC_VER
-    /* Extract and save defaults associated with buffered io, create
-       settings associated with unbuffered io
-    */
+   /* Extract and save defaults associated with buffered io, create
+      settings associated with unbuffered io
+   */
 
-    /* get the terminal settings for stdin */
-    tcgetattr(STDIN_FILENO,&old_tio);
+   /* get the terminal settings for stdin */
+   tcgetattr(STDIN_FILENO,&old_tio);
 
-    /* start with the current settings */
-    new_tio=old_tio;
+   /* start with the current settings */
+   new_tio=old_tio;
 
-    /* disable canonical mode (buffered i/o) and local echo */
-    new_tio.c_lflag &=(~ICANON & ~ECHO);
+   /* disable canonical mode (buffered i/o) and local echo */
+   new_tio.c_lflag &=(~ICANON & ~ECHO);
 #endif
 }
 
 void keybuffering (int flag)
 {
 #ifndef _MSC_VER
-    if (flag) {
-        tcsetattr(STDIN_FILENO,TCSANOW,&old_tio);
-    }
-    else {
-        tcsetattr(STDIN_FILENO,TCSANOW,&new_tio);
-    }
+   if (flag) {
+      tcsetattr(STDIN_FILENO,TCSANOW,&old_tio);
+   }
+   else {
+      tcsetattr(STDIN_FILENO,TCSANOW,&new_tio);
+   }
 #endif
 }
 
@@ -1312,7 +1471,7 @@ int command_loop (void)
    keybuffering (1);
    brkfree_temps ();
 
-restart:
+  restart:
    if (command_input == stdin)
    {
       display_print ();
@@ -1341,12 +1500,14 @@ restart:
 
 void breakpoint_hit (breakpoint_t *br)
 {
+   /* TODO don't know how best to handle errors here. */
+   char eflag = 0; /* unused */
    if (br->threaded && (thread_id != br->tid))
       return;
 
    if (br->conditional)
    {
-      if (eval (br->condition) == 0)
+      if (eval (br->condition, &eflag) == 0)
          return;
    }
 
@@ -1375,19 +1536,19 @@ void command_insn_hook (void)
    command_trace_insn (pc);
 
    if (active_break_count == 0)
-       return;
+      return;
 
    abspc = to_absolute (pc);
    br = brkfind_by_addr (abspc);
    if (br && br->enabled && br->on_execute)
    {
-       breakpoint_hit (br);
-       if (monitor_on == 0)
-           return;
-       if (br->temp)
-           brkfree (br);
-       else
-           printf ("Breakpoint %d reached.\n", br->id);
+      breakpoint_hit (br);
+      if (monitor_on == 0)
+         return;
+      if (br->temp)
+         brkfree (br);
+      else
+         printf ("Breakpoint %d reached.\n", br->id);
    }
 }
 
@@ -1420,7 +1581,7 @@ void command_write_hook (absolute_address_t addr, U8 val)
          if (br->write_mask)
          {
             int mask_ok = ((br->last_write & br->write_mask) !=
-               (val & br->write_mask));
+                           (val & br->write_mask));
             br->last_write = val;
             if (!mask_ok)
                return;

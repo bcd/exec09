@@ -152,7 +152,7 @@ const char *sym_lookup (struct symtab *symtab, unsigned long value)
    			return chain->name;
    		chain = chain->value_chain;
    	}
-      symtab = symtab->parent;
+      symtab = symtab->parent; /* [NAC HACK 26Jul2016] ->parent never used. Remove*/
    }
 	return NULL;
 }
@@ -163,20 +163,20 @@ struct symbol *sym_add (struct symtab *symtab,
 {
 	unsigned int hash;
 	struct symbol *s, *chain;
-   
-   s = malloc (sizeof (struct symbol));
+
+	s = malloc (sizeof (struct symbol));
 	s->name = stringspace_copy (name);
 	s->value = value;
 	s->type = type;
 	s->ty.format = 0;
 	s->ty.size = 0;
-   
-   hash = sym_hash_name (name);
+
+	hash = sym_hash_name (name);
 	chain = symtab->syms_by_name[hash];
 	s->name_chain = chain;
 	symtab->syms_by_name[hash] = s;
 
-   hash = sym_hash_value (value);
+	hash = sym_hash_value (value);
 	chain = symtab->syms_by_value[hash];
 	s->value_chain = chain;
 	symtab->syms_by_value[hash] = s;
@@ -196,9 +196,9 @@ void sym_set (struct symtab *symtab,
 }
 
 
-void for_each_var (void (*cb) (struct symbol *, unsigned int size))
+void symtab_print (struct symtab *symtab)
 {
-	struct symtab *symtab = &program_symtab;
+    //	struct symtab *symtab = &program_symtab;
 	absolute_address_t addr;
 	const char *id;
 	struct symbol *sym;
