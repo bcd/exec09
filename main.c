@@ -190,7 +190,7 @@ struct option
 	{ 't', "loadmap", "" },
 	{ 'T', "trace", "",
 		NO_NEG, NO_ARG, &trace_enabled, 1, NULL, NULL },
-	{ 'm', "maxcycles", "Sets maximum number of cycles to run",
+	{ 'm', "maxcycles", "Set maximum number of cycles to run (0 to disable)",
 		NO_NEG, HAS_ARG, &max_cycles, 0, NULL, NULL },
 	{ 's', "machine", "Specify the machine (exact hardware) to emulate",
 		NO_NEG, HAS_ARG, NULL, 0, &machine_name, NULL },
