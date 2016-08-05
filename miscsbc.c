@@ -9,7 +9,7 @@ int smii_i_avail = 1;
 int smii_o_busy = 0;
 
 // for multicomp09 sdmapper: values most-recently written to these registers
-#define MULTICOMP09_RAMMAX (0x20000)
+#define MULTICOMP09_RAMMAX (0x80000)
 unsigned char mc_mmuadr = 0x00;
 unsigned char mc_mmudat = 0x00;
 unsigned char mc_timer  = 0x00;
@@ -207,28 +207,53 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
     //printf("In console_read with addr=0x%08x pc=0x%04x\n", (unsigned int)addr, get_pc());
     unsigned char ch;
     switch (addr) {
-    case 0:
-    case 2:
-    case 4:
-        // status bit
-        // hardware supports bits [7], [1], [0]
-        return 0x03;
-    case 1:
+        /* UART0 -----------------------------*/
+    case 0: /* status */
+        // b7: interrupt
+        // b1: can accept TX char
+        // b0: RX char available
+        return (batch_file || kbhit()) ? 3 : 2;
+
+    case 1: /* data */
         if (batch_file && fread( &ch, 1, 1, batch_file)) {
         }
         else {
-            ch = getchar();
+            ch = kbchar();
         }
         // key conversions to make keyboard look DOS-like
         if (ch == 127) return 8; // rubout->backspace
         if (ch == 10) return 13; // LF->CR
         return ch;
+
+        /* UART1 -----------------------------*/
+    case 2: /* status */
+        // hardware supports bits [7], [1], [0]
+        printf("[uart1 stat rd addr=0x%08x\n", (unsigned int)addr);
+        return 0x03;
+
+    case 3: /* data */
+        printf("[uart1 data rd addr=0x%08x\n", (unsigned int)addr);
+        return 0x42;
+
+        /* UART2 -----------------------------*/
+    case 4: /* status */
+        // hardware supports bits [7], [1], [0]
+        printf("[uart2 stat rd addr=0x%08x\n", (unsigned int)addr);
+        return 0x03;
+
+    case 5: /* data */
+        printf("[uart2 data rd addr=0x%08x\n", (unsigned int)addr);
+        return 0x42;
+
+        /* GPIO (not modelled) ---------------*/
     case 6:
     case 7:
         printf("[gpio rd addr=0x%08x]\n", (unsigned int)addr);
         return 0x42;
+
+        /* Other (should be unreachable) -----*/
     default:
-        printf("In console_read with addr=0x%08x\n", (unsigned int)addr);
+        printf("ERROR in console_read with addr=0x%08x\n", (unsigned int)addr);
         return 0x42;
     }
 }
@@ -236,30 +261,60 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
 void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
     //printf("In console_write with addr=0x%08x val=0x%02x pc=0x%04x\n", (unsigned int)addr, val, get_pc());
-    fprintf(log_file,"%02x~%02x\n",(unsigned char)(addr&0xff),val);
+    //fprintf(log_file,"%02x~%02x\n",(unsigned char)(addr&0xff),val);
     switch (addr) {
-    case 0:
-    case 2:
-    case 4:
+        /* UART0 -----------------------------*/
+    case 0: /* status */
         if (val==3) {
-            printf("[uart%1d reset]", (unsigned int)(1 + addr>>1));
+            printf("[uart0 reset]");
         }
         else {
-            printf("[uart%1d status write of 0x%02x\n", (unsigned int)(1 + addr>>1), val);
+            printf("[uart0 stat wr of 0x%02x\n", val);
         }
         break;
 
-    case 1:
+    case 1: /* data */
         putchar(val); /* UART 1*/
+        fflush(stdout);
         break;
 
+        /* UART1 -----------------------------*/
+    case 2: /* status */
+        if (val==3) {
+            printf("[uart0 reset]");
+        }
+        else {
+            printf("[uart0 stat wr of 0x%02x\n", val);
+        }
+        break;
+
+    case 3: /* data */
+        printf("[uart1 data wr of 0x%02x\n", val);
+        break;
+
+        /* UART2 -----------------------------*/
+    case 4: /* status */
+        if (val==3) {
+            printf("[uart0 reset]");
+        }
+        else {
+            printf("[uart0 stat wr of 0x%02x\n", val);
+        }
+        break;
+
+    case 5: /* data */
+        printf("[uart1 data wr of 0x%02x\n", val);
+        break;
+
+        /* GPIO (not modelled) ---------------*/
     case 6:
     case 7:
         printf("[gpio wr addr=0x%08x val=0x%02x]\n", (unsigned int)addr, val);
         break;
 
+        /* Other (should be unreachable) -----*/
     default:
-        printf("In console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
+        printf("ERROR in console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
     }
 }
 
@@ -338,14 +393,61 @@ int mmu_flags(int blk) {
    error if too much data written or read or if command while
    not idle.
  */
-void sdmapper_remap(int update_table)
+
+
+/*
+  op values are:
+  0 remap memory using existing register values
+  1 load new dat value then remap memory using existing register values
+  2 load new adr value then remap memory using new values
+*/
+// mc_mmuadr bits:
+// 7 ROMDIS
+// 6 TR
+// 5 MMUEN
+// 4 NMI
+// 3:0 MAPSEL
+//
+void sdmapper_remap(int op, int val)
 {
     int i;
 
-    if (update_table) {
-        // MMUDAT write, so update appropriate mapping register
-        mc_pblk[mc_mmuadr & 0xf] = mc_mmudat;
+    // Update appropriate mapping register if dat written
+    if (op == 1) {
+        mc_pblk[mc_mmuadr & 0xf] = val;
+        if (val > 0x3f) {
+            printf("Bad: write to mmu map register 0x%01x with data 0x%02x at pc=0x%04x\n",0xf & mc_mmuadr, val, get_pc());
+        }
+
+        // If the MMU is enabled and the data register that changed is part of the active mapping, report the mapping
+        if ( ((mc_mmuadr & 0x68) == 0x68) || ((mc_mmuadr & 0x68) == 0x20) ) {
+            fprintf(log_file,"INFO mmudat change on active mapping set: mmudat 0x%02x->0x%02x\n",mc_mmudat, val);
+            fprintf(log_file,"INFO mmuadr 0x%02x       pc=0x%04x", mc_mmuadr, get_pc());
+            for (i=0;i<16;i++) {
+                fprintf(log_file," %02d:0x%02x",i,mc_pblk[i]);
+            }
+            fprintf(log_file,"\n");
+            fflush(NULL);
+        }
+
+        mc_mmudat = val;
     }
+
+
+    if (op == 2) {
+        // If ROMDIS, TR or MMUEN have changed, report the mapping
+        if ((mc_mmuadr & 0x70) != (val & 0x70)) {
+            fprintf(log_file,"INFO mmuadr 0x%02x->0x%02x pc=0x%04x", mc_mmuadr, val, get_pc());
+            for (i=0;i<16;i++) {
+                fprintf(log_file," %02d:0x%02x",i,mc_pblk[i]);
+            }
+            fprintf(log_file,"\n");
+            fflush(NULL);
+        }
+
+        mc_mmuadr = val;
+    }
+
 
     // now update mapping based on mc_mmuadr, mc_pblk[]
 
@@ -411,7 +513,7 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
     case 0: // SDDATA
         switch (mc_state) {
         case 0: case 1: case 2:
-            fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
+            //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
             return 0xff;
         case 3: // in read
             if (mc_poll == 3) {
@@ -420,23 +522,23 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
                     mc_state = 2; // final read then back to idle
                 }
                 if (mc_dindex < 512) {
-                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_data[mc_dindex]);
+                    //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_data[mc_dindex]);
                     return mc_data[mc_dindex++];
                 }
                 else {
                     printf("ERROR attempt to read too much data from sd block\n");
-                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
+                    //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
                     return 0xff;
                 }
             }
             else {
                 printf("ERROR attempt to read sd block when data not yet available\n");
-                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
+                //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
                 return 0xff;
             }
         case 4: // in write
             printf("ERROR attempt to read sd data during write command\n");
-            fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
+            //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xff);
             return 0xff;
         }
         break; // unreachable
@@ -444,47 +546,47 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
         switch (mc_state)
             {
             case 0: // busy and always will remain so
-                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x90);
+                //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x90);
                 return 0x90;
             case 1: // count polls and initialise
                 mc_poll++;
                 if (mc_poll == 16)
                     mc_state = 2;
-                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x90);
+                //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x90);
                 return 0x90;
             case 2: // idle.
-                fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x80);
+                //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x80);
                 return 0x80;
             case 3: // in read
                 if (mc_poll < 3)
                     mc_poll++;
                 if (mc_poll == 3) {
-                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xe0);
+                    //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xe0);
                     return 0xe0; // data available
                 }
                 else {
-                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xa0);
+                    //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xa0);
                     return 0xa0; // still waiting TODO maybe 20
                 }
             case 4: // in write
                 if (mc_poll < 3)
                     mc_poll++;
                 if (mc_poll == 3) {
-                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xa0);
+                    //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0xa0);
                     return 0xa0; // space available
                 }
                 else {
-                    fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x20);
+                    //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x20);
                     return 0x20; // still waiting
                 }
             }
         break; // unreachable
     case 5: // TIMER
-        fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_timer);
+        //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_timer);
         return mc_timer;
     default:
         printf("INFO In sdmapper_read with addr=0x%08x\n", (unsigned char)addr);
-        fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x42);
+        //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x42);
         return 0x42;
     }
 }
@@ -494,7 +596,7 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
     int retvar;
     //printf("INFO In sdmapper_write with addr=0x%08x, mc_state=%d mc_poll=%d mc_dindex=%d\n", addr, mc_state, mc_poll, mc_dindex);
-    fprintf(log_file,"%02x>%02x\n",(unsigned char)(addr&0xff),val);
+    //fprintf(log_file,"%02x>%02x\n",(unsigned char)(addr&0xff),val);
     switch (addr) {
     case 0: // SDDATA
         switch (mc_state) {
@@ -582,19 +684,31 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
         mc_sdlba2 = val;
         break;
     case 5: // TIMER
-        mc_timer = val;
+        // bit [1] is read/write, timer enable
+        // bit [7] is read, write-1-to-clear
+        // Set this up so that it *always* signals an interrupt
+        // when enabled; when used with the "-I" command-line timer
+        // interrupt feature, this will make it seem as though this
+        // timer is the source of all interrupts.
+        if (val & 2) {
+            // enabled and signalling interrupt
+            mc_timer = 0x82;
+        }
+        else {
+            // disabled. Pending interrupt remains or is cleared
+            // depending upon bit[7]
+            mc_timer = (val & 0x80) ^ 0x80;
+        }
         break;
     case 6: // MMUADR
         // ignore writes where bit(4) is set; this is the single-step/nmi control
         // and it forces the other write data to be ignored
         if ((val & 0x10) == 0) {
-            mc_mmuadr = val;
-            sdmapper_remap(0); // 0=> remap memory based on mc_mmuadr
+            sdmapper_remap(2, val);
         }
         break;
     case 7: // MMUDAT
-        mc_mmudat = val;
-        sdmapper_remap(1); // 1=> update mc_pblk[] then remap memory based on mc_mmuadr
+        sdmapper_remap(1, val);
         break;
     }
 }
@@ -630,7 +744,12 @@ void multicomp09_init (const char *boot_rom_file)
     struct hw_device* romdev;
     int i;
 
-    /* RAM is 128Kbytes. With MMU disabled low 64K is mapped linearly
+    /* Log file
+    */
+    log_file = file_open(NULL, "multicomp09.log", "w+b");
+    fprintf(log_file, "===Log file\n");
+
+    /* RAM is 512Kbytes. With MMU disabled low 64K is mapped linearly
        otherwise, it is mapped in 8K chunks. Each chunk has a separate
        write protect.
     */
@@ -689,7 +808,7 @@ void multicomp09_init (const char *boot_rom_file)
     /* Now map all the devices into the address space, in accordance
        with the settings of the memory mapper.
     */
-    sdmapper_remap(0);
+    sdmapper_remap(0, 0);
 
 
     /* If a file multicomp09.bat exists, supply input from it until
@@ -706,11 +825,6 @@ void multicomp09_init (const char *boot_rom_file)
         mc_state = 1;
     else
         mc_state = 0;
-    /*
-      log file
-    */
-    log_file = file_open(NULL, "multicomp09.log", "w+b");
-    fprintf(log_file, "===Log file\n");
 }
 
 

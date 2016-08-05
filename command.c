@@ -1439,18 +1439,14 @@ int command_exec (FILE *infile)
 void keybuffering_defaults (void)
 {
 #ifndef _MSC_VER
-   /* Extract and save defaults associated with buffered io, create
-      settings associated with unbuffered io
-   */
 
-   /* get the terminal settings for stdin */
+   /* get two copies of the terminal settings for stdin */
    tcgetattr(STDIN_FILENO,&old_tio);
-
-   /* start with the current settings */
-   new_tio=old_tio;
+   tcgetattr(STDIN_FILENO,&new_tio);
 
    /* disable canonical mode (buffered i/o) and local echo */
    new_tio.c_lflag &=(~ICANON & ~ECHO);
+
 #endif
 }
 
@@ -1464,6 +1460,30 @@ void keybuffering (int flag)
       tcsetattr(STDIN_FILENO,TCSANOW,&new_tio);
    }
 #endif
+}
+
+
+/* Non-blocking check for input character. If
+ *   true, retreive character using kbchar()
+ */
+int kbhit()
+{
+    struct timeval tv = { 0L, 0L };
+    fd_set fds;
+    FD_ZERO(&fds);
+    FD_SET(0, &fds);
+    return select(1, &fds, NULL, NULL, &tv);
+}
+
+int kbchar()
+{
+    int r;
+    unsigned char c;
+    if ((r = read(0, &c, sizeof(c))) < 0) {
+        return r;
+    } else {
+        return c;
+    }
 }
 
 int command_loop (void)
