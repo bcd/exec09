@@ -218,8 +218,8 @@ so <file>
 	source (the file that called it, or the keyboard.)
 
 sym <file>
-	Load a symbol table file.  Currently, the only format
-	supported is lwlink map file.
+	Load a symbol table file named file.map -- Currently,
+	the only format	supported is an lwlink map file.
 
 td
 	Trace Dump. Display the last 256 instructions that were
