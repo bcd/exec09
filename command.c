@@ -5,6 +5,7 @@
 #include "machine.h"
 #include <sys/errno.h>
 #include <unistd.h>
+#include <ctype.h>
 #ifdef HAVE_TERMIOS_H
 # include <termios.h>
 #else
@@ -12,6 +13,7 @@
 #endif
 
 struct termios old_tio, new_tio;
+int print_insn_long (absolute_address_t addr);
 
 typedef struct
 {
@@ -752,6 +754,28 @@ char* getarg (void)
 
 /****************** Command Handlers ************************/
 
+void cpu_init (const char *arg)
+{
+   char eflag = 0;
+   unsigned long val;
+
+   if (arg) {
+      val = eval (arg, &eflag);
+      if (eflag)
+         report_errors(eflag);
+      else
+         cpu_reset(val);
+   }
+   else
+      cpu_reset(read16(0xfffe)); /* reset vector */
+}
+
+void cmd_reset (void)
+{
+   char *arg = getarg ();
+   cpu_init(arg);
+}
+
 void cmd_print (void)
 {
    char *arg = getarg ();
@@ -1253,7 +1277,7 @@ struct command_name
    { "fg", "foreground", cmd_continue, NULL },
    { "q", "quit", cmd_quit,
      "Quit the simulator" },
-   { "re", "reset", cpu_reset,
+   { "re", "reset", cmd_reset,
      "Reset the CPU" },
    { "h", "help", cmd_help,
      "Display this help" },

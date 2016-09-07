@@ -3015,7 +3015,7 @@ cpu_exit:
    return cpu_period;
 }
 
-void cpu_reset (void)
+void cpu_reset (unsigned newPC)
 {
    X = Y = S = U = A = B = DP = 0;
    H = N = OV = C = 0;
@@ -3025,7 +3025,7 @@ void cpu_reset (void)
    MD = E = F = V = 0;
 #endif
 
-   change_pc (read16 (0xfffe));
+   change_pc (newPC);
    cpu_is_running ();
 }
 

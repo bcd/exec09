@@ -77,6 +77,22 @@ Faults
 
 
 -----------------------------------------------------------------
+Command-line arguments
+
+Use "-h" to get an abbreviated list of command-line arguments.
+Notes on some follow:
+
+-e      Can be used to set the initial value of the PC
+	(mnemonic: Entry point). This can be a numeric value or
+	a symbol from the map file (in which case it will need
+	a & prefix which in turn will need to be escaped to avoid
+        being interpreted by the shell). Eg:
+	-e 0x3000
+	-e \&__start
+
+For an executable foo, any map file must be named foo.map
+
+-----------------------------------------------------------------
 Debugging
 
 
@@ -184,8 +200,13 @@ regs
 	Display the current value of the CPU registers.
 
 
-re
+re [<expr>]
 	Reset the CPU/machine.
+	Optional <expr> specifies the initial PC value. If
+	omitted, initial PC value is fetched from 0xfffe
+	(the reset vector). Eg:
+	re 0x1000
+	re &__start
 
 restore
 	Restore machine state from a 'dump' file. NOT CURRENTLY

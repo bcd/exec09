@@ -20,7 +20,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "machine.h"
+#include "6809.h"
 
 /* A hardware timer counts CPU cycles and can generate interrupts periodically. */
 struct hwtimer

@@ -72,9 +72,12 @@ struct function_call {
 
 void add_named_symbol (const char *id, target_addr_t value, const char *filename);
 struct x_symbol * find_symbol (target_addr_t value);
+
 void monitor_branch (void);
 void monitor_call (unsigned int flags);
 void monitor_return (void);
+void monitor_backtrace (void);
+
 const char * monitor_addr_name (target_addr_t addr);
 const char * absolute_addr_name (unsigned long addr);
 

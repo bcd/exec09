@@ -21,6 +21,7 @@
 
 
 #include <sys/time.h>
+#include <unistd.h>
 #include "6809.h"
 
 /* The total number of cycles that have executed */
@@ -64,7 +65,7 @@ static int binary = 0;
 char *exename;
 
 const char *machine_name = "simple";
-
+const char *entry_addr = NULL;
 const char *prog_name = NULL;
 
 FILE *stat_file = NULL;
@@ -174,9 +175,11 @@ struct option
 		NO_NEG, NO_ARG, NULL, 0, 0, do_help },
 	{ 'b', "binary", "",
 		NO_NEG, NO_ARG, &binary, 1, NULL, NULL },
+	{ 'e', "entry", "Entry point (address or symbol name)",
+		NO_NEG, HAS_ARG, NULL, 0, &entry_addr, NULL },
 	{ 'M', "mhz", "", NO_NEG, HAS_ARG },
-	{ '-', "68a09", "Emulate the 68A09 variation (1.5Mhz)" },
-	{ '-', "68b09", "Emulate the 68B09 variation (2Mhz)" },
+	{ '-', "68a09", "Emulate the 68A09 variation (1.5MHz)" },
+	{ '-', "68b09", "Emulate the 68B09 variation (2MHz)" },
 	{ 'R', "realtime", "Limit simulation speed to match realtime",
 		HAS_NEG, NO_ARG, &machine_realtime, 0, NULL, NULL },
 	{ 'I', "irqfreq", "Asserts an IRQ every so many cycles automatically",
@@ -367,14 +370,13 @@ main (int argc, char *argv[])
 	if (prog_name)
 		load_map_file (prog_name);
 
-	/* Enable debugging if no executable given yet. */
+	/* Force debugging to be on if no executable given yet. */
 	if (!prog_name)	{
 		debug_enabled = 1;
 	}
-	else {
-		/* OK, ready to run.  Reset the CPU first. */
-		cpu_reset ();
-	}
+
+        /* OK, ready to run.  Reset the CPU first. */
+        cpu_init (entry_addr);
 
 	monitor_init ();
 	command_init ();
