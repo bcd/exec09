@@ -3025,7 +3025,7 @@ void cpu_reset (unsigned newPC)
    MD = E = F = V = 0;
 #endif
 
-   change_pc (newPC);
+   change_pc (0xffff & newPC);
    cpu_is_running ();
 }
 
@@ -3040,7 +3040,7 @@ void print_regs (void)
    if (get_cc() & H_FLAG) flags[5] = 'H';
    if (get_cc() & F_FLAG) flags[6] = 'F';
    if (get_cc() & E_FLAG) flags[7] = 'E';
-
+   /*
    printf (" X: 0x%04X  [X]: 0x%04X    Y: 0x%04X  [Y]: 0x%04X    ",
             get_x(), read16(get_x()), get_y(), read16(get_y()) );
    printf ("PC: 0x%04X [PC]: 0x%04X\n",
@@ -3050,4 +3050,14 @@ void print_regs (void)
    printf ("DP: 0x%02X\n", get_dp() );
    printf (" A: 0x%02X      B: 0x%02X    [D]: 0x%04X   CC: %s\n",
             get_a(), get_b(), read16(get_d()), flags );
+   */
+   printf (" X: 0x%04X  Y: 0x%04X  ",
+            get_x(), get_y());
+   printf ("PC: 0x%04X [PC]: 0x%04X\n",
+            get_pc(), read16(get_pc()) );
+   printf (" U: 0x%04X  S: 0x%04X  ",
+            get_u(), get_s() );
+   printf ("DP: 0x%02X\n", get_dp() );
+   printf (" A: 0x%02X    B: 0x%02X    CC: %s\n",
+            get_a(), get_b(), flags );
 }
