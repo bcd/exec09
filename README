@@ -120,6 +120,11 @@ wa <expr>
 	- break and report on each write to this address but
 	  only if the write data ANDed with the mask value is
 	  non-zero.
+	wa 0x1200 if <expr>
+	wa 0x1200 if $s==02:0x0043
+	- break on write to this address if the S register has
+	  the value shown.
+        Combinations of mask/print/if are allowed.
 
 rwa <expr>
 	Set a watchpoint on READ from the given address. See
