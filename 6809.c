@@ -43,7 +43,7 @@ unsigned long irq_start_time;
 unsigned ea = 0;
 long cpu_clk = 0;
 long cpu_period = 0;
-int cpu_quit = 1;
+int cpu_quit;
 unsigned int irqs_pending = 0;
 unsigned int firqs_pending = 0;
 unsigned int cc_changed = 0;
@@ -112,7 +112,7 @@ void sim_error (const char *format, ...)
 		monitor_on = 1;
 	else {
 		keybuffering (1);
-		exit (2);
+		exit (0);	//	exit (2);
         }
 }
 
