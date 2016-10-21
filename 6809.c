@@ -172,10 +172,7 @@ static inline void change_pc (unsigned newPC)
 		fprintf (stderr, "-> %s\n", monitor_addr_name (newPC));
 	}
 #endif
-  PC = newPC & 0xffff; /* [NAC HACK 2016Oct21] stop PC from going out of range. Crude.
-                          why have I not seen this problem before? Did I introduce this
-                          bug as a side-effect of another change?
-                       */
+  PC = newPC;
 }
 
 static inline unsigned imm_byte (void)
@@ -392,47 +389,47 @@ static void extended (void)
 
 /* external register functions */
 
-U8 get_a (void)
+unsigned get_a (void)
 {
   return A;
 }
 
-U8 get_b (void)
+unsigned get_b (void)
 {
   return B;
 }
 
-U8 get_dp (void)
+unsigned get_dp (void)
 {
   return DP >> 8;
 }
 
-U16 get_x (void)
+unsigned get_x (void)
 {
   return X;
 }
 
-U16 get_y (void)
+unsigned get_y (void)
 {
   return Y;
 }
 
-U16 get_s (void)
+unsigned get_s (void)
 {
   return S;
 }
 
-U16 get_u (void)
+unsigned get_u (void)
 {
   return U;
 }
 
-U16 get_pc (void)
+unsigned get_pc (void)
 {
   return PC & 0xffff;
 }
 
-U16 get_d (void)
+unsigned get_d (void)
 {
   return (A << 8) | B;
 }
@@ -479,49 +476,49 @@ unsigned get_md (void)
 }
 #endif
 
-void set_a (U8 val)
+void set_a (unsigned val)
 {
   A = val & 0xff;
 }
 
-void set_b (U8 val)
+void set_b (unsigned val)
 {
   B = val & 0xff;
 }
 
-void set_dp (U8 val)
+void set_dp (unsigned val)
 {
   DP = (val & 0xff) << 8;
 }
 
-void set_x (U16 val)
+void set_x (unsigned val)
 {
   X = val & 0xffff;
 }
 
-void set_y (U16 val)
+void set_y (unsigned val)
 {
   Y = val & 0xffff;
 }
 
-void set_s (U16 val)
+void set_s (unsigned val)
 {
   S = val & 0xffff;
   check_stack ();
 }
 
-void set_u (U16 val)
+void set_u (unsigned val)
 {
   U = val & 0xffff;
 }
 
-void set_pc (U16 val)
+void set_pc (unsigned val)
 {
   PC = val & 0xffff;
   check_pc ();
 }
 
-void set_d (U16 val)
+void set_d (unsigned val)
 {
   A = (val >> 8) & 0xff;
   B = val & 0xff;
@@ -567,7 +564,7 @@ void set_md (unsigned val)
 
 /* handle condition code register */
 
-U8 get_cc (void)
+unsigned get_cc (void)
 {
   unsigned res = EFI & (E_FLAG | F_FLAG | I_FLAG);
 
@@ -585,7 +582,7 @@ U8 get_cc (void)
   return res;
 }
 
-void set_cc (U8 arg)
+void set_cc (unsigned arg)
 {
   EFI = arg & (E_FLAG | F_FLAG | I_FLAG);
   H = (arg & H_FLAG ? 0x10 : 0);
@@ -1883,11 +1880,11 @@ int cpu_execute (int cycles)
 	      case 0x8b:	/* ADDW */
 		break;
 #endif
-	      case 0x8c:        /* CMPY imm */
+	      case 0x8c:
 		cpu_clk -= 5;
 		cmp16 (Y, imm_word ());
 		break;
-	      case 0x8e:        /* LDY imm */
+	      case 0x8e:
 		cpu_clk -= 4;
 		Y = ld16 (imm_word ());
 		break;
@@ -3044,24 +3041,13 @@ void print_regs (void)
    if (get_cc() & F_FLAG) flags[6] = 'F';
    if (get_cc() & E_FLAG) flags[7] = 'E';
 
-   /*   printf (" X: 0x%04X  [X]: 0x%04X    Y: 0x%04X  [Y]: 0x%04X    ",
-           get_x(), 0xffff & read16(get_x()), get_y(), 0xffff & read16(get_y()) );
+   printf (" X: 0x%04X  [X]: 0x%04X    Y: 0x%04X  [Y]: 0x%04X    ",
+            get_x(), read16(get_x()), get_y(), read16(get_y()) );
    printf ("PC: 0x%04X [PC]: 0x%04X\n",
             get_pc(), read16(get_pc()) );
    printf (" U: 0x%04X  [U]: 0x%04X    S: 0x%04X  [S]: 0x%04X    ",
-            get_u(), 0xffff & read16(get_u()), get_s(), 0xffff & read16(get_s()) );
+            get_u(), read16(get_u()), get_s(), read16(get_s()) );
    printf ("DP: 0x%02X\n", get_dp() );
    printf (" A: 0x%02X      B: 0x%02X    [D]: 0x%04X   CC: %s\n",
-            get_a(), get_b(), 0xffff & read16(get_d()), flags );
-   */
-
-   printf (" X: 0x%04X  [X]: 0x%04X    Y: 0x%04X  [Y]: 0x%04X    ",
-           get_x(), 0xffff & 0, get_y(), 0xffff & 0 );
-   printf ("PC: 0x%04X [PC]: 0x%04X\n",
-            get_pc(), 0  );
-   printf (" U: 0x%04X  [U]: 0x%04X    S: 0x%04X  [S]: 0x%04X    ",
-            get_u(), 0xffff & 0, get_s(), 0xffff & 0 );
-   printf ("DP: 0x%02X\n", get_dp() );
-   printf (" A: 0x%02X      B: 0x%02X    [D]: 0x%04X   CC: %s\n",
-            get_a(), get_b(), 0xffff & 0, flags );
+            get_a(), get_b(), read16(get_d()), flags );
 }

@@ -91,27 +91,27 @@ extern int cpu_quit;
 extern int cpu_execute (int);
 extern void cpu_reset (void);
 
-extern U8 get_a  (void);
-extern U8 get_b  (void);
-extern U8 get_cc (void);
-extern U8 get_dp (void);
-extern U16 get_x  (void);
-extern U16 get_y  (void);
-extern U16 get_s  (void);
-extern U16 get_u  (void);
-extern U16 get_pc (void);
-extern U16 get_d  (void);
+extern unsigned get_a  (void);
+extern unsigned get_b  (void);
+extern unsigned get_cc (void);
+extern unsigned get_dp (void);
+extern unsigned get_x  (void);
+extern unsigned get_y  (void);
+extern unsigned get_s  (void);
+extern unsigned get_u  (void);
+extern unsigned get_pc (void);
+extern unsigned get_d  (void);
 extern unsigned get_flags (void);
-extern void set_a  (U8);
-extern void set_b  (U8);
-extern void set_cc (U8);
-extern void set_dp (U8);
-extern void set_x  (U16);
-extern void set_y  (U16);
-extern void set_s  (U16);
-extern void set_u  (U16);
-extern void set_pc (U16);
-extern void set_d  (U16);
+extern void set_a  (unsigned);
+extern void set_b  (unsigned);
+extern void set_cc (unsigned);
+extern void set_dp (unsigned);
+extern void set_x  (unsigned);
+extern void set_y  (unsigned);
+extern void set_s  (unsigned);
+extern void set_u  (unsigned);
+extern void set_pc (unsigned);
+extern void set_d  (unsigned);
 
 /* fileio.c */
 
