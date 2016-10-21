@@ -897,25 +897,29 @@ int dasm (char *buf, absolute_address_t opc)
 
   op = fetch8();
 
-  if (op == 0x10) {
+  if (op == 0x10)
+    {
       op = fetch8();
       am = codes10[op].mode;
       op = codes10[op].code;
-  }
-  else if (op == 0x11) {
+    }
+  else if (op == 0x11)
+    {
       op = fetch8();
       am = codes11[op].mode;
       op = codes11[op].code;
-  }
-  else {
+    }
+  else
+    {
       am = codes[op].mode;
       op = codes[op].code;
-  }
+    }
 
   op_str = (char *) mne[op];
   buf += sprintf (buf, "%-6.6s", op_str);
 
-  switch (am) {
+  switch (am)
+    {
     case _illegal:
       sprintf (buf, "???");
       break;
@@ -938,12 +942,14 @@ int dasm (char *buf, absolute_address_t opc)
       op = fetch8 ();
       R = index_reg[(op >> 5) & 0x3];
 
-      if ((op & 0x80) == 0) {
+      if ((op & 0x80) == 0)
+	{
 	  sprintf (buf, "%s,%c", off4[op & 0x1f], R);
 	  break;
-      }
+	}
 
-      switch (op & 0x1f) {
+      switch (op & 0x1f)
+	{
 	case 0x00:
 	  sprintf (buf, ",%c+", R);
 	  break;
@@ -1016,7 +1022,7 @@ int dasm (char *buf, absolute_address_t opc)
 	default:
 	  sprintf (buf, "???");
 	  break;
-      }
+	}
       break;
 
     case _rel_byte:
@@ -1049,18 +1055,19 @@ int dasm (char *buf, absolute_address_t opc)
 	strcat (buf, "DP,");
       if ((op & 0x06) == 0x06)
 	strcat (buf, "D,");
-      else {
+      else
+	{
 	  if (op & 0x04)
 	    strcat (buf, "B,");
 	  if (op & 0x02)
 	    strcat (buf, "A,");
-      }
+	}
       if (op & 0x01)
 	strcat (buf, "CC,");
       buf[strlen (buf) - 1] = '\0';
       break;
 
-  }
+    }
   return pc - opc;
 }
 
@@ -1089,23 +1096,27 @@ int load_map_file (const char *name)
 	/* Try appending the suffix 'map' to the name of the program. */
 	sprintf (map_filename, "%s.map", name);
 	fp = file_open (NULL, map_filename, "r");
-	if (!fp) {
+	if (!fp)
+	{
 		/* If that fails, try replacing any existing suffix. */
 		sprintf (map_filename, "%s", name);
 		char *s = strrchr (map_filename, '.');
-		if (s) {
+		if (s)
+		{
 			sprintf (s+1, "map");
 			fp = file_open(NULL, map_filename, "r");
 		}
 
-		if (!fp) {
+		if (!fp)
+		{
 			fprintf (stderr, "warning: no symbols for %s\n", name);
 			return -1;
 		}
 	}
 
 	printf ("Reading symbols from '%s'...\n", map_filename);
-	for (;;) {
+	for (;;)
+	{
 		fgets (buf, sizeof(buf)-1, fp);
 		if (feof (fp))
 			break;
@@ -1139,23 +1150,27 @@ int load_image (const char *name)
   FILE *fp;
 
   fp = file_open(NULL, name, "r");
-  if (fp == NULL) {
+  if (fp == NULL)
+    {
       printf("failed to open image file %s.\n", name);
       return 1;
-  }
+    }
 
-  if (fscanf (fp, "S%1x%2x%4x", &type, &count, &addr) == 3) {
+  if (fscanf (fp, "S%1x%2x%4x", &type, &count, &addr) == 3)
+    {
         rewind(fp);
         return load_s19(fp);
-  }
-  else if (fscanf (fp, ":%2x%4x%2x", &count, &addr, &type) == 3) {
+    }
+  else if (fscanf (fp, ":%2x%4x%2x", &count, &addr, &type) == 3)
+    {
         rewind(fp);
         return load_hex(fp);
-  }
-  else {
+    }
+  else
+    {
       printf ("unrecognised format in image file %s.\n", name);
         return 1;
-  }
+    }
 }
 
 int load_hex (FILE *fp)
@@ -1164,38 +1179,45 @@ int load_hex (FILE *fp)
   int done = 1;
   int line = 0;
 
-  while (done != 0) {
+  while (done != 0)
+    {
       line++;
 
-      if (fscanf (fp, ":%2x%4x%2x", &count, &addr, &type) != 3)	{
+      if (fscanf (fp, ":%2x%4x%2x", &count, &addr, &type) != 3)
+	{
 	  printf ("line %d: invalid hex record information.\n", line);
 	  break;
-      }
+	}
       checksum = count + (addr >> 8) + (addr & 0xff) + type;
 
-      switch (type) {
-	case 0: /* data */
-	  for (; count != 0; count--, addr++, checksum += data) {
-              if (fscanf(fp, "%2x", &data)) {
+      switch (type)
+	{
+	case 0:
+	  for (; count != 0; count--, addr++, checksum += data)
+	    {
+              if (fscanf(fp, "%2x", &data))
+                {
 		   write8(addr, (UINT8) data);
-              }
-              else {
+                }
+              else
+                {
                   printf("line %d: hex record data inconsistent with count field.\n", line);
 	          break;
-              }
-          }
+                }
+	    }
 
 	  checksum = (-checksum) & 0xff;
 
-          if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) ) {
+          if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) )
+	    {
 	      printf("line %d: hex record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
-          }
+	    }
           fscanf(fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
-	case 1: /* end of file */
+	case 1:
 	  checksum = (-checksum) & 0xff;
 
           if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) )
@@ -1208,8 +1230,8 @@ int load_hex (FILE *fp)
 	  printf("line %d: not supported hex type %d.\n", line, type);
 	  done = 0;
 	  break;
-      }
-  }
+	}
+    }
 
   (void) fclose (fp);
   return 0;
@@ -1221,39 +1243,46 @@ int load_s19(FILE *fp)
   int done = 1;
   int line = 0;
 
-  while (done != 0) {
+  while (done != 0)
+    {
       line++;
 
-      if (fscanf(fp, "S%1x%2x%4x", &type, &count, &addr) != 3) {
+      if (fscanf(fp, "S%1x%2x%4x", &type, &count, &addr) != 3)
+	{
 	  printf("line %d: invalid S record information.\n", line);
 	  break;
-      }
+	}
 
       checksum = count + (addr >> 8) + (addr & 0xff);
 
-      switch (type) {
-	case 1: /* data */
-	  for (count -= 3; count != 0; count--, addr++, checksum += data) {
-               if (fscanf (fp, "%2x", &data)) {
-                   write8 (addr, (UINT8) data);
-               }
-               else {
+      switch (type)
+	{
+	case 1:
+	  for (count -= 3; count != 0; count--, addr++, checksum += data)
+	    {
+               if (fscanf (fp, "%2x", &data))
+                  {
+                     write8 (addr, (UINT8) data);
+                  }
+               else
+                  {
                     printf ("line %d: S record data inconsistent with count field.\n", line);
 	            break;
-               }
-          }
+                  }
+	    }
 
 	  checksum = (~checksum) & 0xff;
 
-	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) ) {
+	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
+	    {
 	      printf ("line %d: S record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
-          }
+	    }
           fscanf (fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
-	case 9: /* 16-bit start address */
+	case 9:
 	  checksum = (~checksum) & 0xff;
 	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
 	    printf ("line %d: S record checksum missing or invalid.\n", line);
@@ -1274,7 +1303,8 @@ int load_s19(FILE *fp)
 void monitor_call (unsigned int flags)
 {
 #ifdef CALL_STACK
-	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1]) {
+	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1])
+	{
 		current_function_call++;
 		current_function_call->entry_point = get_pc ();
 		current_function_call->flags = flags;
@@ -1282,7 +1312,8 @@ void monitor_call (unsigned int flags)
 #endif
 #if 0
 	const char *id = sym_lookup (&program_symtab, to_absolute (get_pc ()));
-	if (id) {
+	if (id)
+	{
 		// printf ("In %s now\n", id);
 	}
 #endif
@@ -1291,13 +1322,15 @@ void monitor_call (unsigned int flags)
 void monitor_return (void)
 {
 #ifdef CALL_STACK
-	if (current_function_call > &fctab[MAX_FUNCTION_CALLS-1]) {
+	if (current_function_call > &fctab[MAX_FUNCTION_CALLS-1])
+	{
 		current_function_call--;
 		return;
 	}
 
 	while ((current_function_call->flags & FC_TAIL_CALL) &&
-		(current_function_call > fctab)) {
+		(current_function_call > fctab))
+	{
 		current_function_call--;
 	}
 
@@ -1350,8 +1383,7 @@ void monitor_init (void)
 {
    extern int debug_enabled;
 
-   /* PC has already been initialised to program entry point */
-   fctab[0].entry_point = get_pc();
+   fctab[0].entry_point = read16 (0xfffe);
    memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
    current_function_call = &fctab[0];
 

@@ -21,7 +21,7 @@
 /* The interrupt multiplexer */
 
 #include <stdlib.h>
-#include "6809.h"
+#include "machine.h"
 #include "eon.h"
 
 struct imux
