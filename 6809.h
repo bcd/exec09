@@ -70,6 +70,14 @@ extern int dump_cycles_on_success;
 extern const char *prog_name;
 
 long get_elapsed_realtime (void);
+void sim_error (const char *format, ...);
+void sim_exit (uint8_t exit_code);
+void print_regs (void);
+void release_irq (unsigned int source);
+void release_firq (unsigned int source);
+void request_irq (unsigned int source);
+void request_firq (unsigned int source);
+
 
 /* Primitive read/write macros */
 #define read8(addr)        cpu_read8 (addr)
@@ -89,7 +97,7 @@ long get_elapsed_realtime (void);
 /* 6809.c */
 extern int cpu_quit;
 extern int cpu_execute (int);
-extern void cpu_reset (void);
+extern void cpu_reset  (unsigned);
 
 extern U8 get_a  (void);
 extern U8 get_b  (void);
@@ -102,6 +110,7 @@ extern U16 get_u  (void);
 extern U16 get_pc (void);
 extern U16 get_d  (void);
 extern unsigned get_flags (void);
+
 extern void set_a  (U8);
 extern void set_b  (U8);
 extern void set_cc (U8);
@@ -113,8 +122,22 @@ extern void set_u  (U16);
 extern void set_pc (U16);
 extern void set_d  (U16);
 
-/* fileio.c */
+/* command.c */
+void keybuffering_defaults (void);
+void keybuffering (int flag);
+void command_periodic (void);
+void command_exit_irq_hook (unsigned long cycles);
+void command_insn_hook (void);
+void command_init (void);
+void command_read_hook (absolute_address_t addr);
+void command_write_hook (absolute_address_t addr, U8 val);
+int command_loop (void);
+void print_current_insn (void);
 
+/* imux.c */
+void imux_assert (struct hw_device *dev, unsigned int sig);
+
+/* fileio.c */
 struct pathlist
 {
 	int count;
@@ -131,11 +154,16 @@ void file_close (FILE *fp);
 /* monitor.c */
 extern int monitor_on;
 extern int check_break (void);
-extern void monitor_init (void); 
+extern void monitor_init (void);
 extern int monitor6809 (void);
 extern int dasm (char *, absolute_address_t);
 
 extern int load_image (const char *);
+int sizeof_file(FILE * file);
+int load_map_file (const char *name);
+int load_s19(FILE *fp);
+int load_hex(FILE *fp);
+
 
 #define MAX_STRINGSPACE 32000
 #define MAX_SYMBOL_HASH 1009
@@ -182,8 +210,10 @@ extern struct symtab internal_symtab;
 extern struct symtab auto_symtab;
 
 struct symbol *sym_add (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
+void sym_init (void);
 void sym_set (struct symtab *symtab, const char *name, unsigned long value, unsigned int type);
 int sym_find (struct symtab *symtab, const char *name, unsigned long *value, unsigned int type);
+void symtab_print (struct symtab *symtab);
 const char *sym_lookup (struct symtab *symtab, unsigned long value);
 
 typedef void (*command_handler_t) (void);

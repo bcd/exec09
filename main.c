@@ -8,12 +8,12 @@
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
- * 
+ *
  * GCC6809 is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with GCC6809; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -21,6 +21,7 @@
 
 
 #include <sys/time.h>
+#include <unistd.h>
 #include "6809.h"
 
 /* The total number of cycles that have executed */
@@ -64,7 +65,7 @@ static int binary = 0;
 char *exename;
 
 const char *machine_name = "simple";
-
+const char *entry_addr = NULL;
 const char *prog_name = NULL;
 
 FILE *stat_file = NULL;
@@ -129,8 +130,7 @@ idle_loop (void)
 	last_cycles = cycles;
 
 	total_ms_elapsed += sim_ms;
-	if (total_ms_elapsed > 100)
-	{
+	if (total_ms_elapsed > 100) {
 		total_ms_elapsed -= 100;
 		if (machine->periodic)
 			machine->periodic ();
@@ -139,8 +139,7 @@ idle_loop (void)
 
 	delay = sim_ms - real_ms;
 	cumulative_delay += delay;
-	if (cumulative_delay > 0)
-	{
+	if (cumulative_delay > 0) {
 		usleep (50 * 1000UL);
 		cumulative_delay -= 50;
 	}
@@ -176,9 +175,11 @@ struct option
 		NO_NEG, NO_ARG, NULL, 0, 0, do_help },
 	{ 'b', "binary", "",
 		NO_NEG, NO_ARG, &binary, 1, NULL, NULL },
+	{ 'e', "entry", "Entry point (address or symbol name)",
+		NO_NEG, HAS_ARG, NULL, 0, &entry_addr, NULL },
 	{ 'M', "mhz", "", NO_NEG, HAS_ARG },
-	{ '-', "68a09", "Emulate the 68A09 variation (1.5Mhz)" },
-	{ '-', "68b09", "Emulate the 68B09 variation (2Mhz)" },
+	{ '-', "68a09", "Emulate the 68A09 variation (1.5MHz)" },
+	{ '-', "68b09", "Emulate the 68B09 variation (2MHz)" },
 	{ 'R', "realtime", "Limit simulation speed to match realtime",
 		HAS_NEG, NO_ARG, &machine_realtime, 0, NULL, NULL },
 	{ 'I', "irqfreq", "Asserts an IRQ every so many cycles automatically",
@@ -208,10 +209,8 @@ do_help (const char *arg __attribute__((unused)))
 	printf ("Motorola 6809 Simulator     Version %s\n", PACKAGE_VERSION);
 	printf ("m6809-run [options] [program]\n\n");
 	printf ("Options:\n");
-	while (opt->o_long != NULL)
-	{
-		if (opt->help)
-		{
+	while (opt->o_long != NULL) {
+		if (opt->help) {
 			if (opt->o_short == '-')
 				printf ("   --%-16.16s    %s\n", opt->o_long, opt->help);
 			else
@@ -239,45 +238,36 @@ process_option (struct option *opt, const char *arg)
 {
 	int rc;
 	//printf ("Processing option '%s'\n", opt->o_long);
-	if (opt->takes_arg)
-	{
-		if (!arg)
-		{
+	if (opt->takes_arg) {
+		if (!arg) {
 			//printf ("  Takes argument but none given.\n");
 			rc = 0;
 		}
-		else
-		{
-			if (opt->int_value)
-			{
+		else {
+			if (opt->int_value) {
 				*(opt->int_value) = strtoul (arg, NULL, 0);
 				//printf ("  Integer argument '%d' taken.\n", *(opt->int_value));
 			}
-			else if (opt->string_value)
-			{
+			else if (opt->string_value) {
 				*(opt->string_value) = arg;
 				//printf ("  String argument '%s' taken.\n", *(opt->string_value));
 			}
 			rc = 1;
 		}
 	}
-	else
-	{
-		if (arg)
-		{
+	else {
+		if (arg) {
 			//printf ("  Takes no argument but one given, ignored.\n");
 		}
 
-		if (opt->int_value)
-		{
+		if (opt->int_value) {
 			*(opt->int_value) = opt->default_value;
 			//printf ("  Integer argument 1 implied.\n");
 		}
 		rc = 0;
 	}
 
-	if (opt->handler)
-	{
+	if (opt->handler) {
 		rc = opt->handler (arg);
 		//printf ("  Handler called, rc=%d\n", rc);
 	}
@@ -304,22 +294,17 @@ parse_args (int argc, char *argv[])
 	struct option *opt;
 
 next_arg:
-	while (argn < argc)
-	{
+	while (argn < argc) {
 		char *arg = argv[argn];
-		if (arg[0] == '-')
-		{
-			if (arg[1] == '-')
-			{
+		if (arg[0] == '-') {
+			if (arg[1] == '-') {
 				char *rest = strchr (arg+2, '=');
 				if (rest)
 					*rest++ = '\0';
 
 				opt = option_table;
-				while (opt->o_long != NULL)
-				{
-					if (!strcmp (opt->o_long, arg+2))
-					{
+				while (opt->o_long != NULL) {
+					if (!strcmp (opt->o_long, arg+2)) {
 						argn++;
 						(void)process_option (opt, rest);
 						goto next_arg;
@@ -328,13 +313,10 @@ next_arg:
 				}
 				printf ("long option '%s' not recognized.\n", arg+2);
 			}
-			else
-			{
+			else {
 				opt = option_table;
-				while (opt->o_long != NULL)
-				{
-					if (opt->o_short == arg[1])
-					{
+				while (opt->o_long != NULL) {
+					if (opt->o_short == arg[1]) {
 						argn++;
 						if (process_option (opt, argv[argn]))
 							argn++;
@@ -346,8 +328,7 @@ next_arg:
 			}
 			argn++;
 		}
-		else
-		{
+		else {
 			process_plain_argument (argv[argn++]);
 		}
 	}
@@ -373,12 +354,10 @@ main (int argc, char *argv[])
 
 	sym_init ();
 
-	if (binary)
-	{
+	if (binary) {
 		machine_init (machine_name, prog_name);
 	}
-	else
-	{
+	else {
 		/* The machine loader cannot deal with image files,
 		so initialize the machine first, passing it a NULL
 		filename, then load the image file afterwards. */
@@ -391,16 +370,13 @@ main (int argc, char *argv[])
 	if (prog_name)
 		load_map_file (prog_name);
 
-	/* Enable debugging if no executable given yet. */
-	if (!prog_name)
-	{
+	/* Force debugging to be on if no executable given yet. */
+	if (!prog_name)	{
 		debug_enabled = 1;
 	}
-	else
-	{
-		/* OK, ready to run.  Reset the CPU first. */
-		cpu_reset ();
-	}
+
+        /* OK, ready to run.  Reset the CPU first. */
+        cpu_init (entry_addr);
 
 	monitor_init ();
 	command_init ();
@@ -411,10 +387,8 @@ main (int argc, char *argv[])
 	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()
 	 * and let it run for a long time; otherwise, we need to come back
 	 * here periodically and do the interrupt handling. */
-	for (cpu_quit = 1; cpu_quit != 0;)
-	{
-   	if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
-		{
+	for (cpu_quit = 1; cpu_quit != 0;) {
+		if ((cycles_per_irq == 0) && (cycles_per_firq == 0)) {
 			/* Simulate some CPU time, either 1ms worth or up to the
 			next possible IRQ */
 			total += cpu_execute (mhz * 1024);
@@ -422,16 +396,14 @@ main (int argc, char *argv[])
 			/* Call each device that needs periodic processing. */
 			machine_update ();
 		}
-		else
-		{
+		else {
 			total += cpu_execute (cycles_per_irq);
 			/* TODO - this assumes periodic interrupts (WPC) */
 			request_irq (0);
 			{
 			/* TODO - FIRQ frequency not handled yet */
 				static int firq_freq = 0;
-				if (++firq_freq == 8)
-				{
+				if (++firq_freq == 8) {
 					request_firq (0);
 					firq_freq = 0;
 				}
@@ -441,8 +413,7 @@ main (int argc, char *argv[])
 		idle_loop ();
 
 		/* Check for a rogue program that won't end */
-		if ((max_cycles > 0) && (total > max_cycles))
-		{
+		if ((max_cycles > 0) && (total > max_cycles)) {
 			sim_error ("maximum cycle count exceeded at %s\n",
 				monitor_addr_name (get_pc ()));
 		}
