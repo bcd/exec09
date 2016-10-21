@@ -172,7 +172,10 @@ static inline void change_pc (unsigned newPC)
 		fprintf (stderr, "-> %s\n", monitor_addr_name (newPC));
 	}
 #endif
-  PC = newPC;
+  PC = newPC & 0xffff; /* [NAC HACK 2016Oct21] stop PC from going out of range. Crude.
+                          why have I not seen this problem before? Did I introduce this
+                          bug as a side-effect of another change?
+                       */
 }
 
 static inline unsigned imm_byte (void)
