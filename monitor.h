@@ -1,4 +1,5 @@
-
+#ifndef MONITOR_H
+#define MONITOR_H
 
 #define S_NAMED 0x1
 #define S_OFFSET 0x2
@@ -16,6 +17,7 @@
 #define PROMPT_CYCLES 0x2
 #define PROMPT_INSN 0x4
 
+#include "6809.h"
 
 struct cpu_regs {
 	unsigned X, Y, S, U, PC;
@@ -77,6 +79,12 @@ void monitor_call (unsigned int flags);
 void monitor_return (void);
 const char * monitor_addr_name (target_addr_t addr);
 const char * absolute_addr_name (unsigned long addr);
+void monitor_backtrace (void);
+const char* monitor_addr_name (target_addr_t target_addr);
+int load_s19(FILE *fp);
+int load_hex (FILE *fp);
+int load_map_file (const char *name);
+int sizeof_file(FILE * file);
 
 
-
+#endif

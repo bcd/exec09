@@ -24,11 +24,13 @@
 #else
 #error
 #endif
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/errno.h>
 #include "wpclib.h"
+#include "machine.h"
 
 #define WPC_RAM_BASE                0x0000
 #define WPC_RAM_SIZE                0x2000

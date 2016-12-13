@@ -21,7 +21,12 @@
 
 
 #include <sys/time.h>
+#include <unistd.h>
 #include "6809.h"
+#include "command.h"
+#include "symtab.h"
+#include "machine.h"
+#include "monitor.h"
 
 /* The total number of cycles that have executed */
 unsigned long total = 0;

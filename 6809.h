@@ -237,5 +237,13 @@ typedef struct
 #define MAX_THREADS 64
 
 void command_irq_hook (unsigned long cycles);
+unsigned long get_cycles (void);
+void request_irq (unsigned int source);
+void release_irq (unsigned int source);
+void request_firq (unsigned int source);
+void release_firq (unsigned int source);
+void sim_error (const char *format, ...);
+void sim_exit (uint8_t exit_code);
+void print_regs (void);
 
 #endif /* M6809_H */

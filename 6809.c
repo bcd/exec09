@@ -21,6 +21,7 @@
 
 #include "6809.h"
 #include "monitor.h"
+#include "command.h"
 #include <stdarg.h>
 
 unsigned X, Y, S, U, PC;

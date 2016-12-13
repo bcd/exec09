@@ -1,8 +1,9 @@
 #include <fcntl.h>
-#include "machine.h"
 #include <assert.h>
-// for symtab stuff?
+#include "machine.h"
 #include "6809.h"
+#include "ioexpand.h"
+#include "command.h"
 
 // for smii console
 int smii_i_avail = 1;

@@ -19,10 +19,11 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-#include "6809.h"
-#include "monitor.h"
 #include <ctype.h>
 #include <signal.h>
+#include "6809.h"
+#include "monitor.h"
+#include "command.h"
 
 /* The function call stack */
 struct function_call fctab[MAX_FUNCTION_CALLS];

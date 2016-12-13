@@ -5,6 +5,7 @@
 #include "machine.h"
 #include <sys/errno.h>
 #include <unistd.h>
+#include <ctype.h>
 #ifdef HAVE_TERMIOS_H
 # include <termios.h>
 #else
@@ -80,6 +81,7 @@ unsigned long irq_cycles = 0;
 
 unsigned long eval (char *expr, char *eflag);
 unsigned long eval_mem (char *expr, eval_mode_t mode, char *eflag);
+static int print_insn_long (absolute_address_t addr);
 extern int auto_break_insn_count;
 
 FILE *command_input;
@@ -1345,7 +1347,7 @@ command_handler_t command_lookup (const char *cmd)
    return NULL;
 }
 
-int print_insn_long (absolute_address_t addr)
+static int print_insn_long (absolute_address_t addr)
 {
    char buf[64];
    int i;
@@ -1466,7 +1468,7 @@ void keybuffering (int flag)
 /* Non-blocking check for input character. If
  *   true, retreive character using kbchar()
  */
-int kbhit()
+int kbhit(void)
 {
     struct timeval tv = { 0L, 0L };
     fd_set fds;
@@ -1475,7 +1477,7 @@ int kbhit()
     return select(1, &fds, NULL, NULL, &tv);
 }
 
-int kbchar()
+int kbchar(void)
 {
     int r;
     unsigned char c;

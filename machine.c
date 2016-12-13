@@ -22,6 +22,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include "machine.h"
+#include "command.h"
+#include "monitor.h"
 #include "6809.h"
 #include "eon.h"
 

@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include "wpclib.h"
 
 #define UDP_PORT 7400

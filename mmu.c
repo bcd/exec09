@@ -1,19 +1,6 @@
 #include <stdlib.h>
 #include "machine.h"
-
-#define SMR_PAGESIZE 4096
-
-#define SMR_SLOTS 16
-
-/* Small MMU register map */
-#define SMR_SLOT   0  /* Which slot is described by registers 8-9 */
-#define SMR_BASEL  1  /* The base page for lower 8 slots */
-#define SMR_BASEH  2  /* The base page for upper 8 slots */
-#define SMR_FAULTA 3  /* The faulting address */
-#define SMR_FAULTT 5  /* The fault type */
-#define SM_GLOBAL_REGS 6
-#define SMR_PAGE   6  /* Which 4KB page is mapped to the current slot */
-#define SMR_FLAGS  7  /* What are the page flags for this slot */
+#include "mmu.h"
 
 /* The 'small' MMU is an I/O device that allows remapping a window of
 a single device into a fixed region of the CPU. */
