@@ -11,6 +11,7 @@ int smii_o_busy = 0;
 // for multicomp09 sdmapper: values most-recently written to these registers
 #define MULTICOMP09_RAMMAX (0x80000)
 unsigned char mc_mmuadr = 0x00;
+unsigned char mc_mmufrt = 0x00; // Magic flag for Fixed RAM Top
 unsigned char mc_mmudat = 0x00;
 unsigned char mc_timer  = 0x00;
 unsigned char mc_pblk[16]; // [7] is protect, [6:0] is physical block
@@ -435,9 +436,22 @@ void sdmapper_remap(int op, int val)
 
 
     if (op == 2) {
+        if ( ((mc_mmuadr & 0xa0) == 0xa0) && ((val & 0xa0) == 0x20) ) {
+            // ROMDIS=1 and MMUEn=1 and wrote ROMDIS=0 and MMUEn=1 - cue to
+            // set FRT bit and IGNORE transition of ROMDIS
+            mc_mmufrt = 1;
+            val = val | 0x80;
+            fprintf(log_file,"INFO mmuadr 0x%02x->0x%02x frt=%1x pc=0x%04x\n", mc_mmuadr, val, mc_mmufrt, get_pc());
+        }
+        if ( (val & 0x20) == 0x00 ) {
+            // MMUEn is disabled - cue to clear FRT bit
+            mc_mmufrt = 0;
+            fprintf(log_file,"INFO mmuadr 0x%02x->0x%02x frt=%1x pc=0x%04x\n", mc_mmuadr, val, mc_mmufrt, get_pc());
+        }
+
         // If ROMDIS, TR or MMUEN have changed, report the mapping
         if ((mc_mmuadr & 0x70) != (val & 0x70)) {
-            fprintf(log_file,"INFO mmuadr 0x%02x->0x%02x pc=0x%04x", mc_mmuadr, val, get_pc());
+            fprintf(log_file,"INFO mmuadr 0x%02x->0x%02x frt=%1x pc=0x%04x", mc_mmuadr, val, mc_mmufrt, get_pc());
             for (i=0;i<16;i++) {
                 fprintf(log_file," %02d:0x%02x",i,mc_pblk[i]);
             }
