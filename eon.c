@@ -1,6 +1,11 @@
 #include <fcntl.h>
 #include "machine.h"
 #include "eon.h"
+#include "mmu.h"
+#include "ioexpand.h"
+#include "serial.h"
+#include "imux.h"
+#include "timer.h"
 
 
 /**

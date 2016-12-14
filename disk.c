@@ -69,7 +69,6 @@ void disk_update (struct hw_device *dev)
 
 U8 disk_read (struct hw_device *dev, unsigned long addr)
 {
-	struct disk_priv *disk = (struct disk_priv *)dev->priv;
 	return 0;
 }
 
@@ -80,7 +79,7 @@ void disk_write (struct hw_device *dev, unsigned long addr, U8 val)
 	switch (addr)
 	{
 		case DSK_ADDR:
-			disk->ram = (U8*) disk->ramdev->priv + val * SECTOR_SIZE;
+                        disk->ram = (char*) disk->ramdev->priv + val * SECTOR_SIZE;
 			break;
 		case DSK_SECTOR:
 			disk->offset = val; /* high byte */

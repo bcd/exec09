@@ -21,6 +21,7 @@
 
 #include "6809.h"
 #include "monitor.h"
+#include "command.h"
 #include <stdarg.h>
 
 unsigned X, Y, S, U, PC;
@@ -553,10 +554,6 @@ void set_q (unsigned val)
 void set_v (unsigned val)
 {
   V = val & 0xff;
-}
-
-void set_zero (unsigned val)
-{
 }
 
 void set_md (unsigned val)

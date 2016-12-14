@@ -3,12 +3,19 @@
 #include "6809.h"
 #include "monitor.h"
 #include "machine.h"
+#include "symtab.h"
 #include <sys/errno.h>
 #include <unistd.h>
+#include <ctype.h>
 #ifdef HAVE_TERMIOS_H
 # include <termios.h>
 #else
 #error
+#endif
+#ifdef HAVE_READLINE
+# include <stdio.h>
+# include <readline/readline.h>
+# include <readline/history.h>
 #endif
 
 struct termios old_tio, new_tio;
@@ -80,6 +87,7 @@ unsigned long irq_cycles = 0;
 
 unsigned long eval (char *expr, char *eflag);
 unsigned long eval_mem (char *expr, eval_mode_t mode, char *eflag);
+static int print_insn_long (absolute_address_t addr);
 extern int auto_break_insn_count;
 
 FILE *command_input;
@@ -94,7 +102,7 @@ void print_addr (absolute_address_t addr)
 
    print_device_name (addr >> 28);
    putchar (':');
-   printf ("0x%04X", addr & 0xFFFFFF);
+   printf ("0x%04lX", addr & 0xFFFFFF);
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
@@ -198,13 +206,10 @@ void eval_assign (char *expr, unsigned long val, char *eflag)
 
 unsigned long target_read (absolute_address_t addr, unsigned int size)
 {
-   switch (size)
-   {
-      case 1:
-         return abs_read8 (addr);
-      case 2:
-         return abs_read16 (addr);
-   }
+   if (size == 1)
+      return abs_read8(addr);
+   else
+      return abs_read16(addr);
 }
 
 /* Extract any valid format flags - ignore anything else
@@ -510,9 +515,10 @@ display_t* display_alloc (void)
       if (!ds->used)
       {
          ds->used = 1;
-         return ds; /* TODO bug: missing return otherwise */
+         return ds;
       }
    }
+   return NULL;
 }
 
 void display_free (display_t *ds)
@@ -1345,7 +1351,7 @@ command_handler_t command_lookup (const char *cmd)
    return NULL;
 }
 
-int print_insn_long (absolute_address_t addr)
+static int print_insn_long (absolute_address_t addr)
 {
    char buf[64];
    int i;
@@ -1355,7 +1361,7 @@ int print_insn_long (absolute_address_t addr)
 
    print_device_name(addr >> 28);
    putchar(':');
-   printf("0x%04X ", addr & 0xFFFFFF);
+   printf("0x%04lX ", addr & 0xFFFFFF);
 
    for (i = 0; i < size; i++)
       printf("%02X", abs_read8(addr + i));
@@ -1466,7 +1472,7 @@ void keybuffering (int flag)
 /* Non-blocking check for input character. If
  *   true, retreive character using kbchar()
  */
-int kbhit()
+int kbhit(void)
 {
     struct timeval tv = { 0L, 0L };
     fd_set fds;
@@ -1475,7 +1481,7 @@ int kbhit()
     return select(1, &fds, NULL, NULL, &tv);
 }
 
-int kbchar()
+int kbchar(void)
 {
     int r;
     unsigned char c;
@@ -1639,34 +1645,59 @@ void command_periodic (void)
 }
 
 void pc_virtual (unsigned long *val, int writep) {
-   writep ? set_pc (*val) : (*val = get_pc ());
+   if (writep) set_pc (*val);
+   else *val = get_pc ();
 }
 void x_virtual (unsigned long *val, int writep) {
-   writep ? set_x (*val) : (*val = get_x ());
+   if (writep) set_x (*val);
+   else *val = get_x ();
 }
 void y_virtual (unsigned long *val, int writep) {
-   writep ? set_y (*val) : (*val = get_y ());
+   if (writep)
+      set_y (*val);
+   else *val = get_y ();
 }
 void u_virtual (unsigned long *val, int writep) {
-   writep ? set_u (*val) : (*val = get_u ());
+   if (writep)
+      set_u (*val);
+   else
+      *val = get_u ();
 }
 void s_virtual (unsigned long *val, int writep) {
-   writep ? set_s (*val) : (*val = get_s ());
+   if (writep)
+      set_s (*val);
+   else
+      *val = get_s ();
 }
 void d_virtual (unsigned long *val, int writep) {
-   writep ? set_d (*val) : (*val = get_d ());
+   if (writep)
+      set_d (*val);
+   else
+      *val = get_d ();
 }
 void a_virtual (unsigned long *val, int writep) {
-   writep ? set_a (*val) : (*val = get_a ());
+   if (writep)
+      set_a (*val);
+   else
+      *val = get_a ();
 }
 void b_virtual (unsigned long *val, int writep) {
-   writep ? set_b (*val) : (*val = get_b ());
+   if (writep)
+      set_b (*val);
+   else
+      *val = get_b ();
 }
 void dp_virtual (unsigned long *val, int writep) {
-   writep ? set_dp (*val) : (*val = get_dp ());
+   if (writep)
+      set_dp (*val);
+   else
+      *val = get_dp ();
 }
 void cc_virtual (unsigned long *val, int writep) {
-   writep ? set_cc (*val) : (*val = get_cc ());
+   if (writep)
+      set_cc (*val);
+   else
+      *val = get_cc ();
 }
 void irq_load_virtual (unsigned long *val, int writep) {
    if (!writep)

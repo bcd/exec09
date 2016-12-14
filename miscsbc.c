@@ -1,8 +1,9 @@
 #include <fcntl.h>
-#include "machine.h"
 #include <assert.h>
-// for symtab stuff?
+#include "machine.h"
 #include "6809.h"
+#include "ioexpand.h"
+#include "command.h"
 
 // for smii console
 int smii_i_avail = 1;
@@ -521,7 +522,6 @@ void sdmapper_remap(int op, int val)
 
 U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
 {
-    unsigned char ch;
     //printf("INFO In sdmapper_read with addr=0x%08x, mc_state=%d, mc_poll=%d\n", addr, mc_state, mc_poll);
     switch (addr) {
     case 0: // SDDATA
@@ -601,8 +601,8 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
     default:
         printf("INFO In sdmapper_read with addr=0x%08x\n", (unsigned char)addr);
         //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x42);
-        return 0x42;
     }
+    return 0x42; // return default value
 }
 
 // TODO expand RAM and implement mapper, protect and rom disable

@@ -22,6 +22,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include "machine.h"
+#include "command.h"
+#include "monitor.h"
 #include "6809.h"
 #include "eon.h"
 
@@ -83,7 +85,7 @@ struct hw_device *device_attach (struct hw_class *class_ptr, unsigned int size, 
 	/* Attach implies reset */
 	class_ptr->reset (dev);
 	return dev;
-};
+}
 
 /**
  * Map a portion of a device into the CPU's address space.
@@ -179,7 +181,6 @@ static struct hw_device *find_device (unsigned int addr, unsigned char id)
 
 void print_device_name (unsigned int devno)
 {
-   struct hw_device *dev = device_table[devno];
    printf ("%02X", devno);
 }
 
@@ -329,7 +330,6 @@ absolute_address_t to_absolute (unsigned long cpuaddr)
 	if (cpuaddr > 0xffff) return (absolute_address_t)cpuaddr;
 
 	struct bus_map *map = find_map (cpuaddr);
-	struct hw_device *dev = find_device (cpuaddr, map->devid);
 	unsigned long phy_addr = map->offset + cpuaddr % BUS_MAP_SIZE;
 	return absolute_from_reladdr (map->devid, phy_addr);
 }
@@ -352,8 +352,8 @@ void describe_machine (void)
 	unsigned int devno;
 	unsigned int mapno;
 	unsigned int prev_devid = -1;
-	unsigned int prev_offset;
-	unsigned int prev_flags;
+	unsigned int prev_offset = 0;
+	unsigned int prev_flags = 0;
 	unsigned int dot_dot = 0;
 
 	/* machine */
@@ -382,7 +382,7 @@ void describe_machine (void)
 		else
 		{
 			dot_dot = 0;
-			printf ("Map %3d:  addr=%04X  dev=%d  offset=%04X  size=%06X  flags=%02X\n",
+                        printf ("Map %3d:  addr=%04X  dev=%d  offset=%04lX  size=%06lX  flags=%02X\n",
 				mapno, mapno * BUS_MAP_SIZE, map->devid, map->offset,
 				device_table[map->devid]->size, map->flags);
 		}
@@ -414,15 +414,22 @@ void fault (unsigned int addr, unsigned char type)
 
 void null_reset (struct hw_device *dev)
 {
+	(void) dev;	// silence warning unused parameter
 }
 
 U8 null_read (struct hw_device *dev, unsigned long addr)
 {
+	(void) dev;	// silence warning unused parameter
+	(void) addr;
+
 	return 0xFF;
 }
 
 void null_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
+	(void) dev;	// silence warning unused parameter
+	(void) addr;
+	(void) val;
 }
 
 struct hw_class null_class =
