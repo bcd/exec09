@@ -90,6 +90,9 @@ U8 hwtimer_read (struct hw_device *dev, unsigned long addr)
 			return timer->reload / timer->resolution;
 		case HWT_FLAGS:
 			return timer->flags;
+                default:
+                        fprintf(stderr, "Read hwtimer from undefined addr\n");
+                        return 0x42;
 	}
 }
 
@@ -106,7 +109,7 @@ void hwtimer_write (struct hw_device *dev, unsigned long addr, U8 val)
 			break;
 		case HWT_FLAGS:
 			timer->flags = val;
-			break;
+                        break;
 	}
 }
 

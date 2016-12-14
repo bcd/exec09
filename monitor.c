@@ -895,6 +895,7 @@ int dasm (char *buf, absolute_address_t opc)
   absolute_address_t pc = opc;
   char R;
   int fetch1;			/* the first (MSB) fetched byte, used in macro RDWORD */
+  absolute_address_t tmp;
 
   op = fetch8();
 
@@ -1027,12 +1028,13 @@ int dasm (char *buf, absolute_address_t opc)
       break;
 
     case _rel_byte:
-      fetch1 = ((INT8) fetch8 ());
+           fetch1 = ((INT8) fetch8 ());
 	   sprintf (buf, "%s", absolute_addr_name (fetch1 + pc));
       break;
 
     case _rel_word:
-	   sprintf (buf, "%s", absolute_addr_name (fetch16() + pc));
+           tmp = fetch16();
+           sprintf (buf, "%s", absolute_addr_name (pc + tmp));
       break;
 
     case _reg_post:
@@ -1091,8 +1093,6 @@ int load_map_file (const char *name)
 	char buf[256];
 	char *tok_ptr, *value_ptr, *id_ptr;
 	target_addr_t value;
-	char *file_ptr;
-	struct symbol *sym = NULL;
 
 	/* Try appending the suffix 'map' to the name of the program. */
 	sprintf (map_filename, "%s.map", name);
@@ -1147,7 +1147,7 @@ int load_map_file (const char *name)
 */
 int load_image (const char *name)
 {
-  int count, addr, type;
+  unsigned int count, addr, type;
   FILE *fp;
 
   fp = file_open(NULL, name, "r");
@@ -1176,7 +1176,7 @@ int load_image (const char *name)
 
 int load_hex (FILE *fp)
 {
-  int count, addr, type, data, checksum;
+  unsigned int count, addr, type, data, checksum;
   int done = 1;
   int line = 0;
 
@@ -1240,7 +1240,7 @@ int load_hex (FILE *fp)
 
 int load_s19(FILE *fp)
 {
-  int count, addr, type, data, checksum;
+  unsigned int count, addr, type, data, checksum;
   int done = 1;
   int line = 0;
 
@@ -1347,7 +1347,7 @@ const char* absolute_addr_name (absolute_address_t addr)
 
    bufptr = buf;
 
-   bufptr += sprintf (bufptr, "%02X:0x%04X", addr >> 28, addr & 0xFFFFFF);
+   bufptr += sprintf (bufptr, "%02lX:0x%04lX", addr >> 28, addr & 0xFFFFFF);
 
    name = sym_lookup (&program_symtab, addr);
    if (name)

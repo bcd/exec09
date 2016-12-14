@@ -170,7 +170,7 @@ struct option
 	const char *help;
 	unsigned int can_negate : 1;
 	unsigned int takes_arg : 1;
-	int *int_value;
+        int *int_value;
 	int default_value; /* value to set if option is present */
 	const char **string_value;
 	int (*handler) (const char *arg);
@@ -293,7 +293,7 @@ process_option (struct option *opt, const char *arg)
 }
 
 
-int
+void
 process_plain_argument (const char *arg)
 {
 	//printf ("plain argument '%s'\n", arg);
@@ -302,7 +302,7 @@ process_plain_argument (const char *arg)
 }
 
 
-int
+void
 parse_args (int argc, char *argv[])
 {
 	int argn = 1;
@@ -363,11 +363,6 @@ next_arg:
 int
 main (int argc, char *argv[])
 {
-  int off = 0;
-  int i, j, n;
-  int argn = 1;
-  unsigned int loops = 0;
-
   gettimeofday (&time_started, NULL);
 
   exename = argv[0];

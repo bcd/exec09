@@ -59,7 +59,7 @@ int udp_socket_create (int port)
 	return s;
 }
 
-int udp_socket_send (int s, int dstport, const void *data, int len)
+int udp_socket_send (int s, int dstport, const void *data, socklen_t len)
 {
 	int rc;
 	struct sockaddr_in to;
@@ -76,11 +76,10 @@ int udp_socket_send (int s, int dstport, const void *data, int len)
 	return rc;
 }
 
-int udp_socket_receive (int s, int dstport, void *data, int len)
+int udp_socket_receive (int s, int dstport, void *data, socklen_t len)
 {
 	int rc;
 	struct sockaddr_in from;
-	int fromlen;
 
 	rc = recvfrom (s, data, len, 0, (struct sockaddr *)&from, &len);
 	if ((rc < 0) && (errno != EAGAIN))

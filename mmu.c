@@ -68,7 +68,6 @@ void small_mmu_write (struct hw_device *dev, unsigned long addr, U8 val)
 void small_mmu_reset (struct hw_device *dev)
 {
 	unsigned int page;
-	struct small_mmu *mmu = (struct small_mmu *)dev->priv;
 
 	for (page = 0; page < SMR_SLOTS; page++)
 	{

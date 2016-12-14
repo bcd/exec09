@@ -3,8 +3,8 @@
 #define _WPCLIB_H
 
 int udp_socket_create (int port);
-int udp_socket_send (int s, int dstport, const void *data, int len);
-int udp_socket_receive (int s, int dstport, void *data, int len);
+int udp_socket_send (int s, int dstport, const void *data, socklen_t len);
+int udp_socket_receive (int s, int dstport, void *data, socklen_t len);
 int udp_socket_close (int s);
 
 #define NUM_DMD_PHASES 3

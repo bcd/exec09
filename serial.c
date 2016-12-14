@@ -36,7 +36,6 @@ void serial_update (struct serial_port *port)
 {
 	fd_set infds, outfds;
 	struct timeval timeout;
-	int rc;
 
 	FD_ZERO (&infds);
 	FD_SET (port->fin, &infds);
@@ -44,7 +43,7 @@ void serial_update (struct serial_port *port)
 	FD_SET (port->fout, &outfds);
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 0;
-	rc = select (2, &infds, &outfds, NULL, &timeout);
+	select (2, &infds, &outfds, NULL, &timeout);
 	if (FD_ISSET (port->fin, &infds))
 		port->status |= SER_STAT_READOK;
 	else
@@ -72,8 +71,11 @@ U8 serial_read (struct hw_device *dev, unsigned long addr)
 			return val;
 		}
 		case SER_CTL_STATUS:
-			return port->status;
-	}
+                        return port->status;
+                default:
+                        fprintf(stderr, "serial_read() from undefined addr\n");
+        }
+        return 0x42;
 }
 
 void serial_write (struct hw_device *dev, unsigned long addr, U8 val)
