@@ -556,10 +556,6 @@ void set_v (unsigned val)
   V = val & 0xff;
 }
 
-void set_zero (unsigned val)
-{
-}
-
 void set_md (unsigned val)
 {
   MD = val & 0xff;

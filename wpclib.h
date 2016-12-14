@@ -33,7 +33,6 @@ struct wpc_message
 };
 
 int wpc_msg_init (int code, struct wpc_message *msg);
-int wpc_msg_insert (struct wpc_message *msg, const void *p, int len);
 int wpc_msg_send (int s, int dstport, struct wpc_message *msg);
 
 #define CODE_DMD_PAGE 0

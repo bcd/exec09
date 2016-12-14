@@ -99,12 +99,6 @@ int wpc_msg_init (int code, struct wpc_message *msg)
 	return 0;
 }
 
-int wpc_msg_insert (struct wpc_message *msg, const void *p, int len)
-{
-	memcpy (msg->u.data + msg->len, p, len);
-	msg->len += len;
-}
-
 int wpc_msg_send (int s, int dstport, struct wpc_message *msg)
 {
 	int rc = udp_socket_send (s, dstport, msg, msg->len + sizeof (struct wpc_message) - 1000);
