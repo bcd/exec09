@@ -21,21 +21,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "machine.h"
+#include "ioexpand.h"
+#include "6809.h"
+
 
 /* An I/O expander subdivides a single, 128-byte region into 16, 8-byte slots each
 of which can hold a device. It is needed to work around the inability of the system
 bus to handle attaching devices less than 128 bytes in size.
 
 When mapping a slot, an offset can be applied to the underlying device. An example application is to make the I/O expander occupy fewer than 128 bytes by mapping one or more slots to a large underlying ROM. */
-
-#define NR_IOEXPAND 16
-#define IO_WINDOW 8
-
-struct ioexpand
-{
-	struct hw_device *ios[NR_IOEXPAND];
-	unsigned long offset[NR_IOEXPAND];
-};
 
 void ioexpand_attach (struct hw_device *expander_dev, int slot, unsigned long offset, struct hw_device *io_dev)
 {

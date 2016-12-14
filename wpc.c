@@ -24,11 +24,13 @@
 #else
 #error
 #endif
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/errno.h>
 #include "wpclib.h"
+#include "machine.h"
 
 #define WPC_RAM_BASE                0x0000
 #define WPC_RAM_SIZE                0x2000
@@ -191,7 +193,6 @@ static U8 wpc_get_console_state (void)
 
 static U8 wpc_console_read (void)
 {
-	int rc;
 	U8 c = 0;
 
 	if (!wpc_console_inited)
@@ -200,7 +201,7 @@ static U8 wpc_console_read (void)
 		return 0;
 	}
 
-	rc = read (0, &c, 1);
+	read (0, &c, 1);
 	return c;
 }
 
@@ -269,6 +270,8 @@ unsigned int wpc_read_switch_column (int col)
 
 void wpc_write_lamp (int num, int flag)
 {
+	(void) num;	// silence warning unused parameter
+	(void) flag;
 }
 
 
@@ -332,7 +335,7 @@ void wpc_dmd_set_visible (U8 val)
 	wpc_msg_init (CODE_DMD_PAGE, &msg);
 	for (i=0; i < 3; i++)
 	{
-		p = (U8*) wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
+                p = (char*) wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
 		msg.u.dmdpage.phases[i].page = wpc->dmd_visibles[i];
 		memcpy (&msg.u.dmdpage.phases[i].data, p, 512);
 	}
@@ -586,7 +589,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 		case WPC_SOL_FLASH1_OUTPUT:
 		case WPC_SOL_LOWPOWER_OUTPUT:
 			if (val != 0)
-				printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
+                                printf (">>> ASIC write %04lX %02X\n", addr + WPC_ASIC_BASE, val);
 			break;
 
 		default:
@@ -646,10 +649,13 @@ struct hw_device *wpc_asic_create (void)
 
 void wpc_fault (unsigned int addr, unsigned char type)
 {
+	(void) addr;	// silence warning unused parameter
+	(void) type;
 }
 
 void wpc_dump_thread (unsigned int thread_id)
 {
+	(void) thread_id;	// silence warning unused parameter
 }
 
 void io_sym_add (const char *name, unsigned long cpuaddr)

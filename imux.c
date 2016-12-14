@@ -23,14 +23,8 @@
 #include <stdlib.h>
 #include "machine.h"
 #include "eon.h"
-
-struct imux
-{
-	unsigned int in_use;    /* Bits for each int that are used */
-	unsigned int enabled;   /* Bits for each int that is enabled */
-	unsigned int pending;   /* Bits for each int that are active */
-	unsigned int src;       /* Source line back to CPU */
-};
+#include "6809.h"
+#include "imux.h"
 
 
 /*

@@ -157,5 +157,31 @@ struct hw_device *console_create (void);
 struct hw_device *disk_create (const char *backing_file, struct hw_device *ram_dev);
 
 void fault (unsigned int addr, unsigned char type);
+U8 ram_read (struct hw_device *dev, unsigned long addr);
+U8 cpu_read8 (unsigned int addr);
+U16 cpu_read16 (unsigned int addr);
+void cpu_write8 (unsigned int addr, U8 val);
+U8 abs_read8 (absolute_address_t addr);
+void abs_write8 (absolute_address_t addr, U8 val);
+void cpu_is_running (void);
+void machine_init (const char *machine_name, const char *boot_rom_file);
+absolute_address_t to_absolute (unsigned long cpuaddr);
+void dump_machine(void);
+void describe_machine (void);
+void machine_update (void);
+void print_device_name (unsigned int devno);
+void device_define (struct hw_device *dev,
+        unsigned long offset,
+        unsigned int addr,
+        unsigned int len,
+        unsigned int flags);
+void bus_map (unsigned int addr,
+        unsigned int devid,
+        unsigned long offset,
+        unsigned int len,
+        unsigned int flags);
+void bus_unmap (unsigned int addr, unsigned int len);
+struct hw_device *mmu_create (void);
+struct hw_device *null_create (void);
 
 #endif /* _M6809_MACHINE_H */

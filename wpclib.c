@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include "wpclib.h"
 
 #define UDP_PORT 7400
@@ -58,7 +59,7 @@ int udp_socket_create (int port)
 	return s;
 }
 
-int udp_socket_send (int s, int dstport, const void *data, int len)
+int udp_socket_send (int s, int dstport, const void *data, socklen_t len)
 {
 	int rc;
 	struct sockaddr_in to;
@@ -75,11 +76,10 @@ int udp_socket_send (int s, int dstport, const void *data, int len)
 	return rc;
 }
 
-int udp_socket_receive (int s, int dstport, void *data, int len)
+int udp_socket_receive (int s, int dstport, void *data, socklen_t len)
 {
 	int rc;
 	struct sockaddr_in from;
-	int fromlen;
 
 	rc = recvfrom (s, data, len, 0, (struct sockaddr *)&from, &len);
 	if ((rc < 0) && (errno != EAGAIN))
@@ -96,12 +96,6 @@ int wpc_msg_init (int code, struct wpc_message *msg)
 	msg->timestamp = 0;
 	msg->len = 0;
 	return 0;
-}
-
-int wpc_msg_insert (struct wpc_message *msg, const void *p, int len)
-{
-	memcpy (msg->u.data + msg->len, p, len);
-	msg->len += len;
 }
 
 int wpc_msg_send (int s, int dstport, struct wpc_message *msg)
