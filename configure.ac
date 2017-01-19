@@ -48,7 +48,7 @@ AC_ARG_ENABLE([readline],
    [rl_lib=$enableval], [rl_lib=no])
 if test $rl_lib = yes; then
    AC_DEFINE(HAVE_READLINE, 1, [Use readline library])
-	READLINE_LIBS="-L/lib -lreadline"
+	READLINE_LIBS="-lreadline"
 	AC_SUBST(READLINE_LIBS)
 fi
 
