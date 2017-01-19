@@ -26,6 +26,21 @@ debugger command-line:
 > make
 
 -----------------------------------------------------------------
+Build and install (on OS X)
+
+The build process is very similar to Linux, so the instructions
+provided there apply to some degree to OS X as well.
+
+To automate the process of fetching and installing the
+prerequisites, configuring, compiling and installing, a script
+exists that does all the grunt work.
+
+MacPorts is required. Installing the prerequisites requires root
+privileges, so you will be asked for your password.
+
+> ./build.osx.sh
+
+-----------------------------------------------------------------
 Input Files
 
 
