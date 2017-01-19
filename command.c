@@ -1588,7 +1588,7 @@ void command_read_hook (absolute_address_t addr)
    br = brkfind_by_addr (addr);
    if (br && br->enabled && br->on_read)
    {
-      printf ("Watchpoint %d triggered. [", br->id);
+      printf ("Watchpoint %d triggered. [pc=0x%04X ", br->id, get_pc());
       print_addr (addr);
       printf ("]\n");
       breakpoint_hit (br);
@@ -1615,10 +1615,9 @@ void command_write_hook (absolute_address_t addr, U8 val)
 
          breakpoint_hit (br);
 
-         printf ("Watchpoint %d triggered. [", br->id);
+         printf ("Watchpoint %d triggered. [pc=0x%04X ", br->id, get_pc());
          print_addr (addr);
-         printf (" = 0x%02X", val);
-         printf ("]\n");
+         printf (" = 0x%02X]\n", val);
       }
    }
 
