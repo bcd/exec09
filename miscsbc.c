@@ -255,7 +255,7 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
 
         /* Other (should be unreachable) -----*/
     default:
-        printf("ERROR in console_read with addr=0x%08x\n", (unsigned int)addr);
+        printf("ERROR in console_read with addr=0x%04x\n", (unsigned int)addr);
         return 0x42;
     }
 }
@@ -271,7 +271,7 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
             printf("[uart0 reset]");
         }
         else {
-            printf("[uart0 stat wr of 0x%02x\n", val);
+            printf("[uart0 stat wr: PC=0x%04x, addr=0x%04x, wdata=0x%02x]\n", get_pc(), (unsigned int)addr, val);
         }
         break;
 
@@ -283,10 +283,10 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         /* UART1 -----------------------------*/
     case 2: /* status */
         if (val==3) {
-            printf("[uart0 reset]");
+            printf("[uart1 reset]");
         }
         else {
-            printf("[uart0 stat wr of 0x%02x\n", val);
+            printf("[uart1 stat wr: PC=0x%04x, addr=0x%04x, wdata=0x%02x]\n", get_pc(), (unsigned int)addr, val);
         }
         break;
 
@@ -297,26 +297,26 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         /* UART2 -----------------------------*/
     case 4: /* status */
         if (val==3) {
-            printf("[uart0 reset]");
+            printf("[uart2 reset]");
         }
         else {
-            printf("[uart0 stat wr of 0x%02x\n", val);
+            printf("[uart2 stat wr: PC=0x%04x, addr=0x%04x, wdata=0x%02x]\n", get_pc(), (unsigned int)addr, val);
         }
         break;
 
     case 5: /* data */
-        printf("[uart1 data wr of 0x%02x\n", val);
+        printf("[uart2 data wr of 0x%02x\n", val);
         break;
 
         /* GPIO (not modelled) ---------------*/
     case 6:
     case 7:
-        printf("[gpio wr addr=0x%08x val=0x%02x]\n", (unsigned int)addr, val);
+        printf("[gpio wr addr=0x%04x val=0x%02x]\n", (unsigned int)addr, val);
         break;
 
         /* Other (should be unreachable) -----*/
     default:
-        printf("ERROR in console_write with addr=0x%08x val=0x%02x\n",(unsigned int)addr, val);
+        printf("ERROR in console_write with addr=0x%04x val=0x%02x\n",(unsigned int)addr, val);
     }
 }
 
@@ -599,7 +599,7 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
         //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_timer);
         return mc_timer;
     default:
-        printf("INFO In sdmapper_read with addr=0x%08x\n", (unsigned char)addr);
+        printf("INFO In sdmapper_read with addr=0x%04x\n", (unsigned int)addr);
         //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x42);
     }
     return 0x42; // return default value
