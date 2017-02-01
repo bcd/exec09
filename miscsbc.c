@@ -11,6 +11,9 @@ int smii_o_busy = 0;
 
 // for multicomp09 sdmapper: values most-recently written to these registers
 #define MULTICOMP09_RAMMAX (0x80000)
+// [NAC HACK 2017Feb01] this does not match RTL!! RTL uses block 7. This is chosen
+// for now to match the mapping in NITROS9.
+#define FRT_BLOCK (63)
 unsigned char mc_mmuadr = 0x00;
 unsigned char mc_mmufrt = 0x00; // Magic flag for Fixed RAM Top
 unsigned char mc_mmudat = 0x00;
@@ -24,9 +27,8 @@ int  mc_addr;
 int  mc_state;
 int  mc_poll;
 int  mc_dindex;
-// [NAC HACK 2015May07] to allow remap of io. Really nasty hack.
-// [NAC HACK 2015May07] also needed to allow dump.
-struct hw_device *mc_rom, *mc_ram, *mc_iodev;
+// multicomp devices
+struct hw_device *mc_romdev, *mc_ramdev, *mc_iodev, *mc_consoledev, *mc_sdmapperdev;
 
 FILE *sd_file;
 FILE *batch_file;
@@ -464,56 +466,97 @@ void sdmapper_remap(int op, int val)
     }
 
 
-    // now update mapping based on mc_mmuadr, mc_pblk[]
+    // now update mapping based on mc_mmuadr, mc_pblk[], mc_mmufrt
 
     //[NAC HACK 2015May06] Yeuch. Horrible how I have had to hardwire the device numbers.
     //overall, it would be better if I could pick them in the first place.
+    // 0 null-device
+    // 1 RAM
+    // 2 ROM
+    // 3 CONSOLE
+    // 4 SDMAPPER
+    // 5 IOEXPAND
 
 
     //      addr    dev  offset         len     flags
 
-    bus_map(0x0000, 1,   mmu_offset(0), 0x2000, mmu_flags(0));
-    bus_map(0x2000, 1,   mmu_offset(1), 0x2000, mmu_flags(1));
-    bus_map(0x4000, 1,   mmu_offset(2), 0x2000, mmu_flags(2));
+    bus_map(0x0000, 1,   mmu_offset(0), 0x2000, mmu_flags(0)); // block 0
+    bus_map(0x2000, 1,   mmu_offset(1), 0x2000, mmu_flags(1)); // block 1
+    bus_map(0x4000, 1,   mmu_offset(2), 0x2000, mmu_flags(2)); // ..
     bus_map(0x6000, 1,   mmu_offset(3), 0x2000, mmu_flags(3));
     bus_map(0x8000, 1,   mmu_offset(4), 0x2000, mmu_flags(4));
     bus_map(0xA000, 1,   mmu_offset(5), 0x2000, mmu_flags(5));
-    bus_map(0xC000, 1,   mmu_offset(6), 0x2000, mmu_flags(6));
+    bus_map(0xC000, 1,   mmu_offset(6), 0x2000, mmu_flags(6)); // block 6
 
-    // 0xE000-0xFFFF ROM or remappable RAM
+    // Block 7 is cut up in pieces..
+
+    // 0xE000-0xFDFF (0x1E00 bytes) behaves as ROM or MMappable RAM
     if (mc_mmuadr & 0x80) {
-        // ROM disabled; map RAM.
-        bus_map(0xE000, 1,   mmu_offset(7), 0x2000, mmu_flags(7));
+        // ROM device disabled; map RAM.
+        bus_map(0xE000, 1,   mmu_offset(7), 0x1E00, mmu_flags(7));
     }
     else {
-        // ROM
-        bus_map(0xE000, 2,   0x0000, 0x2000, MAP_READABLE);  // ROM
+        // ROM device, starting at offset 0
+        bus_map(0xE000, 2,   0x0000,        0x1E00, MAP_READABLE);
     }
 
-    // need to do IOEXPAND last because it overwrites a section within
-    // a larger window.
-    bus_map(0xFF80, 5,   0x0000, 128,    MAP_READWRITE); // IOEXPAND
+    // The next 0x180 bytes is the first part of the Fixed RAM Top
+    // which behaves as ROM or MMappable RAM or RAM from a fixed block
+    if (mc_mmuadr & 0x80) {
+        // ROM device disabled; map 0x180 bytes of RAM
+        if (mc_mmufrt) {
+            // RAM from fixed block -- always allow read/write
+            bus_map(0xFE00, 1,   0x1E00 + (FRT_BLOCK << 13), 0x180, mmu_flags(7));
+        }
+        else {
+            // RAM from block controlled by MMU
+            bus_map(0xFE00, 1,   0x1E00 + mmu_offset(7),     0x180, MAP_READWRITE);
+        }
+    }
+    else {
+        // ROM device, starting at offset 0x1E00
+        bus_map(0xFE00, 2,   0x1E00,        0x180, MAP_READABLE);
+    }
 
-    // need to do this again for the windows that map back
-    // to underlying ROM.. because it may now be underlying RAM
+    // The final 0x80 bytes at the very top of the address space is broken
+    // into 16 devices, each 8 bytes in size. Two of the devices correspond
+    // to addresses 0xFFDx -- the I/O devices. The remaining 14 slots act
+    // in the same way as Fixed RAM Top and each of them applies the same
+    // rules as the other FRT region above.
+    bus_map(0xFF80, 5,   0x0000, 128,    MAP_READWRITE); // ioexpand
+
     for (i=0; i<16; i++) {
-        if ((i!=10) && (i!=11)) {
-            // Map to underlying memory. Read will have an address of 0x0-0xf
-            // so we need to apply an offset to get it to the
-            // right place. The offset is from the start of the
-            // romdev and has nothing to do with the actual
-            // bus address of the location.
-            // Access permission inherited from underlying
-            // device, which is exactly what I want.
+        if (i==10) {
+            // 0xFFD0-0xFFD7 -- VDU/UART and GPIO
+            ioexpand_attach(mc_iodev, i, 0, mc_consoledev);
+        }
+        else if (i==11) {
+            // 0xFFD8-0xFFDF -- SDCARD and MemMapper
+            ioexpand_attach(mc_iodev, i, 0, mc_sdmapperdev);
+        }
+        else {
+            // Map to underlying memory. Access will have an address of 0x0-0xf
+            // so we need to apply an offset to get it to the right place. The
+            // offset is from the start of the underlying device (ROM or RAM)
+            // and has nothing to do with the actual bus address of the location.
+            // The access permissions are inherited from the underlying device,
+            // which is exactly what I want.
+            // [NAC HACK 2017Feb01] is the access permission correct for the
+            // write-protection flag on the MMU devices??
             if (mc_mmuadr & 0x80) {
-                // ROM is disabled; map RAM. Offset is a function of paging register
-                // [NAC HACK 2015Jun26] was:
-                //                ioexpand_attach(mc_iodev, i, ((mc_mapper & 0xf0)<<9) + 0x1F80 + (i*8), mc_ram);
-                ioexpand_attach(mc_iodev, i, mmu_offset(7) + 0x1F80 + (i*8), mc_ram);
+                // ROM device disabled; map 0x10 bytes of RAM
+                if (mc_mmufrt) {
+                    // RAM from fixed block -- always allow read/write
+                    ioexpand_attach(mc_iodev, i, (FRT_BLOCK << 13) + 0x1F80 + (i*8), mc_ramdev);
+                }
+                else {
+                    // RAM from block controlled by MMU
+                    ioexpand_attach(mc_iodev, i, mmu_offset(7) + 0x1F80 + (i*8), mc_ramdev);
+                }
             }
             else {
-                // ROM
-                ioexpand_attach(mc_iodev, i, 0x1F80 + (i*8), mc_rom);
+                // ROM device, starting at offset 0x1F80
+                ioexpand_attach(mc_iodev, i, 0x1F80 + (i*8), mc_romdev);
             }
         }
     }
@@ -746,16 +789,12 @@ struct hw_device* sdmapper_create (void)
 }
 
 
+
 // [NAC HACK 2015May05] is it legal to have more than one instance of anything?
 // eg 2 RAMs? I assumed it was but now I realise IT IS NOT! Yeuch.
 // I assume the same restriction also applies to ROMs and RAMs
 void multicomp09_init (const char *boot_rom_file)
 {
-    struct hw_device* multicomp09_console;
-    struct hw_device* multicomp09_sdmapper;
-    struct hw_device* iodev;
-    struct hw_device* ramdev;
-    struct hw_device* romdev;
     int i;
 
     /* Log file
@@ -767,22 +806,22 @@ void multicomp09_init (const char *boot_rom_file)
        otherwise, it is mapped in 8K chunks. Each chunk has a separate
        write protect.
     */
-    ramdev = ram_create(MULTICOMP09_RAMMAX);
+    mc_ramdev = ram_create(MULTICOMP09_RAMMAX);
 
     /* ROM is 8Kbytes. Usually sits from E000 to FFFF but can be disabled
        by writing 0x80 to MMUADR
     */
-    romdev = rom_create (boot_rom_file, 0x2000);
+    mc_romdev = rom_create (boot_rom_file, 0x2000);
 
-    /* I/O - UART */
-    multicomp09_console = console_create();
-    multicomp09_console->class_ptr->read = multicomp09_console_read;
-    multicomp09_console->class_ptr->write = multicomp09_console_write;
+    /* I/O Devices - UARTs */
+    mc_consoledev = console_create();
+    mc_consoledev->class_ptr->read = multicomp09_console_read;
+    mc_consoledev->class_ptr->write = multicomp09_console_write;
 
-    /* I/O - sdmapper */
-    multicomp09_sdmapper = sdmapper_create();
+    /* I/O Devices - SD controller, MMapper, Timer */
+    mc_sdmapperdev = sdmapper_create();
 
-    /* I/O devices at FFD0/FFDF
+    /* Address space for I/O devices at FFD0/FFDF
        Use an ioexpand device at 0xFF80-0xFFFF.
        This overlays the ROM mapping and creating it *after*
        the ROM overwrites the ROM's mapping.
@@ -791,39 +830,13 @@ void multicomp09_init (const char *boot_rom_file)
        In particular, need locations 0xFFF0-0xFFFF mapped
        in order to provide the exception vectors.
      */
-    iodev = ioexpand_create();
+    mc_iodev = ioexpand_create();
 
-    for (i=0; i<16; i++) {
-        if (i==10) {
-            // 0xFFD0-0xFFD7 -- VDU/UART and GPIO
-            ioexpand_attach(iodev, i, 0, multicomp09_console);
-        }
-        else if (i==11) {
-            // 0xFFD8-0xFFDF -- SDCARD and MemMapper
-            ioexpand_attach(iodev, i, 0, multicomp09_sdmapper);
-        }
-        else {
-            //[NAC HACK 2015May07] done in sdmapper_remap in a moment
-            // so no real reason to do it here..
-
-            // Map to ROM. Read will have an address of 0x0-0xf
-            // so we need to apply an offset to get it to the
-            // right place. The offset is from the start of the
-            // romdev and has nothing to do with the actual
-            // bus address of the location.
-            ioexpand_attach(iodev, i, 0x1F80 + (i*8), romdev);
-        }
-    }
-    //[NAC HACK 2015May07] need a nicer way than this!
-    mc_rom = romdev;
-    mc_ram = ramdev;
-    mc_iodev = iodev;
 
     /* Now map all the devices into the address space, in accordance
        with the settings of the memory mapper.
     */
     sdmapper_remap(0, 0);
-
 
     /* If a file multicomp09.bat exists, supply input from it until
        it's exhausted.
@@ -852,7 +865,7 @@ void multicomp09_dump (void)
     char byte;
     dump_file = file_open(NULL, "multicomp09.dmp", "w+b");
     for (i=0; i<MULTICOMP09_RAMMAX; i=i+1) {
-        byte = ram_read(mc_ram,i);
+        byte = ram_read(mc_ramdev,i);
         /* inefficient!! */
         fwrite(&byte, 1, 1, dump_file);
     }
