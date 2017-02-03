@@ -897,15 +897,17 @@ int dasm (char *buf, absolute_address_t opc)
   int fetch1;			/* the first (MSB) fetched byte, used in macro RDWORD */
   absolute_address_t tmp;
 
+  extern int os9call;
+
   op = fetch8();
 
-  if (op == 0x10)
+  if (op == 0x10) /* prefix for PAGE2 opcodes */
     {
       op = fetch8();
       am = codes10[op].mode;
       op = codes10[op].code;
     }
-  else if (op == 0x11)
+  else if (op == 0x11) /* prefix for PAGE3 opcodes */
     {
       op = fetch8();
       am = codes11[op].mode;
@@ -918,7 +920,15 @@ int dasm (char *buf, absolute_address_t opc)
     }
 
   op_str = (char *) mne[op];
-  buf += sprintf (buf, "%-6.6s", op_str);
+  if ((op_str == "SWI2") && os9call)
+    {
+      op = fetch8();
+      buf += sprintf (buf, "%-6.6s#$%2x", "OS9", op);
+    }
+  else
+    {
+      buf += sprintf (buf, "%-6.6s", op_str);
+    }
 
   switch (am)
     {

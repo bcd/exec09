@@ -48,6 +48,9 @@ int debug_enabled = 0;
 /* Nonzero if tracing is enabled */
 int trace_enabled = 0;
 
+/* Nonzero if SWI2 should be reported with a postbyte */
+int os9call = 0;
+
 /* When nonzero, causes the program to print the total number of cycles
 on a successful exit. */
 int dump_cycles_on_success = 0;
@@ -192,6 +195,8 @@ struct option
 		NO_NEG, HAS_ARG, &cycles_per_firq, 0, NULL, NULL },
 	{ 'C', "cycledump", "",
 		HAS_NEG, NO_ARG, &dump_cycles_on_success, 1, NULL, NULL},
+	{ 'o', "os9call", "Treat SWI2 as an OS9/NitrOS9 system call and report postbyte",
+		HAS_NEG, NO_ARG, &os9call, 1, NULL, NULL},
 	{ 't', "loadmap", "" },
 	{ 'T', "trace", "",
 		NO_NEG, NO_ARG, &trace_enabled, 1, NULL, NULL },
