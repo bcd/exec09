@@ -642,8 +642,17 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
         //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_timer);
         return mc_timer;
     default:
-        printf("INFO In sdmapper_read with addr=0x%04x\n", (unsigned int)addr);
-        //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),0x42);
+        // In general, it's an error to read back anything else. However, in the
+        // case of a CLR instruction the CPU does a read "modify" write (but
+        // ignores the read data. In this case, it's nice *not* to print this
+        // warning message.
+        // This is a hack because it only ignores CLR with extended addressing
+        // and, worse, it might cause a real problem to be missed because
+        // we guess/assume the start position of the previous op-code (would be
+        // cleaner if we tracker previous pc).
+        if (read8(get_pc()-3) != 0x7f) {
+            printf("INFO In sdmapper_read with addr=0x%04x\n", (unsigned int)addr);
+        }
     }
     return 0x42; // return default value
 }
