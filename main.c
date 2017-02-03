@@ -22,6 +22,7 @@
 
 #include <sys/time.h>
 #include <unistd.h>
+#include <limits.h>
 #include "6809.h"
 #include "command.h"
 #include "symtab.h"
@@ -57,7 +58,7 @@ int dump_cycles_on_success = 0;
 
 /* When nonzero, indicates the total number of cycles before an automated
 exit.  This is to help speed through test cases that never finish. */
-unsigned long max_cycles = 500000000UL;
+int max_cycles = INT_MAX;
 
 /* When nonzero, says that the state of the machine is persistent
 across runs of the simulator. */
@@ -418,7 +419,7 @@ main (int argc, char *argv[])
 	 * here periodically and do the interrupt handling. */
 	for (cpu_quit = 1; cpu_quit != 0;)
 	{
-   	if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
+		if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
 		{
 			/* Simulate some CPU time, either 1ms worth or up to the
 			next possible IRQ */
@@ -427,20 +428,22 @@ main (int argc, char *argv[])
 			/* Call each device that needs periodic processing. */
 			machine_update ();
 		}
-		else
+		else if ((cycles_per_irq != 0) && (cycles_per_firq == 0))
 		{
 			total += cpu_execute (cycles_per_irq);
-			/* TODO - this assumes periodic interrupts (WPC) */
 			request_irq (0);
-			{
-			/* TODO - FIRQ frequency not handled yet */
-				static int firq_freq = 0;
-				if (++firq_freq == 8)
-				{
-					request_firq (0);
-					firq_freq = 0;
-				}
-			}
+		}
+		else if ((cycles_per_irq == 0) && (cycles_per_firq != 0))
+		{
+			total += cpu_execute (cycles_per_firq);
+			request_firq (0);
+		}
+		else
+		{
+			/* need to track them both and continue to work out which is
+			   next.
+			*/
+			sim_error ("Oops. Don't currently support -I and -F together\n");
 		}
 
 		idle_loop ();
