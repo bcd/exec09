@@ -24,6 +24,7 @@
 #include "6809.h"
 #include "monitor.h"
 #include "command.h"
+#include "os9syscalls.h"
 
 /* The function call stack */
 struct function_call fctab[MAX_FUNCTION_CALLS];
@@ -923,7 +924,14 @@ int dasm (char *buf, absolute_address_t opc)
   if ((op_str == "SWI2") && os9call)
     {
       op = fetch8();
-      buf += sprintf (buf, "%-6.6s#$%2x", "OS9", op);
+      if(op < 0x91)
+        {
+          buf += sprintf (buf, "%-6.6s%s", "OS9", os9syscall[op]);
+        }
+      else
+        {
+          buf += sprintf (buf, "%-6.6s#$%2x", "OS9", op);
+        }
     }
   else
     {
