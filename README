@@ -188,7 +188,7 @@ p [format] <expr>
 	- use the previous format.
 
 	f is the display format (default x for hex). Options:
-	  x X d u o a s (match printf).
+	  x X d u o a c s (match printf).
 
         TODO: the code supports /u (unit) as well, but the b w
         options don't make any obvious difference to the output.

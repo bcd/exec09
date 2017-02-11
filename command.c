@@ -229,6 +229,7 @@ void parse_format_flag (const char *flags, unsigned char *formatp)
          case 'o':
          case 'a':
          case 's':
+         case 'c':
             *formatp = *flags;
             break;
       }
@@ -535,6 +536,15 @@ void print_value (unsigned long val, datatype_t *typep)
          print_addr (val);
          return;
 
+      case 'c':
+      {
+         char c;
+         c = val;
+         if ((c < 32) | (c > 126)) c = '.';
+         putchar(c);
+         return;
+      }
+
       case 's':
       {
          absolute_address_t addr = (absolute_address_t)val;
@@ -625,6 +635,10 @@ void do_examine (void)
       case 'w':
          objs_per_line = 8;
          break;
+
+      case 'c':
+         objs_per_line = 32;
+         break;
    }
 
    for (n = 0; n < examine_repeat; n++)
@@ -648,7 +662,7 @@ void do_examine (void)
          default:
             print_value (target_read (examine_addr, examine_type.size),
                          &examine_type);
-            putchar (' ');
+            if (examine_type.format != 'c') putchar (' ');
             examine_addr += examine_type.size;
       }
    }
