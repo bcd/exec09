@@ -51,11 +51,13 @@ unsigned int cc_changed = 0;
 
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
+int cwai_state = CWAI_STATE_IDLE;
+
 extern int dump_cycles_on_success;
 extern int trace_enabled;
 
-extern void irq (void);
-extern void firq (void);
+void irq (void);
+void firq (void);
 
 
 void request_irq (unsigned int source)
@@ -66,7 +68,7 @@ void request_irq (unsigned int source)
 	 */
 	irqs_pending |= (1 << source);
 	if (!(EFI & I_FLAG))
-		irq ();
+		irq();
 }
 
 void release_irq (unsigned int source)
@@ -82,7 +84,7 @@ void request_firq (unsigned int source)
 	 */
 	firqs_pending |= (1 << source);
 	if (!(EFI & F_FLAG))
-		firq ();
+		firq();
 }
 
 void release_firq (unsigned int source)
@@ -597,9 +599,9 @@ void cc_modified (void)
 {
   /* Check for pending interrupts */
 	if (firqs_pending && !(EFI & F_FLAG))
-		firq ();
+		firq();
 	else if (irqs_pending && !(EFI & I_FLAG))
-		irq ();
+		irq();
 	cc_changed = 0;
 }
 
@@ -1340,6 +1342,36 @@ static void pulu (void)
 
 /* Miscellaneous Instructions */
 
+static void stack_machine_state(int full)
+{
+  if (full) {
+    cpu_clk -= 19;
+    EFI |= E_FLAG;
+  }
+  else {
+    cpu_clk -= 6; /* ?? */
+    EFI &= ~E_FLAG;
+  }
+  S = (S - 2) & 0xffff;
+  write_stack16(S, PC & 0xffff);
+  if (full) {
+    S = (S - 2) & 0xffff;
+    write_stack16(S, U);
+    S = (S - 2) & 0xffff;
+    write_stack16(S, Y);
+    S = (S - 2) & 0xffff;
+    write_stack16(S, X);
+    S = (S - 1) & 0xffff;
+    write_stack(S, DP >> 8);
+    S = (S - 1) & 0xffff;
+    write_stack(S, B);
+    S = (S - 1) & 0xffff;
+    write_stack(S, A);
+  }
+  S = (S - 1) & 0xffff;
+  write_stack(S, get_cc());
+}
+
 static void nop (void)
 {
   cpu_clk -= 2;
@@ -1393,27 +1425,17 @@ static void rts (void)
 
 void irq (void)
 {
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  if (cwai_state == CWAI_STATE_WAIT) {
+      /* In CWAI and machine state is already saved */
+      cwai_state = CWAI_STATE_IDLE;
+  }
+  else {
+      stack_machine_state(1);
+  }
   EFI |= I_FLAG;
 
-  irq_start_time = get_cycles ();
-  change_pc (read16 (0xfff8));
+  irq_start_time = get_cycles();
+  change_pc(read16(0xfff8));
 #if 1
   irqs_pending = 0;
 #endif
@@ -1421,14 +1443,16 @@ void irq (void)
 
 void firq (void)
 {
-  EFI &= ~E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  if (cwai_state == CWAI_STATE_WAIT) {
+      /* In CWAI and machine state is already saved */
+      cwai_state = CWAI_STATE_IDLE;
+  }
+  else {
+      stack_machine_state(0);
+  }
   EFI |= (I_FLAG | F_FLAG);
 
-  change_pc (read16 (0xfff6));
+  change_pc(read16(0xfff6));
 #if 1
   firqs_pending = 0;
 #endif
@@ -1436,24 +1460,7 @@ void firq (void)
 
 void swi (void)
 {
-  cpu_clk -= 19;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  stack_machine_state(1);
   EFI |= (I_FLAG | F_FLAG);
 
   change_pc (read16 (0xfffa));
@@ -1461,48 +1468,16 @@ void swi (void)
 
 void swi2 (void)
 {
-  cpu_clk -= 20;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  cpu_clk -= 1;
+  stack_machine_state(1);
 
   change_pc (read16 (0xfff4));
 }
 
 void swi3 (void)
 {
-  cpu_clk -= 20;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  cpu_clk -= 1;
+  stack_machine_state(1);
 
   change_pc (read16 (0xfff2));
 }
@@ -1510,32 +1485,58 @@ void swi3 (void)
 #ifdef H6309
 void trap (void)
 {
-  cpu_clk -= 20;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  cpu_clk -= 1;
+  stack_machine_state(1);
 
   change_pc (read16 (0xfff0));
 }
 #endif
 
+/* CWAI handling is controlled by a variable cwai_state and divided
+   into 3 parts:
+   - code here
+   - code in the main instruction loop
+   - code in irq() and firq()
+
+   CWAI masks the CC then saves all of the user registers on the
+   hardware stack and waits for interrupt (so that the interrupt has lower
+   latency).
+
+   [NAC HACK 2017Mar11] should abort main loop here when CWAI_STATE_WAIT
+   otherwise we're simply burning cycles to no benefit
+   [NAC HACK 2017Mar11] need to fix other bugs in main scheduler?
+   [NAC HACK 2017Mar11] why doesn't nitros L1 work now? Doesn't get any
+   I/O? Do I need to mock up a serial interrupt? I thought it was all
+   done on the timer?
+*/
 void cwai (void)
 {
-  sim_error ("CWAI - not supported yet!");
+  switch (cwai_state) {
+  case CWAI_STATE_IDLE:
+      /* PC has advanced to this CWAI instruction. Set flags,
+         stack machine state for when we take the interrupt; the
+         stacked PC points after the CWAI
+      */
+      EFI &= (INT8) imm_byte ();
+      cpu_clk -= 1;
+      stack_machine_state(1);
+
+      /* remember we're in CWAI, adjust PC to re-execute this instruction
+      */
+      cwai_state = CWAI_STATE_WAIT;
+      change_pc (PC - 2); /* instruction + immediate */
+      break;
+  case CWAI_STATE_WAIT:
+      /* Been here before. Still waiting for interrupt. Adjust PC so that
+         we will re-execute this instruction
+      */
+      cpu_clk -= 1; /* [NAC HACK 2017Mar11] not correct.. */
+      change_pc (PC - 1); /* instruction -- did not fetch immediate */
+      break;
+  default:
+      sim_error ("invalid value of cwai_state %02X\n", cwai_state);
+      break;
+  }
 }
 
 void sync (void)

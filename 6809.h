@@ -63,6 +63,11 @@ typedef uint16_t target_addr_t;
 #define V_FLAG 0x02
 #define C_FLAG 0x01
 
+/* For cwai state machine */
+#define CWAI_STATE_IDLE     0
+#define CWAI_STATE_WAIT     1
+
+
 extern int debug_enabled;
 extern int need_flush;
 extern unsigned long total;
