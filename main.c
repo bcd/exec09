@@ -419,14 +419,15 @@ main (int argc, char *argv[])
 	 * here periodically and do the interrupt handling. */
 	for (cpu_quit = 1; cpu_quit != 0;)
 	{
+		/* Call each device that needs periodic processing. */
+		machine_update ();
+
 		if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
 		{
 			/* Simulate some CPU time, either 1ms worth or up to the
 			next possible IRQ */
 			total += cpu_execute (mhz * 1024);
 
-			/* Call each device that needs periodic processing. */
-			machine_update ();
 		}
 		else if ((cycles_per_irq != 0) && (cycles_per_firq == 0))
 		{

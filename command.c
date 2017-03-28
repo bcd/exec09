@@ -1484,7 +1484,7 @@ void keybuffering (int flag)
 
 
 /* Non-blocking check for input character. If
- *   true, retreive character using kbchar()
+ *   true, retrieve character using kbchar()
  */
 int kbhit(void)
 {

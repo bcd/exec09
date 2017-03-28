@@ -559,6 +559,7 @@ struct hw_class console_class =
 	.reset = null_reset,
 	.read = console_read,
 	.write = console_write,
+        .update = NULL,
 };
 
 struct hw_device *console_create (void)

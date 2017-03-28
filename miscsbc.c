@@ -9,6 +9,8 @@
 int smii_i_avail = 1;
 int smii_o_busy = 0;
 
+// for multicomp09 Rx FIFO
+#define CharFIFO_SIZE (8)
 // for multicomp09 sdmapper: values most-recently written to these registers
 #define MULTICOMP09_RAMMAX (0x80000)
 // [NAC HACK 2017Feb01] this does not match RTL!! RTL uses block 7. This is chosen
@@ -27,6 +29,16 @@ int  mc_addr;
 int  mc_state;
 int  mc_poll;
 int  mc_dindex;
+struct CharFIFO {
+    int wr;
+    int rd;
+    int empty;
+    char data[CharFIFO_SIZE];
+};
+
+static struct CharFIFO uart0_rx_fifo = {0,0,1,0};
+unsigned char uart0_wr_status = 0;
+
 // multicomp devices
 struct hw_device *mc_romdev, *mc_ramdev, *mc_iodev, *mc_consoledev, *mc_sdmapperdev;
 
@@ -200,52 +212,130 @@ struct machine smii_machine =
  *
  ********************************************************************/
 
-/* UART-style console. Console input is blocking (but should not be)
+/* UART-style console.
+   Previously, the input FIFO was not modelled:
+   Data input is sort-of non-blocking: if you read the UART status
+   bit and it says RX Char Available, you can read the data register
+   and know that it will not stall.
+   However, if you read the data register and no character is
+   available (rude!) the input will block until you press a key.
+   Could have it work other than this.. reading the data register
+   could also call kbhit. When no character is available could
+   return 0xff or somesuch, which would more accurately model real behaviour.
+
+   Now, the FIFO is modelled and so are UART Rx interrupts:
+   1/ each read of status or data calls kbhit and puts a char
+   (if any) into the FIFO and then:
+   1a/ print error message if FIFO overflow
+   1b/ for status: char available = FIFO-not-empty
+   1c/ for data: if FIFO-not-empty, pop and return oldest char else
+   print error message (application error) and return 0xff
+   2/ register an .update routine for the console_class. The update
+   routine is called in the exec09 main loop on a periodic basis.
+   3/ the update routine calls kbbit and puts a char (if any) into
+   the FIFO and then:
+   3a/ print error message if FIFO overflow
+   3b/ if UART interrupt enabled and FIFO-not-empty: call IRQ
+   4/ IRQ ISR needs to understand that a UART IRQ arrived rather
+   than a timer IRQ. TBD how to handle that.. probably by modelling
+   the timer interrupt in a more complex way.. eg, by testing the mask
+   *or* by implementing a new mask bit for the UART IRQ.
+   5/ on status write of 3 (reset), clear the FIFO.
+
+   The result should work correctly for existing applications:
+   - polled I/O in FLEX and CamelForth and Cubix and MSBASIC
+   - timer-driven I/O in FUZIX (and can change FUZIX to allow
+     rx interrupts, if it does not already)
+   - lastly, it should allow NitrOS9 L1 to do terminal input
+     and therefore boot to the command prompt.
+
    offset 0,1 - 1st UART - virtual UART. Main console
    offset 2,3 - 2nd UART
    offset 4,5 - 3rd UART
    offset 6,7 - GPIO unit
  */
+U8 multicomp_console_rxpoll (void)
+{
+    unsigned char ch;
+    if (batch_file) {
+        // do not allow the batch file to create an overflow
+        if (uart0_rx_fifo.empty || (uart0_rx_fifo.rd != uart0_rx_fifo.wr)) {
+            fread( &ch, 1, 1, batch_file);
+            uart0_rx_fifo.empty = 0;
+            uart0_rx_fifo.data[uart0_rx_fifo.wr] = ch;
+            uart0_rx_fifo.wr = (uart0_rx_fifo.wr + 1) % CharFIFO_SIZE;
+        }
+    }
+    else {
+        if (kbhit()) {
+            ch = kbchar();
+            if ((uart0_rx_fifo.wr == uart0_rx_fifo.rd) && (uart0_rx_fifo.empty == 0)) {
+                // discard newest char - the real hardware is not polite
+                // like this! Should really generate a receiver overrun.
+                printf("[uart0 error: rx FIFO overflow\n");
+            }
+            else {
+                uart0_rx_fifo.empty = 0;
+                uart0_rx_fifo.data[uart0_rx_fifo.wr] = ch;
+                uart0_rx_fifo.wr = (uart0_rx_fifo.wr + 1) % CharFIFO_SIZE;
+                //printf("[uart0 push char 0x%02d. wr=%d rd=%d empty=%d\n",ch, uart0_rx_fifo.wr, uart0_rx_fifo.rd, uart0_rx_fifo.empty);
+            }
+        }
+    }
+}
+
+
 U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
 {
     //printf("In console_read with addr=0x%08x pc=0x%04x\n", (unsigned int)addr, get_pc());
     unsigned char ch;
     switch (addr) {
-        /* UART0 -----------------------------*/
-    case 0: /* status */
-        // b7: interrupt
-        // b1: can accept TX char
-        // b0: RX char available
-        return (batch_file || kbhit()) ? 3 : 2;
 
-    case 1: /* data */
-        if (batch_file && fread( &ch, 1, 1, batch_file)) {
+    case 0: /* UART0 status */
+        // b7: interrupt
+        // b1: can accept Tx char
+        // b0: Rx char available
+        multicomp_console_rxpoll();
+        if  (uart0_rx_fifo.empty) {
+            return (uart0_wr_status & 0x80) | 2;
         }
         else {
-            ch = kbchar();
+            return (uart0_wr_status & 0x80) | 3;
         }
-        // key conversions to make keyboard look DOS-like
-        if (ch == 127) return 8; // rubout->backspace
-        if (ch == 10) return 13; // LF->CR
-        return ch;
 
-        /* UART1 -----------------------------*/
-    case 2: /* status */
+    case 1: /* UART0 data */
+        multicomp_console_rxpoll();
+        if  (uart0_rx_fifo.empty) {
+            printf("[uart0 error: read from EMPTY data register\n");
+            return 0xff;
+        }
+        else {
+            ch = uart0_rx_fifo.data[uart0_rx_fifo.rd];
+            uart0_rx_fifo.rd = (uart0_rx_fifo.rd + 1) % CharFIFO_SIZE;
+            if (uart0_rx_fifo.rd == uart0_rx_fifo.wr) {
+                uart0_rx_fifo.empty = 1;
+            }
+            // key conversions to make keyboard look DOS-like
+            if (ch == 127) return 8; // rubout->backspace
+            if (ch == 10) return 13; // LF->CR
+            return ch;
+        }
+
+    case 2: /* UART1 status */
         // hardware supports bits [7], [1], [0]
         printf("[uart1 stat rd addr=0x%08x\n", (unsigned int)addr);
         return 0x03;
 
-    case 3: /* data */
+    case 3: /* UART1 data */
         printf("[uart1 data rd addr=0x%08x\n", (unsigned int)addr);
         return 0x42;
 
-        /* UART2 -----------------------------*/
-    case 4: /* status */
+    case 4: /* UART2 status */
         // hardware supports bits [7], [1], [0]
         printf("[uart2 stat rd addr=0x%08x\n", (unsigned int)addr);
         return 0x03;
 
-    case 5: /* data */
+    case 5: /* UART2 data */
         printf("[uart2 data rd addr=0x%08x\n", (unsigned int)addr);
         return 0x42;
 
@@ -267,9 +357,13 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
     //printf("In console_write with addr=0x%08x val=0x%02x pc=0x%04x\n", (unsigned int)addr, val, get_pc());
     //fprintf(log_file,"%02x~%02x\n",(unsigned char)(addr&0xff),val);
     switch (addr) {
-        /* UART0 -----------------------------*/
-    case 0: /* status */
-        if (val==3) {
+
+    case 0: /* UART0 status */
+        uart0_wr_status = val;
+        if (val==3) { /* master reset */
+            uart0_rx_fifo.wr=0;
+            uart0_rx_fifo.wr=0;
+            uart0_rx_fifo.empty=1;
             printf("[uart0 reset]");
         }
         else {
@@ -277,13 +371,12 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         }
         break;
 
-    case 1: /* data */
-        putchar(val); /* UART 1*/
+    case 1: /* UART0 data */
+        putchar(val);
         fflush(stdout);
         break;
 
-        /* UART1 -----------------------------*/
-    case 2: /* status */
+    case 2: /* UART1 status */
         if (val==3) {
             printf("[uart1 reset]");
         }
@@ -292,12 +385,11 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         }
         break;
 
-    case 3: /* data */
+    case 3: /* UART1 data */
         printf("[uart1 data wr of 0x%02x\n", val);
         break;
 
-        /* UART2 -----------------------------*/
-    case 4: /* status */
+    case 4: /* UART2 status */
         if (val==3) {
             printf("[uart2 reset]");
         }
@@ -306,7 +398,7 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         }
         break;
 
-    case 5: /* data */
+    case 5: /* UART2 data */
         printf("[uart2 data wr of 0x%02x\n", val);
         break;
 
@@ -319,6 +411,14 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         /* Other (should be unreachable) -----*/
     default:
         printf("ERROR in console_write with addr=0x%04x val=0x%02x\n",(unsigned int)addr, val);
+    }
+}
+
+void multicomp09_console_update (struct hw_device *dev)
+{
+    multicomp_console_rxpoll();
+    if (uart0_rx_fifo.empty == 0 && (uart0_wr_status & 0x80)) {
+        request_irq(1);
     }
 }
 
@@ -638,8 +738,23 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
                 }
             }
         break; // unreachable
-    case 5: // TIMER
-        //fprintf(log_file,"%02x<%02x\n",(unsigned char)(addr&0xff),mc_timer);
+    case 5: // TIMER read
+        /* The -I command-line option is used to generate periodic timer interrupts.
+           If the timer interrupt is enabled, and wot_irqs() indicates that a
+           timer interrupt is pending, we can flag the interrupt here.
+           [NAC HACK 2017Mar28] bugette: if the timer interrupt is not
+           enabled (or, before it is enabled) the ISR will still get
+           entered and whatever other service routines there will have to cope.
+           For example, it might get treated as an Rx interrupt, for which
+           reason the Rx service must check for char available and not simply
+           assume that entry to the ISR guarantees a char. That's a bit nasty
+           but the alternative requires binding the request_irq call in main.c
+           more tightly with the target (could do that with a target call-back)
+           For now, this bugette should not cause any problems.
+        */
+        if ((mc_timer & 1) && (wot_irqs() & 1)) {
+            mc_timer |= 0x80;
+        }
         return mc_timer;
     default:
         // In general, it's an error to read back anything else. However, in the
@@ -749,19 +864,19 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
     case 4: // SDLBA2
         mc_sdlba2 = val;
         break;
-    case 5: // TIMER
+    case 5: // TIMER write
         // bit [1] is read/write, timer enable
-        // bit [7] is read, write-1-to-clear
+        // bit [7] is read, write-1-to-clear, interrupt.
         // Set this up so that it *always* signals an interrupt
         // when enabled; when used with the "-I" command-line timer
         // interrupt feature, this will make it seem as though this
         // timer is the source of all interrupts.
         if (val & 2) {
-            // enabled and signalling interrupt
-            mc_timer = 0x82;
+            // timer enabled
+            mc_timer |= 0x02;
         }
         else {
-            // disabled. Pending interrupt remains or is cleared
+            // timer disabled. Pending interrupt remains or is cleared
             // depending upon bit[7]
             mc_timer = (val & 0x80) ^ 0x80;
         }
@@ -824,8 +939,9 @@ void multicomp09_init (const char *boot_rom_file)
 
     /* I/O Devices - UARTs */
     mc_consoledev = console_create();
-    mc_consoledev->class_ptr->read = multicomp09_console_read;
-    mc_consoledev->class_ptr->write = multicomp09_console_write;
+    mc_consoledev->class_ptr->read   = multicomp09_console_read;
+    mc_consoledev->class_ptr->write  = multicomp09_console_write;
+    mc_consoledev->class_ptr->update = multicomp09_console_update;
 
     /* I/O Devices - SD controller, MMapper, Timer */
     mc_sdmapperdev = sdmapper_create();

@@ -59,7 +59,16 @@ extern int trace_enabled;
 void irq (void);
 void firq (void);
 
+/* [NAC HACK 2017Mar28] crude mechanism to allow multicomp09
+   to model the timer interrupt
+*/
+unsigned int wot_irqs(void)
+{
+    return irqs_pending;
+}
 
+/* called with source=0 for periodic timer interrupt */
+/* called with source=1 for multicomp09 uart0 rx interrupt */
 void request_irq (unsigned int source)
 {
 	/* If the interrupt is not masked, generate
@@ -71,11 +80,16 @@ void request_irq (unsigned int source)
 		irq();
 }
 
+/* currently this is never called. Instead, irqs_pending is
+   always cleared in the ISR. That matches an ISR that processes
+   to completion
+*/
 void release_irq (unsigned int source)
 {
 	irqs_pending &= ~(1 << source);
 }
 
+/* called with source=0 for periodic timer interrupt */
 void request_firq (unsigned int source)
 {
 	/* If the interrupt is not masked, generate
@@ -87,6 +101,10 @@ void request_firq (unsigned int source)
 		firq();
 }
 
+/* currently this is never called. Instead, irqs_pending is
+   always cleared in the ISR. That matches an ISR that processes
+   to completion
+*/
 void release_firq (unsigned int source)
 {
 	firqs_pending &= ~(1 << source);
