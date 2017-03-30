@@ -35,13 +35,11 @@ unsigned long total = 0;
 /* The frequency of the emulated CPU, in megahertz */
 unsigned int mhz = 1;
 
-/* When nonzero, indicates that the IRQ should be triggered periodically,
-every so many cycles.  By default no periodic IRQ is generated. */
-unsigned int cycles_per_irq = 0;
-
-/* When nonzero, indicates that the FIRQ should be triggered periodically,
-every so many cycles.  By default no periodic FIRQ is generated. */
-unsigned int cycles_per_firq = 0;
+/* When nonzero, indicates that the machine's tick routine should be
+   triggered periodically, every so many cycles. Typically this is
+   used by the machine to generate a timer interrupt. Off By default.
+*/
+unsigned int cycles_per_tick = 0;
 
 /* Nonzero if debugging support is turned on */
 int debug_enabled = 0;
@@ -141,8 +139,7 @@ idle_loop (void)
 	if (total_ms_elapsed > 100)
 	{
 		total_ms_elapsed -= 100;
-		if (machine->periodic)
-			machine->periodic ();
+		if (machine->periodic) machine->periodic ();
 		command_periodic ();
 	}
 
@@ -190,10 +187,8 @@ struct option
 	{ '-', "68b09", "Emulate the 68B09 variation (2Mhz)" },
 	{ 'R', "realtime", "Limit simulation speed to match realtime",
 		HAS_NEG, NO_ARG, &machine_realtime, 0, NULL, NULL },
-	{ 'I', "irqfreq", "Asserts an IRQ every so many cycles automatically",
-		NO_NEG, HAS_ARG, &cycles_per_irq, 0, NULL, NULL },
-	{ 'F', "firqfreq", "Asserts an FIRQ every so many cycles automatically",
-		NO_NEG, HAS_ARG, &cycles_per_firq, 0, NULL, NULL },
+	{ 'I', "tIckfreq", "Automatically calls the machine's tick every so many cycles",
+		NO_NEG, HAS_ARG, &cycles_per_tick, 0, NULL, NULL },
 	{ 'C', "cycledump", "",
 		HAS_NEG, NO_ARG, &dump_cycles_on_success, 1, NULL, NULL},
 	{ 'o', "os9call", "Treat SWI2 as an OS9/NitrOS9 system call and report postbyte",
@@ -414,37 +409,27 @@ main (int argc, char *argv[])
 	keybuffering (0);
 
 	/* Now, iterate through the instructions.
-	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()
-	 * and let it run for a long time; otherwise, we need to come back
-	 * here periodically and do the interrupt handling. */
+           Without -I, we can just call cpu_execute() and let it run
+           for a long time; otherwise, we need to come back here
+           periodically and call the machine's ->tick() routine */
+        //[NAC HACK 2017Mar30] need to schedule this properly instead of this one-or-the-other approach
+        //.. need to track the rate of each and work out who's next.
 	for (cpu_quit = 1; cpu_quit != 0;)
 	{
 		/* Call each device that needs periodic processing. */
 		machine_update ();
 
-		if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
+		if (cycles_per_tick == 0)
 		{
 			/* Simulate some CPU time, either 1ms worth or up to the
-			next possible IRQ */
+			next possible tick */
 			total += cpu_execute (mhz * 1024);
 
 		}
-		else if ((cycles_per_irq != 0) && (cycles_per_firq == 0))
-		{
-			total += cpu_execute (cycles_per_irq);
-			request_irq (0);
-		}
-		else if ((cycles_per_irq == 0) && (cycles_per_firq != 0))
-		{
-			total += cpu_execute (cycles_per_firq);
-			request_firq (0);
-		}
 		else
 		{
-			/* need to track them both and continue to work out which is
-			   next.
-			*/
-			sim_error ("Oops. Don't currently support -I and -F together\n");
+			total += cpu_execute (cycles_per_tick);
+			if (machine->tick) machine->tick ();
 		}
 
 		idle_loop ();

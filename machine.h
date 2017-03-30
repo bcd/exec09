@@ -146,6 +146,7 @@ struct machine
 	void (*dump_thread) (unsigned int thread_id);
 	void (*periodic) (void);
 	void (*dump) (void);
+	void (*tick) (void);
 	unsigned long cycles_per_sec;
 };
 

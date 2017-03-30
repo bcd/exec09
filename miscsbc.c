@@ -36,8 +36,8 @@ struct CharFIFO {
     char data[CharFIFO_SIZE];
 };
 
-static struct CharFIFO uart0_rx_fifo = {0,0,1,0};
-unsigned char uart0_wr_status = 0;
+static struct CharFIFO uart0_rx_fifo;
+static unsigned char uart0_wr_status;
 
 // multicomp devices
 struct hw_device *mc_romdev, *mc_ramdev, *mc_iodev, *mc_consoledev, *mc_sdmapperdev;
@@ -195,8 +195,7 @@ struct machine smii_machine =
 {
 	.name = "smii",
 	.fault = fault,
-	.init = smii_init,
-	.periodic = 0,
+	.init = smii_init
 };
 
 
@@ -272,13 +271,12 @@ U8 multicomp_console_rxpoll (void)
             if ((uart0_rx_fifo.wr == uart0_rx_fifo.rd) && (uart0_rx_fifo.empty == 0)) {
                 // discard newest char - the real hardware is not polite
                 // like this! Should really generate a receiver overrun.
-                printf("[uart0 error: rx FIFO overflow\n");
+                printf("[uart0 error: rx FIFO overflow]\n");
             }
             else {
                 uart0_rx_fifo.empty = 0;
                 uart0_rx_fifo.data[uart0_rx_fifo.wr] = ch;
                 uart0_rx_fifo.wr = (uart0_rx_fifo.wr + 1) % CharFIFO_SIZE;
-                //printf("[uart0 push char 0x%02d. wr=%d rd=%d empty=%d\n",ch, uart0_rx_fifo.wr, uart0_rx_fifo.rd, uart0_rx_fifo.empty);
             }
         }
     }
@@ -306,7 +304,7 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
     case 1: /* UART0 data */
         multicomp_console_rxpoll();
         if  (uart0_rx_fifo.empty) {
-            printf("[uart0 error: read from EMPTY data register\n");
+            printf("[uart0 error: read from EMPTY data register]\n");
             return 0xff;
         }
         else {
@@ -314,6 +312,7 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
             uart0_rx_fifo.rd = (uart0_rx_fifo.rd + 1) % CharFIFO_SIZE;
             if (uart0_rx_fifo.rd == uart0_rx_fifo.wr) {
                 uart0_rx_fifo.empty = 1;
+                release_irq(1);
             }
             // key conversions to make keyboard look DOS-like
             if (ch == 127) return 8; // rubout->backspace
@@ -323,20 +322,20 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
 
     case 2: /* UART1 status */
         // hardware supports bits [7], [1], [0]
-        printf("[uart1 stat rd addr=0x%08x\n", (unsigned int)addr);
+        printf("[uart1 stat rd addr=0x%08x]\n", (unsigned int)addr);
         return 0x03;
 
     case 3: /* UART1 data */
-        printf("[uart1 data rd addr=0x%08x\n", (unsigned int)addr);
+        printf("[uart1 data rd addr=0x%08x]\n", (unsigned int)addr);
         return 0x42;
 
     case 4: /* UART2 status */
         // hardware supports bits [7], [1], [0]
-        printf("[uart2 stat rd addr=0x%08x\n", (unsigned int)addr);
+        printf("[uart2 stat rd addr=0x%08x]\n", (unsigned int)addr);
         return 0x03;
 
     case 5: /* UART2 data */
-        printf("[uart2 data rd addr=0x%08x\n", (unsigned int)addr);
+        printf("[uart2 data rd addr=0x%08x]\n", (unsigned int)addr);
         return 0x42;
 
         /* GPIO (not modelled) ---------------*/
@@ -364,6 +363,8 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
             uart0_rx_fifo.wr=0;
             uart0_rx_fifo.wr=0;
             uart0_rx_fifo.empty=1;
+            uart0_wr_status = 0;
+            release_irq(1);
             printf("[uart0 reset]");
         }
         else {
@@ -386,7 +387,7 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         break;
 
     case 3: /* UART1 data */
-        printf("[uart1 data wr of 0x%02x\n", val);
+        printf("[uart1 data wr of 0x%02x]\n", val);
         break;
 
     case 4: /* UART2 status */
@@ -399,7 +400,7 @@ void multicomp09_console_write (struct hw_device *dev, unsigned long addr, U8 va
         break;
 
     case 5: /* UART2 data */
-        printf("[uart2 data wr of 0x%02x\n", val);
+        printf("[uart2 data wr of 0x%02x]\n", val);
         break;
 
         /* GPIO (not modelled) ---------------*/
@@ -739,22 +740,6 @@ U8 sdmapper_read (struct hw_device *dev, unsigned long addr)
             }
         break; // unreachable
     case 5: // TIMER read
-        /* The -I command-line option is used to generate periodic timer interrupts.
-           If the timer interrupt is enabled, and wot_irqs() indicates that a
-           timer interrupt is pending, we can flag the interrupt here.
-           [NAC HACK 2017Mar28] bugette: if the timer interrupt is not
-           enabled (or, before it is enabled) the ISR will still get
-           entered and whatever other service routines there will have to cope.
-           For example, it might get treated as an Rx interrupt, for which
-           reason the Rx service must check for char available and not simply
-           assume that entry to the ISR guarantees a char. That's a bit nasty
-           but the alternative requires binding the request_irq call in main.c
-           more tightly with the target (could do that with a target call-back)
-           For now, this bugette should not cause any problems.
-        */
-        if ((mc_timer & 1) && (wot_irqs() & 1)) {
-            mc_timer |= 0x80;
-        }
         return mc_timer;
     default:
         // In general, it's an error to read back anything else. However, in the
@@ -867,19 +852,15 @@ void sdmapper_write (struct hw_device *dev, unsigned long addr, U8 val)
     case 5: // TIMER write
         // bit [1] is read/write, timer enable
         // bit [7] is read, write-1-to-clear, interrupt.
-        // Set this up so that it *always* signals an interrupt
-        // when enabled; when used with the "-I" command-line timer
-        // interrupt feature, this will make it seem as though this
-        // timer is the source of all interrupts.
-        if (val & 2) {
-            // timer enabled
-            mc_timer |= 0x02;
+
+        // Enable or disable
+        mc_timer = (mc_timer & 0xfd) | (val & 2);
+
+        if (val & 0x80) {
+            release_irq(0);
+            mc_timer &= 0x7f;
         }
-        else {
-            // timer disabled. Pending interrupt remains or is cleared
-            // depending upon bit[7]
-            mc_timer = (val & 0x80) ^ 0x80;
-        }
+
         break;
     case 6: // MMUADR
         // ignore writes where bit(4) is set; this is the single-step/nmi control
@@ -913,6 +894,20 @@ struct hw_device* sdmapper_create (void)
 }
 
 
+
+/* Called periodically when exec09 is invoked with the -I option.
+   This can be used to model the hardware of a periodic timer and
+   (for example) invoke IRQ or FIQ as required by the hardware.
+   For multicomp09, model the timer interrupt: if the timer is enabled,
+   generate an IRQ.
+*/
+void multicomp09_tick (void)
+{
+    if (mc_timer & 0x02) {
+        mc_timer |= 0x80;
+        request_irq(0);
+    }
+}
 
 // [NAC HACK 2015May05] is it legal to have more than one instance of anything?
 // eg 2 RAMs? I assumed it was but now I realise IT IS NOT! Yeuch.
@@ -963,6 +958,13 @@ void multicomp09_init (const char *boot_rom_file)
     */
     sdmapper_remap(0, 0);
 
+    /* Initialise/reset the UART0 input FIFO and its status register*/
+    uart0_rx_fifo.wr = 0;
+    uart0_rx_fifo.rd = 0;
+    uart0_rx_fifo.empty = 1;
+    uart0_wr_status = 0;
+    release_irq(1);
+
     /* If a file multicomp09.bat exists, supply input from it until
        it's exhausted.
     */
@@ -1002,8 +1004,8 @@ struct machine multicomp09_machine =
 	.name = "multicomp09",
 	.fault = fault,
 	.init = multicomp09_init,
-	.periodic = 0,
         .dump = multicomp09_dump,
+        .tick = multicomp09_tick
 };
 
 
@@ -1112,6 +1114,5 @@ struct machine kipper1_machine =
 {
 	.name = "kipper1",
 	.fault = fault,
-	.init = kipper1_init,
-	.periodic = 0,
+	.init = kipper1_init
 };
