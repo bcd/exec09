@@ -295,7 +295,7 @@ U8 multicomp09_console_read (struct hw_device *dev, unsigned long addr)
         // b0: Rx char available
         multicomp_console_rxpoll();
         if  (uart0_rx_fifo.empty) {
-            return (uart0_wr_status & 0x80) | 2;
+            return 2;
         }
         else {
             return (uart0_wr_status & 0x80) | 3;
