@@ -13,9 +13,8 @@ int smii_o_busy = 0;
 #define CharFIFO_SIZE (8)
 // for multicomp09 sdmapper: values most-recently written to these registers
 #define MULTICOMP09_RAMMAX (0x80000)
-// [NAC HACK 2017Feb01] this does not match RTL!! RTL uses block 7. This is chosen
-// for now to match the mapping in NITROS9.
-#define FRT_BLOCK (63)
+// to match RTL, FRT_BLOCK must be 7
+#define FRT_BLOCK (7)
 unsigned char mc_mmuadr = 0x00;
 unsigned char mc_mmufrt = 0x00; // Magic flag for Fixed RAM Top
 unsigned char mc_mmudat = 0x00;
