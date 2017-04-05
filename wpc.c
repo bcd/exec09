@@ -24,11 +24,13 @@
 #else
 #error
 #endif
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/errno.h>
 #include "wpclib.h"
+#include "machine.h"
 
 #define WPC_RAM_BASE                0x0000
 #define WPC_RAM_SIZE                0x2000
@@ -191,7 +193,6 @@ static U8 wpc_get_console_state (void)
 
 static U8 wpc_console_read (void)
 {
-	int rc;
 	U8 c = 0;
 
 	if (!wpc_console_inited)
@@ -200,7 +201,7 @@ static U8 wpc_console_read (void)
 		return 0;
 	}
 
-	rc = read (0, &c, 1);
+	read (0, &c, 1);
 	return c;
 }
 
@@ -269,6 +270,8 @@ unsigned int wpc_read_switch_column (int col)
 
 void wpc_write_lamp (int num, int flag)
 {
+	(void) num;	// silence warning unused parameter
+	(void) flag;
 }
 
 
@@ -286,8 +289,7 @@ void wpc_dmd_set_visible (U8 val)
 {
 	char *p;
 	struct wpc_message msg;
-	int rc;
-	int i, n;
+	int i;
 	static unsigned long last_firq_time = 0;
 	unsigned long now;
 	static int no_change_count = 0;
@@ -333,7 +335,7 @@ void wpc_dmd_set_visible (U8 val)
 	wpc_msg_init (CODE_DMD_PAGE, &msg);
 	for (i=0; i < 3; i++)
 	{
-		p = wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
+                p = (char*) wpc->dmd_dev->priv + wpc->dmd_visibles[i] * 512;
 		msg.u.dmdpage.phases[i].page = wpc->dmd_visibles[i];
 		memcpy (&msg.u.dmdpage.phases[i].data, p, 512);
 	}
@@ -498,7 +500,6 @@ void wpc_update_ram (void)
 			WPC_RAM_SIZE - size_writable, MAP_READABLE);
 }
 
-
 void wpc_set_rom_page (unsigned char val)
 {
 	bus_map (WPC_PAGED_REGION, 2, val * WPC_PAGED_SIZE, WPC_PAGED_SIZE, MAP_READABLE);
@@ -588,7 +589,7 @@ void wpc_asic_write (struct hw_device *dev, unsigned long addr, U8 val)
 		case WPC_SOL_FLASH1_OUTPUT:
 		case WPC_SOL_LOWPOWER_OUTPUT:
 			if (val != 0)
-				printf (">>> ASIC write %04X %02X\n", addr + WPC_ASIC_BASE, val);
+                                printf (">>> ASIC write %04lX %02X\n", addr + WPC_ASIC_BASE, val);
 			break;
 
 		default:
@@ -627,6 +628,7 @@ void wpc_asic_reset (struct hw_device *dev)
 
 struct hw_class wpc_asic_class =
 {
+	.name = "wpc_asic",
 	.reset = wpc_asic_reset,
 	.read = wpc_asic_read,
 	.write = wpc_asic_write,
@@ -647,10 +649,13 @@ struct hw_device *wpc_asic_create (void)
 
 void wpc_fault (unsigned int addr, unsigned char type)
 {
+	(void) addr;	// silence warning unused parameter
+	(void) type;
 }
 
 void wpc_dump_thread (unsigned int thread_id)
 {
+	(void) thread_id;	// silence warning unused parameter
 }
 
 void io_sym_add (const char *name, unsigned long cpuaddr)
@@ -664,8 +669,6 @@ void io_sym_add (const char *name, unsigned long cpuaddr)
 void wpc_init (const char *boot_rom_file)
 {
 	struct hw_device *dev;
-	int rc;
-	struct sockaddr_in myaddr;
 
 	device_define ( dev = wpc_asic_create (), 0,
 		WPC_ASIC_BASE, WPC_PAGED_REGION - WPC_ASIC_BASE, MAP_READWRITE);

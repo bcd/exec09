@@ -1,23 +1,11 @@
-
 #include <fcntl.h>
 #include "machine.h"
 #include "eon.h"
-
-extern int system_running;
-
-
-void eon_fault (unsigned int addr, unsigned char type)
-{
-	if (system_running)
-	{
-		sim_error (">>> Page fault: addr=%04X type=%02X PC=%04X\n", addr, type, get_pc ());
-#if 0
-		fault_addr = addr;
-		fault_type = type;
-		irq ();
-#endif
-	}
-}
+#include "mmu.h"
+#include "ioexpand.h"
+#include "serial.h"
+#include "imux.h"
+#include "timer.h"
 
 
 /**
@@ -72,17 +60,17 @@ void eon2_init (const char *boot_rom_file)
 	Each device is allocated only 8 bytes. */
 	iodev = ioexpand_create ();
 	device_define (iodev, 0, 0xFF00, 128, MAP_READWRITE);
-	ioexpand_attach (iodev, 0, serial_create ());
-	ioexpand_attach (iodev, 1, disk_create ("disk.bin", ram_dev));
-	ioexpand_attach (iodev, 2, mmudev);
-	ioexpand_attach (iodev, 3, intdev = imux_create (1));
+	ioexpand_attach (iodev, 0, 0, serial_create ());
+	ioexpand_attach (iodev, 1, 0, disk_create ("disk.bin", ram_dev));
+	ioexpand_attach (iodev, 2, 0, mmudev);
+	ioexpand_attach (iodev, 3, 0, intdev = imux_create (1));
 	/* 4 = config EEPROM */
 	/* 5 = video display */
 	/* 6 = battery-backed clock */
 	/* 7 = power control (reboot/off) */
 	/* 8 = periodic timer/oscillator */
 	/* 9 = hostfile (for debug only) */
-	ioexpand_attach (iodev, 9, hostfile_create ("hostfile", O_RDWR));
+	ioexpand_attach (iodev, 9, 0, hostfile_create ("hostfile", O_RDWR));
 	/* etc. up to device 15 */
 	/* May need to define an I/O _multiplexer_ to support more than 16 devices */
 
@@ -106,7 +94,7 @@ void simple_init (const char *boot_rom_file)
 struct machine eon_machine =
 {
 	.name = "eon",
-	.fault = eon_fault,
+	.fault = fault,
 	.init = eon_init,
 	.periodic = 0,
 };
@@ -114,7 +102,7 @@ struct machine eon_machine =
 struct machine eon2_machine =
 {
 	.name = "eon2",
-	.fault = eon_fault,
+	.fault = fault,
 	.init = eon2_init,
 	.periodic = 0,
 };
@@ -122,9 +110,7 @@ struct machine eon2_machine =
 struct machine simple_machine =
 {
 	.name = "simple",
-	.fault = eon_fault,
+	.fault = fault,
 	.init = simple_init,
 	.periodic = 0,
 };
-
-

@@ -63,6 +63,11 @@ typedef uint16_t target_addr_t;
 #define V_FLAG 0x02
 #define C_FLAG 0x01
 
+/* For cwai state machine */
+#define CWAI_STATE_IDLE     0
+#define CWAI_STATE_WAIT     1
+
+
 extern int debug_enabled;
 extern int need_flush;
 extern unsigned long total;
@@ -135,9 +140,7 @@ extern void monitor_init (void);
 extern int monitor6809 (void);
 extern int dasm (char *, absolute_address_t);
 
-extern int load_hex (const char *);
-extern int load_s19 (const char *);
-extern int load_bin (const char *,int);
+extern int load_image (const char *);
 
 #define MAX_STRINGSPACE 32000
 #define MAX_SYMBOL_HASH 1009
@@ -239,5 +242,13 @@ typedef struct
 #define MAX_THREADS 64
 
 void command_irq_hook (unsigned long cycles);
+unsigned long get_cycles (void);
+void request_irq (unsigned int source);
+void release_irq (unsigned int source);
+void request_firq (unsigned int source);
+void release_firq (unsigned int source);
+void sim_error (const char *format, ...);
+void sim_exit (uint8_t exit_code);
+void print_regs (void);
 
 #endif /* M6809_H */

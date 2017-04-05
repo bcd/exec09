@@ -20,16 +20,11 @@
 
 /* The interrupt multiplexer */
 
+#include <stdlib.h>
 #include "machine.h"
 #include "eon.h"
-
-struct imux
-{
-	unsigned int in_use;    /* Bits for each int that are used */
-	unsigned int enabled;   /* Bits for each int that is enabled */
-	unsigned int pending;   /* Bits for each int that are active */
-	unsigned int src;       /* Source line back to CPU */
-};
+#include "6809.h"
+#include "imux.h"
 
 
 /*
@@ -54,7 +49,6 @@ void imux_refresh (struct imux *mux)
 	}
 }
 
-
 void imux_reset (struct hw_device *dev)
 {
 	struct imux *mux = (struct imux *)dev->priv;
@@ -77,7 +71,6 @@ U8 imux_read (struct hw_device *dev, unsigned long addr)
 	}
 	return -1;
 }
-
 
 void imux_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
@@ -116,9 +109,9 @@ void imux_assert (struct hw_device *dev, unsigned int sig)
 	imux_refresh (mux);
 }
 
-
 struct hw_class imux_class =
 {
+	.name = "imux",
 	.readonly = 0,
 	.reset = imux_reset,
 	.read = imux_read,
@@ -131,5 +124,3 @@ struct hw_device *imux_create (unsigned int cpu_line)
 	imux->src = cpu_line;
 	return device_attach (&imux_class, BUS_MAP_SIZE, imux);
 }
-
-

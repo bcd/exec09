@@ -19,12 +19,12 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
-#include "6809.h"
-#include "monitor.h"
 #include <ctype.h>
 #include <signal.h>
-
+#include "6809.h"
+#include "monitor.h"
+#include "command.h"
+#include "os9syscalls.h"
 
 /* The function call stack */
 struct function_call fctab[MAX_FUNCTION_CALLS];
@@ -38,7 +38,6 @@ int auto_break_insn_count = 0;
 int monitor_on = 0;
 
 int dump_every_insn = 0;
-
 
 enum addr_mode
 {
@@ -888,29 +887,30 @@ char *off4[] = {
   "-8", "-7", "-6", "-5", "-4", "-3", "-2", "-1"
 };
 
-
 /* Disassemble the current instruction.  Returns the number of bytes that
 compose it. */
-int
-dasm (char *buf, absolute_address_t opc)
+int dasm (char *buf, absolute_address_t opc)
 {
   UINT8 op, am;
   char *op_str;
   absolute_address_t pc = opc;
   char R;
   int fetch1;			/* the first (MSB) fetched byte, used in macro RDWORD */
+  absolute_address_t tmp;
 
-  op = fetch8 ();
+  extern int os9call;
 
-  if (op == 0x10)
+  op = fetch8();
+
+  if (op == 0x10) /* prefix for PAGE2 opcodes */
     {
-      op = fetch8 ();
+      op = fetch8();
       am = codes10[op].mode;
       op = codes10[op].code;
     }
-  else if (op == 0x11)
+  else if (op == 0x11) /* prefix for PAGE3 opcodes */
     {
-      op = fetch8 ();
+      op = fetch8();
       am = codes11[op].mode;
       op = codes11[op].code;
     }
@@ -921,7 +921,22 @@ dasm (char *buf, absolute_address_t opc)
     }
 
   op_str = (char *) mne[op];
-  buf += sprintf (buf, "%-6.6s", op_str);
+  if ((op_str == "SWI2") && os9call)
+    {
+      op = fetch8();
+      if(op < 0x91)
+        {
+          buf += sprintf (buf, "%-6.6s%s", "OS9", os9syscall[op]);
+        }
+      else
+        {
+          buf += sprintf (buf, "%-6.6s#$%2x", "OS9", op);
+        }
+    }
+  else
+    {
+      buf += sprintf (buf, "%-6.6s", op_str);
+    }
 
   switch (am)
     {
@@ -1016,13 +1031,13 @@ dasm (char *buf, absolute_address_t opc)
 	  sprintf (buf, "[D,%c]", R);
 	  break;
 	case 0x1C:
-	  sprintf (buf, "[$%02X,PC]", fetch8 ());
+	  sprintf (buf, "[$%02X,PC]", fetch8());
 	  break;
 	case 0x1D:
-	  sprintf (buf, "[$%04X,PC]", fetch16 ());
+	  sprintf (buf, "[$%04X,PC]", fetch16());
 	  break;
 	case 0x1F:
-	  sprintf (buf, "[%s]", monitor_addr_name (fetch16 ()));
+	  sprintf (buf, "[%s]", monitor_addr_name (fetch16()));
 	  break;
 	default:
 	  sprintf (buf, "???");
@@ -1031,12 +1046,13 @@ dasm (char *buf, absolute_address_t opc)
       break;
 
     case _rel_byte:
-      fetch1 = ((INT8) fetch8 ());
+           fetch1 = ((INT8) fetch8 ());
 	   sprintf (buf, "%s", absolute_addr_name (fetch1 + pc));
       break;
 
     case _rel_word:
-	   sprintf (buf, "%s", absolute_addr_name (fetch16 () + pc));
+           tmp = fetch16();
+           sprintf (buf, "%s", absolute_addr_name (pc + tmp));
       break;
 
     case _reg_post:
@@ -1076,8 +1092,7 @@ dasm (char *buf, absolute_address_t opc)
   return pc - opc;
 }
 
-int
-sizeof_file (FILE * file)
+int sizeof_file(FILE * file)
 {
   int size;
 
@@ -1088,17 +1103,14 @@ sizeof_file (FILE * file)
   return size;
 }
 
-
-int
-load_map_file (const char *name)
+// nac it would be nice to have an intelligent map file reader..
+int load_map_file (const char *name)
 {
 	FILE *fp;
 	char map_filename[256];
 	char buf[256];
-	char *value_ptr, *id_ptr;
+	char *tok_ptr, *value_ptr, *id_ptr;
 	target_addr_t value;
-	char *file_ptr;
-	struct symbol *sym = NULL;
 
 	/* Try appending the suffix 'map' to the name of the program. */
 	sprintf (map_filename, "%s.map", name);
@@ -1111,7 +1123,7 @@ load_map_file (const char *name)
 		if (s)
 		{
 			sprintf (s+1, "map");
-			fp = file_open (NULL, map_filename, "r");
+			fp = file_open(NULL, map_filename, "r");
 		}
 
 		if (!fp)
@@ -1128,61 +1140,63 @@ load_map_file (const char *name)
 		if (feof (fp))
 			break;
 
-		value_ptr = buf;
-		if (!strncmp (value_ptr, "page", 4))
-		{
-			unsigned char page = strtoul (value_ptr+4, NULL, 10);
-			if (!strcmp (machine->name, "wpc"))
-				wpc_set_rom_page (page);
-			sym = NULL;
-			continue;
-		}
+                tok_ptr = strtok (buf, " \t\n");
+                if (0 != strcmp(tok_ptr, "Symbol:"))
+                    continue;
 
-		if (strncmp (value_ptr, "      ", 6))
-			continue;
+                id_ptr =  strtok(NULL, " \t\n");
+                // skip over filename
+                tok_ptr = strtok (NULL, " \t\n");
+                // skip over "="
+                tok_ptr = strtok (NULL, " \t\n");
+                value_ptr = strtok (NULL, " \t\n");
+                // get value as hex string
+                value = (target_addr_t) strtoul(value_ptr, NULL, 16);
 
-		while (*value_ptr == ' ')
-			value_ptr++;
-
-		value = strtoul (value_ptr, &id_ptr, 16);
-		if (id_ptr == value_ptr)
-			continue;
-
-		while (*id_ptr == ' ')
-			id_ptr++;
-
-		id_ptr = strtok (id_ptr, " \t\n");
-		if (((*id_ptr == 'l') || (*id_ptr == 's')) && (id_ptr[1] == '_'))
-			continue;
-		++id_ptr;
-
-		file_ptr = strtok (NULL, " \t\n");
-
-		if (sym)
-			sym->ty.size = to_absolute (value) - sym->value;
-		sym = sym_add (&program_symtab, id_ptr, to_absolute (value), 0); /* file_ptr? */
+		sym_add (&program_symtab, id_ptr, to_absolute (value), 0);
 	}
 
 	fclose (fp);
 	return 0;
 }
 
-
-int
-load_hex (const char *name)
+/* Auto-detect image file type and load it. For this to work,
+   the machine must already be initialized.
+*/
+int load_image (const char *name)
 {
+  unsigned int count, addr, type;
   FILE *fp;
-  int count, addr, type, data, checksum;
-  int done = 1;
-  int line = 0;
 
-  fp = file_open (NULL, name, "r");
-
+  fp = file_open(NULL, name, "r");
   if (fp == NULL)
     {
-      printf ("failed to open hex record file %s.\n", name);
+      printf("failed to open image file %s.\n", name);
       return 1;
     }
+
+  if (fscanf (fp, "S%1x%2x%4x", &type, &count, &addr) == 3)
+    {
+        rewind(fp);
+        return load_s19(fp);
+    }
+  else if (fscanf (fp, ":%2x%4x%2x", &count, &addr, &type) == 3)
+    {
+        rewind(fp);
+        return load_hex(fp);
+    }
+  else
+    {
+      printf ("unrecognised format in image file %s.\n", name);
+        return 1;
+    }
+}
+
+int load_hex (FILE *fp)
+{
+  unsigned int count, addr, type, data, checksum;
+  int done = 1;
+  int line = 0;
 
   while (done != 0)
     {
@@ -1193,7 +1207,6 @@ load_hex (const char *name)
 	  printf ("line %d: invalid hex record information.\n", line);
 	  break;
 	}
-
       checksum = count + (addr >> 8) + (addr & 0xff) + type;
 
       switch (type)
@@ -1201,65 +1214,61 @@ load_hex (const char *name)
 	case 0:
 	  for (; count != 0; count--, addr++, checksum += data)
 	    {
-	      fscanf (fp, "%2x", &data);
-	      write8 (addr, (UINT8) data);
+              if (fscanf(fp, "%2x", &data))
+                {
+		   write8(addr, (UINT8) data);
+                }
+              else
+                {
+                  printf("line %d: hex record data inconsistent with count field.\n", line);
+	          break;
+                }
 	    }
 
 	  checksum = (-checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
+
+          if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) )
 	    {
-	      printf ("line %d: invalid hex record checksum.\n", line);
+	      printf("line %d: hex record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
 	    }
-	  (void) fgetc (fp);	/* skip CR/LF/NULL */
+          fscanf(fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
 	case 1:
 	  checksum = (-checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
-	    printf ("line %d: invalid hex record checksum \n", line);
+
+          if ( (fscanf(fp, "%2x", &data) != 1) || (data != checksum) )
+	    printf("line %d: hex record checksum missing or invalid.\n", line);
 	  done = 0;
 	  break;
 
 	case 2:
 	default:
-	  printf ("line %d: not supported hex type %d.\n", line, type);
+	  printf("line %d: not supported hex type %d.\n", line, type);
 	  done = 0;
 	  break;
 	}
     }
 
-  fclose (fp);
+  (void) fclose (fp);
   return 0;
 }
 
-
-int
-load_s19 (const char *name)
+int load_s19(FILE *fp)
 {
-  FILE *fp;
-  int count, addr, type, data, checksum;
+  unsigned int count, addr, type, data, checksum;
   int done = 1;
   int line = 0;
-
-  fp = file_open (NULL, name, "r");
-
-  if (fp == NULL)
-    {
-      printf ("failed to open S-record file %s.\n", name);
-      return 1;
-    }
 
   while (done != 0)
     {
       line++;
 
-      if (fscanf (fp, "S%1x%2x%4x", &type, &count, &addr) != 3)
+      if (fscanf(fp, "S%1x%2x%4x", &type, &count, &addr) != 3)
 	{
-	  printf ("line %d: invalid S record information.\n", line);
+	  printf("line %d: invalid S record information.\n", line);
 	  break;
 	}
 
@@ -1270,26 +1279,32 @@ load_s19 (const char *name)
 	case 1:
 	  for (count -= 3; count != 0; count--, addr++, checksum += data)
 	    {
-	      fscanf (fp, "%2x", &data);
-	      write8 (addr, (UINT8) data);
+               if (fscanf (fp, "%2x", &data))
+                  {
+                     write8 (addr, (UINT8) data);
+                  }
+               else
+                  {
+                    printf ("line %d: S record data inconsistent with count field.\n", line);
+	            break;
+                  }
 	    }
 
 	  checksum = (~checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
+
+	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
 	    {
-	      printf ("line %d: invalid S record checksum.\n", line);
+	      printf ("line %d: S record checksum missing or invalid.\n", line);
 	      done = 0;
 	      break;
 	    }
-	  (void) fgetc (fp);	/* skip CR/LF/NULL */
+          fscanf (fp, "%*[\r\n]"); /* skip any form of line ending */
 	  break;
 
 	case 9:
 	  checksum = (~checksum) & 0xff;
-	  fscanf (fp, "%2x", &data);
-	  if (data != checksum)
-	    printf ("line %d: invalid S record checksum.\n", line);
+	  if ( (fscanf (fp, "%2x", &data) != 1) || (data != checksum) )
+	    printf ("line %d: S record checksum missing or invalid.\n", line);
 	  done = 0;
 	  break;
 
@@ -1300,14 +1315,11 @@ load_s19 (const char *name)
 	}
     }
 
-  fclose (fp);
+  (void) fclose(fp);
   return 0;
 }
 
-
-
-void
-monitor_call (unsigned int flags)
+void monitor_call (unsigned int flags)
 {
 #ifdef CALL_STACK
 	if (current_function_call <= &fctab[MAX_FUNCTION_CALLS-1])
@@ -1326,9 +1338,7 @@ monitor_call (unsigned int flags)
 #endif
 }
 
-
-void
-monitor_return (void)
+void monitor_return (void)
 {
 #ifdef CALL_STACK
 	if (current_function_call > &fctab[MAX_FUNCTION_CALLS-1])
@@ -1348,73 +1358,60 @@ monitor_return (void)
 #endif
 }
 
-
-const char *
-absolute_addr_name (absolute_address_t addr)
+const char* absolute_addr_name (absolute_address_t addr)
 {
-	static char buf[256], *bufptr;
-	const char *name;
+   static char buf[256], *bufptr;
+   const char *name;
 
-	bufptr = buf;
+   bufptr = buf;
 
-   bufptr += sprintf (bufptr, "%02X:0x%04X", addr >> 28, addr & 0xFFFFFF);
+   bufptr += sprintf (bufptr, "%02lX:0x%04lX", addr >> 28, addr & 0xFFFFFF);
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
-      bufptr += sprintf (bufptr, "  <%-16.16s>", name);
+      sprintf (bufptr, "  <%-16.16s>", name);
 
-	return buf;
-
+   return buf;
 }
 
-
-const char *
-monitor_addr_name (target_addr_t target_addr)
+const char* monitor_addr_name (target_addr_t target_addr)
 {
-	static char buf[256], *bufptr;
-	const char *name;
-	absolute_address_t addr = to_absolute (target_addr);
+   static char buf[256], *bufptr;
+   const char *name;
+   absolute_address_t addr = to_absolute (target_addr);
 
-	bufptr = buf;
+   bufptr = buf;
 
-   bufptr += sprintf (bufptr, "0x%04X", target_addr);
+   bufptr += sprintf (bufptr, "$%04X", target_addr);
 
    name = sym_lookup (&program_symtab, addr);
    if (name)
-      bufptr += sprintf (bufptr, "  <%s>", name);
+      sprintf (bufptr, "  <%s>", name);
 
-	return buf;
+   return buf;
 }
 
-
-static void
-monitor_signal (int sigtype)
+static void monitor_signal (int sigtype)
 {
-  (void) sigtype;
-  putchar ('\n');
-  monitor_on = 1;
+   (void) sigtype;
+   putchar ('\n');
+   monitor_on = 1;
 }
 
-
-void
-monitor_init (void)
+void monitor_init (void)
 {
-	int tmp;
-	extern int debug_enabled;
-	target_addr_t a;
+   extern int debug_enabled;
 
-	fctab[0].entry_point = read16 (0xfffe);
-	memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
-	current_function_call = &fctab[0];
+   fctab[0].entry_point = read16 (0xfffe);
+   memset (&fctab[0].entry_regs, 0, sizeof (struct cpu_regs));
+   current_function_call = &fctab[0];
 
-  auto_break_insn_count = 0;
-  monitor_on = debug_enabled;
-  signal (SIGINT, monitor_signal);
+   auto_break_insn_count = 0;
+   monitor_on = debug_enabled;
+   signal (SIGINT, monitor_signal);
 }
 
-
-int
-check_break (void)
+int check_break (void)
 {
 	if (dump_every_insn)
 		print_current_insn ();
@@ -1425,9 +1422,7 @@ check_break (void)
 	return 0;
 }
 
-
-void
-monitor_backtrace (void)
+void monitor_backtrace (void)
 {
 	struct function_call *fc = current_function_call;
 	while (fc >= &fctab[0]) {
@@ -1436,8 +1431,7 @@ monitor_backtrace (void)
 	}
 }
 
-int
-monitor6809 (void)
+int monitor6809 (void)
 {
 	int rc;
 

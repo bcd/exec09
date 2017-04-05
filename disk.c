@@ -19,7 +19,10 @@
  */
 
 #include <stdio.h>
-#include "machine.h"
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include "6809.h"
 #include "eon.h"
 
 /* The disk drive is emulated as follows:
@@ -66,17 +69,17 @@ void disk_update (struct hw_device *dev)
 
 U8 disk_read (struct hw_device *dev, unsigned long addr)
 {
-	struct disk_priv *disk = (struct disk_priv *)dev->priv;
+	return 0;
 }
 
 void disk_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
 	struct disk_priv *disk = (struct disk_priv *)dev->priv;
-
+	int retvar;
 	switch (addr)
 	{
 		case DSK_ADDR:
-			disk->ram = disk->ramdev->priv + val * SECTOR_SIZE;
+                        disk->ram = (char*) disk->ramdev->priv + val * SECTOR_SIZE;
 			break;
 		case DSK_SECTOR:
 			disk->offset = val; /* high byte */
@@ -90,7 +93,8 @@ void disk_write (struct hw_device *dev, unsigned long addr, U8 val)
 		case DSK_CTRL:
 			if (val & DSK_READ)
 			{
-				fread (disk->ram, SECTOR_SIZE, 1, disk->fp);
+				retvar = fread (disk->ram, SECTOR_SIZE, 1, disk->fp);
+				assert(retvar != -1);
 			}
 			else if (val & DSK_WRITE)
 			{
@@ -136,6 +140,7 @@ void disk_format (struct hw_device *dev)
 
 struct hw_class disk_class =
 {
+	.name = "disk",
 	.readonly = 0,
 	.reset = disk_reset,
 	.read = disk_read,

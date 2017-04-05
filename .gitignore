@@ -1,0 +1,16 @@
+# Result of ./configure
+.deps
+config.h
+config.log
+config.status
+m6809-run
+stamp-h1
+Makefile
+aclocal.m4
+autom4te.cache
+
+# Result of make
+*.o
+
+# Result of emacs edits
+*~

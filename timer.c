@@ -19,26 +19,13 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "machine.h"
+#include "6809.h"
+#include "imux.h"
+#include "timer.h"
 
 /* A hardware timer counts CPU cycles and can generate interrupts periodically. */
-struct hwtimer
-{
-	int count;            /* The current value of the timer */
-	unsigned int reload;  /* Value to reload into the timer when it reaches zero */
-	unsigned int resolution; /* Resolution of CPU registers (cycles/tick) */
-	unsigned int flags;
-	unsigned long prev_cycles;
-	struct hw_device *int_dev;  /* Which interrupt mux we use */
-	unsigned int int_line;  /* Which interrupt to signal */
-};
-
-/* The I/O registers exposed by this driver */
-#define HWT_COUNT     0  /* The 8-bit timer counter */
-#define HWT_RELOAD    1  /* The 8-bit reload counter */
-#define HWT_FLAGS     2  /* Misc. flags */
-	#define HWTF_INT   0x80   /* Generate interrupt at zero */
-
 
 /*
  * Called by the system to indicate that some number of CPU cycles have passed.
@@ -103,6 +90,9 @@ U8 hwtimer_read (struct hw_device *dev, unsigned long addr)
 			return timer->reload / timer->resolution;
 		case HWT_FLAGS:
 			return timer->flags;
+                default:
+                        fprintf(stderr, "Read hwtimer from undefined addr\n");
+                        return 0x42;
 	}
 }
 
@@ -119,7 +109,7 @@ void hwtimer_write (struct hw_device *dev, unsigned long addr, U8 val)
 			break;
 		case HWT_FLAGS:
 			timer->flags = val;
-			break;
+                        break;
 	}
 }
 
@@ -143,6 +133,7 @@ void oscillator_reset (struct hw_device *dev)
 
 struct hw_class hwtimer_class =
 {
+	.name = "hwtimer",
 	.readonly = 0,
 	.reset = hwtimer_reset,
 	.read = hwtimer_read,
@@ -168,7 +159,7 @@ struct hw_class oscillator_class =
 	.update = hwtimer_update,
 };
 
-struct hw_device *oscillator_create (struct hw_device *int_dev, unsigned int int_line)
+struct hw_device *oscillator_create(struct hw_device *int_dev, unsigned int int_line)
 {
 	struct hwtimer *timer = malloc (sizeof (struct hwtimer));
 	timer->reload = 2048; /* cycles per pulse */

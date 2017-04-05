@@ -20,35 +20,22 @@
 
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include "machine.h"
+#include "serial.h"
 
 /* Emulate a serial port.  Basically this driver can be used for any byte-at-a-time
 input/output interface. */
-struct serial_port
-{
-	unsigned int ctrl;
-	unsigned int status;
-	int fin;
-	int fout;
-};
-
-/* The I/O registers exposed by this driver */
-#define SER_DATA         0   /* Data input/output */
-#define SER_CTL_STATUS   1   /* Control (write) and status (read) */
-	#define SER_CTL_ASYNC   0x1   /* Enable async mode (more realistic) */
-	#define SER_CTL_RESET   0x2   /* Reset device */
-
-	#define SER_STAT_READOK  0x1
-	#define SER_STAT_WRITEOK 0x2
 
 void serial_update (struct serial_port *port)
 {
 	fd_set infds, outfds;
 	struct timeval timeout;
-	int rc;
 
 	FD_ZERO (&infds);
 	FD_SET (port->fin, &infds);
@@ -56,7 +43,7 @@ void serial_update (struct serial_port *port)
 	FD_SET (port->fout, &outfds);
 	timeout.tv_sec = 0;
 	timeout.tv_usec = 0;
-	rc = select (2, &infds, &outfds, NULL, &timeout);
+	select (2, &infds, &outfds, NULL, &timeout);
 	if (FD_ISSET (port->fin, &infds))
 		port->status |= SER_STAT_READOK;
 	else
@@ -70,6 +57,7 @@ void serial_update (struct serial_port *port)
 U8 serial_read (struct hw_device *dev, unsigned long addr)
 {
 	struct serial_port *port = (struct serial_port *)dev->priv;
+	int retval;
 	serial_update (port);
 	switch (addr)
 	{
@@ -78,23 +66,29 @@ U8 serial_read (struct hw_device *dev, unsigned long addr)
 			U8 val;
 			if (!(port->status & SER_STAT_READOK))
 				return 0xFF;
-			read (port->fin, &val, 1);
+			retval = read (port->fin, &val, 1);
+			assert(retval != -1);
 			return val;
 		}
 		case SER_CTL_STATUS:
-			return port->status;
-	}
+                        return port->status;
+                default:
+                        fprintf(stderr, "serial_read() from undefined addr\n");
+        }
+        return 0x42;
 }
 
 void serial_write (struct hw_device *dev, unsigned long addr, U8 val)
 {
 	struct serial_port *port = (struct serial_port *)dev->priv;
+	int retval;
 	switch (addr)
 	{
 		case SER_DATA:
 		{
 			U8 v = val;
-			write (port->fout, &v, 1);
+			retval = write (port->fout, &v, 1);
+			assert(retval != -1);
 			break;
 		}
 		case SER_CTL_STATUS:
@@ -112,6 +106,7 @@ void serial_reset (struct hw_device *dev)
 
 struct hw_class serial_class =
 {
+	.name = "serial",
 	.readonly = 0,
 	.reset = serial_reset,
 	.read = serial_read,
@@ -120,8 +115,7 @@ struct hw_class serial_class =
 
 extern U8 null_read (struct hw_device *dev, unsigned long addr);
 
-
-struct hw_device *serial_create (void)
+struct hw_device* serial_create (void)
 {
 	struct serial_port *port = malloc (sizeof (struct serial_port));
 	port->fin = STDIN_FILENO;
@@ -129,10 +123,9 @@ struct hw_device *serial_create (void)
 	return device_attach (&serial_class, 4, port);
 }
 
-struct hw_device *hostfile_create (const char *filename, int flags)
+struct hw_device* hostfile_create (const char *filename, int flags)
 {
 	struct serial_port *port = malloc (sizeof (struct serial_port));
-	port->fin = port->fout = open (filename, O_CREAT | flags);
+	port->fin = port->fout = open(filename, O_CREAT | flags, S_IRUSR | S_IWUSR);
 	return device_attach (&serial_class, 4, port);
 }
-

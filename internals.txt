@@ -1,0 +1,174 @@
+Introduction
+------------
+
+exec09 has several pre-defined "machines" and it is quite easy to
+define new ones.
+
+The 6809 processor can access a 16-bit address space and defining a
+machine involves defining what is in the address space.
+
+The address space is populated by a set of "devices". Consider the
+imaginary machine foo. The machine is initialised by foo_init() and
+that routine contains a series of calls to device_define().
+
+Each device is an instance of a certain "class". There are pre-defined
+classes for RAM, ROM, console-io and some others.
+
+Address decoding
+----------------
+
+The 16-bit address space is divided into regions of size
+BUS_MAP_SIZE. This is 128 by default, meaning that the address space
+is divided into 512 pieces each of which is described by a struct bus_map.
+
+There is an array (busmaps[]) of struct bus_map. For a particular
+memory access, the array is indexed by the top 9 bits of the 16-bit
+address.
+
+This description will start by considering the simple case, and move
+on to describe ways to handle more complex situations.
+
+Ignore I/O for the moment and consider that our imaginary machine foos
+is populated with RAM from 0-0x3ff and a ROM from 0xe000-0xfff.
+
+The machine initialisation, foo_init, will:
+
+- create, attach and initialise the RAM device
+- create, attach and initialise the ROM device
+- map the RAM device
+- map the ROM device.
+
+Creating the device allocates storage to it. Attaching the device (to
+the bus) assigns an ordinal number, "devid" to the device which is used
+as its index in the device_table[]. The device_table stores hw_device
+struct.
+
+Mapping the device involves populating entries in busmaps[]. After
+reset, each entry in busmaps[] references a device of class
+null_class. This is responsible for generating non-existent memory
+exception in response to a read or write (this also means that the
+address space read/write routines don't need to do any check of
+address parameters or return values).
+
+Our 1kbyte RAM mapped at address 0 will occupy 1024/128=8 locations in
+busmaps[]; busmaps[0]..busmaps[7] will each map to different offsets
+in the same device.
+
+bus_map() (called by device_define()) stores the devid, offset and
+flags in each of the busmaps[] entries.
+
+One of the final steps in machine initialisation is to make a copy of
+busmaps[] into default_busmaps[]. During run-time, it is possible to
+call bus_map() again to change the mapping of an address region or to
+call bus_unmap() to restore the mapping of an address region to its
+original start-up value.
+
+TODO bus_unmap is a bad name, and it is not used anywhere.
+
+TODO the null device is created automatically but not used
+automatically. Instead, value 0xFF means unmapped.
+
+Special address decoding 1: windowing
+-------------------------------------
+
+In the simple case, a device will be fully mapped into a region of the
+16-bit CPU address space. However, this need not be the
+case. device_define() takes arguments "offset", "addr", "len". This
+allows a sub-set of a device (a window of size "len") to be exposed in
+the CPU address space starting at address "addr". The CPU address
+"addr" will correspond to offset "offset" from the start of storage
+provided by the device.
+
+The intention here is that a machine will implement control registers
+that can control the window (eg, an I/O device that supplies modified
+value of "offset"). Each map entry (ie, each 128-byte region) has its
+own independent value of "offset" and so there can be an arbitrary
+remapping on 128-byte boundaries.
+
+Special address decoding 2: simple overlay
+------------------------------------------
+
+If you make multiple calls to device_define() with overlapping address
+assignments, the later calls will overwrite the earlier ones. You can
+take advantage of this to "carve a hole" in the address space of a
+large device in order to insert a small device -- provided that device
+occupies a multiple of 128 locations. For example, a ROM at the top
+of the address space but with a device defined over the top of it to
+carve a hole from 0xff00-0xff7f for I/O devices, but still providing
+ROM at 0xff80-0xffff (for the exception vectors). In this case, simply
+define the I/O device after the ROM device.
+
+Special address decoding 3: io expander
+---------------------------------------
+
+Sometimes, 128 locations (the default minimum resolution of address
+space decode) is too coarse. One way to make efficient use of it is to
+use a device of class ioexpand_class. This breaks a 128-byte region
+into 16, 8-byte "slots" each of which can be associated with a
+different device.
+
+It's also possible to map slots to ROM and RAM devices so that a
+device can "carve a hole" of 8 bytes in a ROM or RAM. Look at the
+definition of multicomp09 to see an example of this.
+
+TODO restriction: implementation in sparse_io only allows 1 busmap[]
+entry, ie it is restricted to an address range of BUS_MAP_SIZE (128
+bytes).
+
+TODO code and add an example.
+
+TODO note that, using ioexpand, the ioexpander itself needs to have
+permissive access. Is the access of the lower-level device honoured?
+Access check seems to work in two ways: first the map access is
+checked an then (maybe) the device iteself checks access. That seems a
+bit messy.
+
+Image Loading
+-------------
+
+When exec09 starts up, the memory is empty. You can use a command-line
+argument to pre-load an image to memory.
+
+You can load an image in binary format, s-record format in intel-hex
+format. The command-line default is to load an s-record file (TODO
+there may be no way to specify a hex file currently even though all
+the code is in place to allow it).
+
+s-record and intel-hex files contain addressing information and so
+they can write to arbitrary (and potentially non-contiguous) regions
+of address space. When data is loaded in one of these file formats:
+
+- it is loaded after the machine has been initialised
+- it is written to memory byte-by-byte as though by the 6809 CPU
+  (the 16-bit address space is exactly as seen by the CPU).
+- any attempt to write to non-existent or non-writeable memory will
+  result in an access violation being reported.
+
+To load a binary file it must be specified using the "-b" command-line
+option. You can only load a binary file if your machine contains a ROM
+device and (unless you have coded your machine specifically) you can
+only load a single ROM device.
+
+Unlike an s-record or intel-hex file, a binary file is loaded as part
+of machine initialisation and is loaded directly by the ROM
+device. There are no access checks: the device is loaded even if it is
+normally read-only. Since a binary file contains no addressing
+information it is loaded to incrementing byte locations starting at
+offset 0 in the ROM device; in fact, the ROM device is created to be
+of the exact size needed to hold the binary image; this may be
+smaller, larger or identical in size to the space assigned to the ROM
+device in the machine's address space.
+
+TODO how does an s-rec file load to ROM if, as I stated above, the
+normal access checks occur? (maybe it doesn't, since I did my "bug fix")
+
+TODO if, as I explained above, a ROM is exactly the size of its
+binary, how can the ROM exist other than when pre-loaded from an image
+(but I know that it can be loaded from srec..).
+
+
+
+
+NEXT
+
+different/wider address spaces, why what for and how.

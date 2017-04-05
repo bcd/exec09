@@ -21,11 +21,13 @@
 
 
 #include <sys/time.h>
+#include <unistd.h>
+#include <limits.h>
 #include "6809.h"
-
-enum
-{ HEX, S19, BIN };
-
+#include "command.h"
+#include "symtab.h"
+#include "machine.h"
+#include "monitor.h"
 
 /* The total number of cycles that have executed */
 unsigned long total = 0;
@@ -33,13 +35,11 @@ unsigned long total = 0;
 /* The frequency of the emulated CPU, in megahertz */
 unsigned int mhz = 1;
 
-/* When nonzero, indicates that the IRQ should be triggered periodically,
-every so many cycles.  By default no periodic IRQ is generated. */
-unsigned int cycles_per_irq = 0;
-
-/* When nonzero, indicates that the FIRQ should be triggered periodically,
-every so many cycles.  By default no periodic FIRQ is generated. */
-unsigned int cycles_per_firq = 0;
+/* When nonzero, indicates that the machine's tick routine should be
+   triggered periodically, every so many cycles. Typically this is
+   used by the machine to generate a timer interrupt. Off By default.
+*/
+unsigned int cycles_per_tick = 0;
 
 /* Nonzero if debugging support is turned on */
 int debug_enabled = 0;
@@ -47,13 +47,16 @@ int debug_enabled = 0;
 /* Nonzero if tracing is enabled */
 int trace_enabled = 0;
 
+/* Nonzero if SWI2 should be reported with a postbyte */
+int os9call = 0;
+
 /* When nonzero, causes the program to print the total number of cycles
 on a successful exit. */
 int dump_cycles_on_success = 0;
 
 /* When nonzero, indicates the total number of cycles before an automated
 exit.  This is to help speed through test cases that never finish. */
-unsigned long max_cycles = 500000000UL;
+int max_cycles = INT_MAX;
 
 /* When nonzero, says that the state of the machine is persistent
 across runs of the simulator. */
@@ -63,7 +66,7 @@ int machine_persistent = 0;
 processor would run like. */
 int machine_realtime = 0;
 
-static int type = S19;
+static int binary = 0;
 
 char *exename;
 
@@ -136,8 +139,7 @@ idle_loop (void)
 	if (total_ms_elapsed > 100)
 	{
 		total_ms_elapsed -= 100;
-		if (machine->periodic)
-			machine->periodic ();
+		if (machine->periodic) machine->periodic ();
 		command_periodic ();
 	}
 
@@ -169,8 +171,8 @@ struct option
 	const char *help;
 	unsigned int can_negate : 1;
 	unsigned int takes_arg : 1;
-	int *int_value;
-	int default_value;
+        int *int_value;
+	int default_value; /* value to set if option is present */
 	const char **string_value;
 	int (*handler) (const char *arg);
 } option_table[] = {
@@ -179,22 +181,22 @@ struct option
 	{ 'h', "help", NULL,
 		NO_NEG, NO_ARG, NULL, 0, 0, do_help },
 	{ 'b', "binary", "",
-		NO_NEG, NO_ARG, &type, BIN, NULL, NULL },
+		NO_NEG, NO_ARG, &binary, 1, NULL, NULL },
 	{ 'M', "mhz", "", NO_NEG, HAS_ARG },
 	{ '-', "68a09", "Emulate the 68A09 variation (1.5Mhz)" },
 	{ '-', "68b09", "Emulate the 68B09 variation (2Mhz)" },
 	{ 'R', "realtime", "Limit simulation speed to match realtime",
 		HAS_NEG, NO_ARG, &machine_realtime, 0, NULL, NULL },
-	{ 'I', "irqfreq", "Asserts an IRQ every so many cycles automatically",
-		NO_NEG, HAS_ARG, &cycles_per_irq, 0, NULL, NULL },
-	{ 'F', "firqfreq", "Asserts an FIRQ every so many cycles automatically",
-		NO_NEG, HAS_ARG, &cycles_per_firq, 0, NULL, NULL },
+	{ 'I', "tIckfreq", "Automatically calls the machine's tick every so many cycles",
+		NO_NEG, HAS_ARG, &cycles_per_tick, 0, NULL, NULL },
 	{ 'C', "cycledump", "",
 		HAS_NEG, NO_ARG, &dump_cycles_on_success, 1, NULL, NULL},
+	{ 'o', "os9call", "Treat SWI2 as an OS9/NitrOS9 system call and report postbyte",
+		HAS_NEG, NO_ARG, &os9call, 1, NULL, NULL},
 	{ 't', "loadmap", "" },
 	{ 'T', "trace", "",
 		NO_NEG, NO_ARG, &trace_enabled, 1, NULL, NULL },
-	{ 'm', "maxcycles", "Sets maximum number of cycles to run",
+	{ 'm', "maxcycles", "Set maximum number of cycles to run (0 to disable)",
 		NO_NEG, HAS_ARG, &max_cycles, 0, NULL, NULL },
 	{ 's', "machine", "Specify the machine (exact hardware) to emulate",
 		NO_NEG, HAS_ARG, NULL, 0, &machine_name, NULL },
@@ -268,7 +270,9 @@ process_option (struct option *opt, const char *arg)
 	else
 	{
 		if (arg)
+		{
 			//printf ("  Takes no argument but one given, ignored.\n");
+		}
 
 		if (opt->int_value)
 		{
@@ -290,7 +294,7 @@ process_option (struct option *opt, const char *arg)
 }
 
 
-int
+void
 process_plain_argument (const char *arg)
 {
 	//printf ("plain argument '%s'\n", arg);
@@ -299,7 +303,7 @@ process_plain_argument (const char *arg)
 }
 
 
-int
+void
 parse_args (int argc, char *argv[])
 {
 	int argn = 1;
@@ -360,12 +364,7 @@ next_arg:
 int
 main (int argc, char *argv[])
 {
-  int off = 0;
-  int i, j, n;
-  int argn = 1;
-  unsigned int loops = 0;
-
-	gettimeofday (&time_started, NULL);
+  gettimeofday (&time_started, NULL);
 
   exename = argv[0];
   /* TODO - enable different options by default
@@ -375,25 +374,18 @@ main (int argc, char *argv[])
 
 	sym_init ();
 
-	switch (type)
+	if (binary)
 	{
-		case HEX:
-			if (prog_name && load_hex (prog_name))
-				usage ();
-			break;
-
-		case S19:
-			/* The machine loader cannot deal with S-record files.
-			So initialize the machine first, passing it a NULL
-			filename, then load the S-record file afterwards. */
-			machine_init (machine_name, NULL);
-			if (prog_name && load_s19 (prog_name))
-				usage ();
-			break;
-
-		default:
-			machine_init (machine_name, prog_name);
-			break;
+		machine_init (machine_name, prog_name);
+	}
+	else
+	{
+		/* The machine loader cannot deal with image files,
+		so initialize the machine first, passing it a NULL
+		filename, then load the image file afterwards. */
+		machine_init (machine_name, NULL);
+		if (prog_name && load_image (prog_name))
+			usage ();
 	}
 
 	/* Try to load a map file */
@@ -402,44 +394,42 @@ main (int argc, char *argv[])
 
 	/* Enable debugging if no executable given yet. */
 	if (!prog_name)
+	{
 		debug_enabled = 1;
+	}
 	else
+	{
 		/* OK, ready to run.  Reset the CPU first. */
 		cpu_reset ();
+	}
 
 	monitor_init ();
 	command_init ();
-   keybuffering (0);
+        keybuffering_defaults ();
+	keybuffering (0);
 
 	/* Now, iterate through the instructions.
-	 * If no IRQs or FIRQs are enabled, we can just call cpu_execute()
-	 * and let it run for a long time; otherwise, we need to come back
-	 * here periodically and do the interrupt handling. */
+           Without -I, we can just call cpu_execute() and let it run
+           for a long time; otherwise, we need to come back here
+           periodically and call the machine's ->tick() routine */
+        //[NAC HACK 2017Mar30] need to schedule this properly instead of this one-or-the-other approach
+        //.. need to track the rate of each and work out who's next.
 	for (cpu_quit = 1; cpu_quit != 0;)
 	{
-   	if ((cycles_per_irq == 0) && (cycles_per_firq == 0))
+		/* Call each device that needs periodic processing. */
+		machine_update ();
+
+		if (cycles_per_tick == 0)
 		{
 			/* Simulate some CPU time, either 1ms worth or up to the
-			next possible IRQ */
+			next possible tick */
 			total += cpu_execute (mhz * 1024);
 
-			/* Call each device that needs periodic processing. */
-			machine_update ();
 		}
 		else
 		{
-			total += cpu_execute (cycles_per_irq);
-			/* TODO - this assumes periodic interrupts (WPC) */
-			request_irq (0);
-			{
-			/* TODO - FIRQ frequency not handled yet */
-				static int firq_freq = 0;
-				if (++firq_freq == 8)
-				{
-					request_firq (0);
-					firq_freq = 0;
-				}
-			}
+			total += cpu_execute (cycles_per_tick);
+			if (machine->tick) machine->tick ();
 		}
 
 		idle_loop ();
@@ -453,5 +443,6 @@ main (int argc, char *argv[])
 	}
 
 	sim_exit (0);
+	keybuffering (1);
 	return 0;
 }

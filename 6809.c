@@ -19,10 +19,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  */
 
-
-
 #include "6809.h"
 #include "monitor.h"
+#include "command.h"
 #include <stdarg.h>
 
 unsigned X, Y, S, U, PC;
@@ -52,14 +51,20 @@ unsigned int cc_changed = 0;
 
 unsigned *index_regs[4] = { &X, &Y, &U, &S };
 
-extern int dump_cycles_on_success;
+int cwai_state = CWAI_STATE_IDLE;
 
+extern int dump_cycles_on_success;
 extern int trace_enabled;
 
-extern void irq (void);
-extern void firq (void);
+void irq (void);
+void firq (void);
 
-
+/* Values of 'source' are arbitrary and can be assigned
+   per-machine. Machine is responsible for using the
+   corresponding values of 'source' in release_irq.
+   multicomp09 uses 0 for periodic timer interrupt
+                    1 for uart0 rx interrupt
+*/
 void request_irq (unsigned int source)
 {
 	/* If the interrupt is not masked, generate
@@ -68,15 +73,21 @@ void request_irq (unsigned int source)
 	 */
 	irqs_pending |= (1 << source);
 	if (!(EFI & I_FLAG))
-		irq ();
+		irq();
 }
 
+/* IRQ/FIQ are modelled as wire-OR from multiple hw
+   devices. A machine must call this to model a hw device
+   negating its contribution to IRQ.
+   An ISR should be designed to process all sources. If
+   it does not, the interrupt will re-fire immediately.
+*/
 void release_irq (unsigned int source)
 {
 	irqs_pending &= ~(1 << source);
 }
 
-
+/* called with source=0 for periodic timer interrupt */
 void request_firq (unsigned int source)
 {
 	/* If the interrupt is not masked, generate
@@ -85,32 +96,29 @@ void request_firq (unsigned int source)
 	 */
 	firqs_pending |= (1 << source);
 	if (!(EFI & F_FLAG))
-		firq ();
+		firq();
 }
 
+/* currently this is never called. Instead, irqs_pending is
+   always cleared in the ISR. That matches an ISR that processes
+   to completion
+*/
 void release_firq (unsigned int source)
 {
 	firqs_pending &= ~(1 << source);
 }
 
-
-
-static inline void
-check_pc (void)
+static inline void check_pc (void)
 {
 	/* TODO */
 }
 
-
-static inline void
-check_stack (void)
+static inline void check_stack (void)
 {
 	/* TODO */
 }
 
-
-void
-sim_error (const char *format, ...)
+void sim_error (const char *format, ...)
 {
 	va_list ap;
 
@@ -121,20 +129,18 @@ sim_error (const char *format, ...)
 
 	if (debug_enabled)
 		monitor_on = 1;
-	else
+	else {
+		keybuffering (1);
 		exit (2);
+        }
 }
 
-
-unsigned long
-get_cycles (void)
+unsigned long get_cycles (void)
 {
 	return total + cpu_period - cpu_clk;
 }
 
-
-void
-sim_exit (uint8_t exit_code)
+void sim_exit (uint8_t exit_code)
 {
 	char *s;
 
@@ -163,13 +169,11 @@ sim_exit (uint8_t exit_code)
 			fclose (fp);
 		}
 	}
-
+	keybuffering (1);
 	exit (exit_code);
 }
 
-
-static inline void
-change_pc (unsigned newPC)
+static inline void change_pc (unsigned newPC)
 {
 #if 0
   /* TODO - will let some RAM execute for trampolines */
@@ -177,6 +181,7 @@ change_pc (unsigned newPC)
   {
 	  fprintf (stderr, "m6809-run: invalid PC = %04X, previous was %s\n",
 	  	newPC, monitor_addr_name (PC));
+	  keybuffering (1);
 	  exit (2);
   }
 
@@ -186,20 +191,20 @@ change_pc (unsigned newPC)
 		fprintf (stderr, "-> %s\n", monitor_addr_name (newPC));
 	}
 #endif
-  PC = newPC;
+  PC = newPC & 0xffff; /* [NAC HACK 2016Oct21] stop PC from going out of range. Crude.
+                          why have I not seen this problem before? Did I introduce this
+                          bug as a side-effect of another change?
+                       */
 }
 
-
-static inline unsigned
-imm_byte (void)
+static inline unsigned imm_byte (void)
 {
   unsigned val = read8 (PC);
   PC++;
   return val;
 }
 
-static inline unsigned
-imm_word (void)
+static inline unsigned imm_word (void)
 {
   unsigned val = read16 (PC);
   PC += 2;
@@ -208,8 +213,7 @@ imm_word (void)
 
 #define WRMEM(addr, data) write8 (addr, data)
 
-static void
-WRMEM16 (unsigned addr, unsigned data)
+static void WRMEM16 (unsigned addr, unsigned data)
 {
   WRMEM (addr, data >> 8);
   cpu_clk--;
@@ -218,8 +222,7 @@ WRMEM16 (unsigned addr, unsigned data)
 
 #define RDMEM(addr) read8 (addr)
 
-static unsigned
-RDMEM16 (unsigned addr)
+static unsigned RDMEM16 (unsigned addr)
 {
   unsigned val = RDMEM (addr) << 8;
   cpu_clk--;
@@ -230,29 +233,25 @@ RDMEM16 (unsigned addr)
 #define write_stack WRMEM
 #define read_stack  RDMEM
 
-static void
-write_stack16 (unsigned addr, unsigned data)
+static void write_stack16 (unsigned addr, unsigned data)
 {
   write_stack ((addr + 1) & 0xffff, data & 0xff);
   write_stack (addr, data >> 8);
 }
 
-static unsigned
-read_stack16 (unsigned addr)
+static unsigned read_stack16 (unsigned addr)
 {
   return (read_stack (addr) << 8) | read_stack ((addr + 1) & 0xffff);
 }
 
-static void
-direct (void)
+static void direct (void)
 {
   unsigned val = read8 (PC) | DP;
   PC++;
   ea = val;
 }
 
-static void
-indexed (void)			/* note take 1 extra cycle */
+static void indexed (void)			/* note take 1 extra cycle */
 {
   unsigned post = imm_byte ();
   unsigned *R = index_regs[(post >> 5) & 0x3];
@@ -403,8 +402,7 @@ indexed (void)			/* note take 1 extra cycle */
     }
 }
 
-static void
-extended (void)
+static void extended (void)
 {
   unsigned val = read16 (PC);
   PC += 2;
@@ -413,216 +411,178 @@ extended (void)
 
 /* external register functions */
 
-unsigned
-get_a (void)
+unsigned get_a (void)
 {
   return A;
 }
 
-unsigned
-get_b (void)
+unsigned get_b (void)
 {
   return B;
 }
 
-unsigned
-get_dp (void)
+unsigned get_dp (void)
 {
   return DP >> 8;
 }
 
-unsigned
-get_x (void)
+unsigned get_x (void)
 {
   return X;
 }
 
-unsigned
-get_y (void)
+unsigned get_y (void)
 {
   return Y;
 }
 
-unsigned
-get_s (void)
+unsigned get_s (void)
 {
   return S;
 }
 
-unsigned
-get_u (void)
+unsigned get_u (void)
 {
   return U;
 }
 
-unsigned
-get_pc (void)
+unsigned get_pc (void)
 {
   return PC & 0xffff;
 }
 
-unsigned
-get_d (void)
+unsigned get_d (void)
 {
   return (A << 8) | B;
 }
 
-unsigned
-get_flags (void)
+unsigned get_flags (void)
 {
   return EFI;
 }
 
 #ifdef H6309
-unsigned
-get_e (void)
+unsigned get_e (void)
 {
   return E;
 }
 
-unsigned
-get_f (void)
+unsigned get_f (void)
 {
   return F;
 }
 
-unsigned
-get_w (void)
+unsigned get_w (void)
 {
   return (E << 8) | F;
 }
 
-unsigned
-get_q (void)
+unsigned get_q (void)
 {
   return (get_w () << 16) | get_d ();
 }
 
-unsigned
-get_v (void)
+unsigned get_v (void)
 {
   return V;
 }
 
-unsigned
-get_zero (void)
+unsigned get_zero (void)
 {
   return 0;
 }
 
-unsigned
-get_md (void)
+unsigned get_md (void)
 {
   return MD;
 }
 #endif
 
-void
-set_a (unsigned val)
+void set_a (unsigned val)
 {
   A = val & 0xff;
 }
 
-void
-set_b (unsigned val)
+void set_b (unsigned val)
 {
   B = val & 0xff;
 }
 
-void
-set_dp (unsigned val)
+void set_dp (unsigned val)
 {
   DP = (val & 0xff) << 8;
 }
 
-void
-set_x (unsigned val)
+void set_x (unsigned val)
 {
   X = val & 0xffff;
 }
 
-void
-set_y (unsigned val)
+void set_y (unsigned val)
 {
   Y = val & 0xffff;
 }
 
-void
-set_s (unsigned val)
+void set_s (unsigned val)
 {
   S = val & 0xffff;
   check_stack ();
 }
 
-void
-set_u (unsigned val)
+void set_u (unsigned val)
 {
   U = val & 0xffff;
 }
 
-void
-set_pc (unsigned val)
+void set_pc (unsigned val)
 {
   PC = val & 0xffff;
   check_pc ();
 }
 
-void
-set_d (unsigned val)
+void set_d (unsigned val)
 {
   A = (val >> 8) & 0xff;
   B = val & 0xff;
 }
 
 #ifdef H6309
-void
-set_e (unsigned val)
+void set_e (unsigned val)
 {
   E = val & 0xff;
 }
 
-void
-set_f (unsigned val)
+void set_f (unsigned val)
 {
   F = val & 0xff;
 }
 
-void
-set_w (unsigned val)
+void set_w (unsigned val)
 {
   E = (val >> 8) & 0xff;
   F = val & 0xff;
 }
 
-void
-set_q (unsigned val)
+void set_q (unsigned val)
 {
   set_w ((val >> 16) & 0xffff);
   set_d (val & 0xffff);
 }
 
-void
-set_v (unsigned val)
+void set_v (unsigned val)
 {
   V = val & 0xff;
 }
 
-void
-set_zero (unsigned val)
-{
-}
-void
-set_md (unsigned val)
+void set_md (unsigned val)
 {
   MD = val & 0xff;
 }
 #endif
 
-
 /* handle condition code register */
 
-unsigned
-get_cc (void)
+unsigned get_cc (void)
 {
   unsigned res = EFI & (E_FLAG | F_FLAG | I_FLAG);
 
@@ -640,8 +600,7 @@ get_cc (void)
   return res;
 }
 
-void
-set_cc (unsigned arg)
+void set_cc (unsigned arg)
 {
   EFI = arg & (E_FLAG | F_FLAG | I_FLAG);
   H = (arg & H_FLAG ? 0x10 : 0);
@@ -652,20 +611,17 @@ set_cc (unsigned arg)
   cc_changed = 1;
 }
 
-
-void
-cc_modified (void)
+void cc_modified (void)
 {
   /* Check for pending interrupts */
 	if (firqs_pending && !(EFI & F_FLAG))
-		firq ();
+		firq();
 	else if (irqs_pending && !(EFI & I_FLAG))
-		irq ();
+		irq();
 	cc_changed = 0;
 }
 
-unsigned
-get_reg (unsigned nro)
+unsigned get_reg (unsigned nro)
 {
   unsigned val = 0xff;
 
@@ -722,8 +678,7 @@ get_reg (unsigned nro)
   return val;
 }
 
-void
-set_reg (unsigned nro, unsigned val)
+void set_reg (unsigned nro, unsigned val)
 {
   switch (nro)
     {
@@ -781,8 +736,7 @@ set_reg (unsigned nro, unsigned val)
 
 /* 8-Bit Accumulator and Memory Instructions */
 
-static unsigned
-adc (unsigned arg, unsigned val)
+static unsigned adc (unsigned arg, unsigned val)
 {
   unsigned res = arg + val + (C != 0);
 
@@ -793,8 +747,7 @@ adc (unsigned arg, unsigned val)
   return res;
 }
 
-static unsigned
-add (unsigned arg, unsigned val)
+static unsigned add (unsigned arg, unsigned val)
 {
   unsigned res = arg + val;
 
@@ -805,8 +758,7 @@ add (unsigned arg, unsigned val)
   return res;
 }
 
-static unsigned
-and (unsigned arg, unsigned val)
+static unsigned and (unsigned arg, unsigned val)
 {
   unsigned res = arg & val;
 
@@ -816,8 +768,7 @@ and (unsigned arg, unsigned val)
   return res;
 }
 
-static unsigned
-asl (unsigned arg)		/* same as lsl */
+static unsigned asl (unsigned arg)		/* same as lsl */
 {
   unsigned res = arg << 1;
 
@@ -829,8 +780,7 @@ asl (unsigned arg)		/* same as lsl */
   return res;
 }
 
-static unsigned
-asr (unsigned arg)
+static unsigned asr (unsigned arg)
 {
   unsigned res = (INT8) arg;
 
@@ -841,8 +791,7 @@ asr (unsigned arg)
   return res;
 }
 
-static void
-bit (unsigned arg, unsigned val)
+static void bit (unsigned arg, unsigned val)
 {
   unsigned res = arg & val;
 
@@ -850,8 +799,7 @@ bit (unsigned arg, unsigned val)
   OV = 0;
 }
 
-static unsigned
-clr (unsigned arg)
+static unsigned clr (unsigned arg)
 {
   C = N = Z = OV = arg = 0;
   cpu_clk -= 2;
@@ -859,8 +807,7 @@ clr (unsigned arg)
   return arg;
 }
 
-static void
-cmp (unsigned arg, unsigned val)
+static void cmp (unsigned arg, unsigned val)
 {
   unsigned res = arg - val;
 
@@ -869,8 +816,7 @@ cmp (unsigned arg, unsigned val)
   OV = (arg ^ val) & (arg ^ res);
 }
 
-static unsigned
-com (unsigned arg)
+static unsigned com (unsigned arg)
 {
   unsigned res = arg ^ 0xff;
 
@@ -882,8 +828,7 @@ com (unsigned arg)
   return res;
 }
 
-static void
-daa (void)
+static void daa (void)
 {
   unsigned res = A;
   unsigned msn = res & 0xf0;
@@ -903,8 +848,7 @@ daa (void)
   cpu_clk -= 2;
 }
 
-static unsigned
-dec (unsigned arg)
+static unsigned dec (unsigned arg)
 {
   unsigned res = (arg - 1) & 0xff;
 
@@ -915,8 +859,7 @@ dec (unsigned arg)
   return res;
 }
 
-unsigned
-eor (unsigned arg, unsigned val)
+unsigned eor (unsigned arg, unsigned val)
 {
   unsigned res = arg ^ val;
 
@@ -926,8 +869,7 @@ eor (unsigned arg, unsigned val)
   return res;
 }
 
-static void
-exg (void)
+static void exg (void)
 {
   unsigned tmp1 = 0xff;
   unsigned tmp2 = 0xff;
@@ -945,8 +887,7 @@ exg (void)
   cpu_clk -= 8;
 }
 
-static unsigned
-inc (unsigned arg)
+static unsigned inc (unsigned arg)
 {
   unsigned res = (arg + 1) & 0xff;
 
@@ -957,8 +898,7 @@ inc (unsigned arg)
   return res;
 }
 
-static unsigned
-ld (unsigned arg)
+static unsigned ld (unsigned arg)
 {
   unsigned res = arg;
 
@@ -968,8 +908,7 @@ ld (unsigned arg)
   return res;
 }
 
-static unsigned
-lsr (unsigned arg)
+static unsigned lsr (unsigned arg)
 {
   unsigned res = arg >> 1;
 
@@ -981,8 +920,7 @@ lsr (unsigned arg)
   return res;
 }
 
-static void
-mul (void)
+static void mul (void)
 {
   unsigned res = (A * B) & 0xffff;
 
@@ -993,8 +931,7 @@ mul (void)
   cpu_clk -= 11;
 }
 
-static unsigned
-neg (int arg)
+static unsigned neg (int arg)
 {
   unsigned res = (-arg) & 0xff;
 
@@ -1005,8 +942,7 @@ neg (int arg)
   return res;
 }
 
-static unsigned
-or (unsigned arg, unsigned val)
+static unsigned or (unsigned arg, unsigned val)
 {
   unsigned res = arg | val;
 
@@ -1016,8 +952,7 @@ or (unsigned arg, unsigned val)
   return res;
 }
 
-static unsigned
-rol (unsigned arg)
+static unsigned rol (unsigned arg)
 {
   unsigned res = (arg << 1) + (C != 0);
 
@@ -1029,8 +964,7 @@ rol (unsigned arg)
   return res;
 }
 
-static unsigned
-ror (unsigned arg)
+static unsigned ror (unsigned arg)
 {
   unsigned res = arg;
 
@@ -1043,8 +977,7 @@ ror (unsigned arg)
   return res;
 }
 
-static unsigned
-sbc (unsigned arg, unsigned val)
+static unsigned sbc (unsigned arg, unsigned val)
 {
   unsigned res = arg - val - (C != 0);
 
@@ -1055,8 +988,7 @@ sbc (unsigned arg, unsigned val)
   return res;
 }
 
-static void
-st (unsigned arg)
+static void st (unsigned arg)
 {
   unsigned res = arg;
 
@@ -1066,8 +998,7 @@ st (unsigned arg)
   WRMEM (ea, res);
 }
 
-static unsigned
-sub (unsigned arg, unsigned val)
+static unsigned sub (unsigned arg, unsigned val)
 {
   unsigned res = arg - val;
 
@@ -1078,8 +1009,7 @@ sub (unsigned arg, unsigned val)
   return res;
 }
 
-static void
-tst (unsigned arg)
+static void tst (unsigned arg)
 {
   unsigned res = arg;
 
@@ -1088,8 +1018,7 @@ tst (unsigned arg)
   cpu_clk -= 2;
 }
 
-static void
-tfr (void)
+static void tfr (void)
 {
   unsigned tmp1 = 0xff;
   unsigned post = imm_byte ();
@@ -1102,18 +1031,15 @@ tfr (void)
   cpu_clk -= 6;
 }
 
-
 /* 16-Bit Accumulator Instructions */
 
-static void
-abx (void)
+static void abx (void)
 {
   X = (X + B) & 0xffff;
   cpu_clk -= 3;
 }
 
-static void
-addd (unsigned val)
+static void addd (unsigned val)
 {
   unsigned arg = (A << 8) | B;
   unsigned res = arg + val;
@@ -1125,8 +1051,7 @@ addd (unsigned val)
   B = res & 0xff;
 }
 
-static void
-cmp16 (unsigned arg, unsigned val)
+static void cmp16 (unsigned arg, unsigned val)
 {
   unsigned res = arg - val;
 
@@ -1136,8 +1061,7 @@ cmp16 (unsigned arg, unsigned val)
   OV = ((arg ^ val) & (arg ^ res)) >> 8;
 }
 
-static void
-ldd (unsigned arg)
+static void ldd (unsigned arg)
 {
   unsigned res = arg;
 
@@ -1147,8 +1071,7 @@ ldd (unsigned arg)
   OV = 0;
 }
 
-static unsigned
-ld16 (unsigned arg)
+static unsigned ld16 (unsigned arg)
 {
   unsigned res = arg;
 
@@ -1159,8 +1082,7 @@ ld16 (unsigned arg)
   return res;
 }
 
-static void
-sex (void)
+static void sex (void)
 {
   unsigned res = B;
 
@@ -1172,8 +1094,7 @@ sex (void)
   cpu_clk -= 2;
 }
 
-static void
-std (void)
+static void std (void)
 {
   unsigned res = (A << 8) | B;
 
@@ -1183,8 +1104,7 @@ std (void)
   WRMEM16 (ea, res);
 }
 
-static void
-st16 (unsigned arg)
+static void st16 (unsigned arg)
 {
   unsigned res = arg;
 
@@ -1194,8 +1114,7 @@ st16 (unsigned arg)
   WRMEM16 (ea, res);
 }
 
-static void
-subd (unsigned val)
+static void subd (unsigned val)
 {
   unsigned arg = (A << 8) | B;
   unsigned res = arg - val;
@@ -1209,8 +1128,7 @@ subd (unsigned val)
 
 /* stack instructions */
 
-static void
-pshs (void)
+static void pshs (void)
 {
   unsigned post = imm_byte ();
 
@@ -1266,8 +1184,7 @@ pshs (void)
     }
 }
 
-static void
-pshu (void)
+static void pshu (void)
 {
   unsigned post = imm_byte ();
 
@@ -1323,8 +1240,7 @@ pshu (void)
     }
 }
 
-static void
-puls (void)
+static void puls (void)
 {
   unsigned post = imm_byte ();
 
@@ -1382,8 +1298,7 @@ puls (void)
     }
 }
 
-static void
-pulu (void)
+static void pulu (void)
 {
   unsigned post = imm_byte ();
 
@@ -1443,14 +1358,42 @@ pulu (void)
 
 /* Miscellaneous Instructions */
 
-static void
-nop (void)
+static void stack_machine_state(int full)
+{
+  if (full) {
+    cpu_clk -= 19;
+    EFI |= E_FLAG;
+  }
+  else {
+    cpu_clk -= 6; /* ?? */
+    EFI &= ~E_FLAG;
+  }
+  S = (S - 2) & 0xffff;
+  write_stack16(S, PC & 0xffff);
+  if (full) {
+    S = (S - 2) & 0xffff;
+    write_stack16(S, U);
+    S = (S - 2) & 0xffff;
+    write_stack16(S, Y);
+    S = (S - 2) & 0xffff;
+    write_stack16(S, X);
+    S = (S - 1) & 0xffff;
+    write_stack(S, DP >> 8);
+    S = (S - 1) & 0xffff;
+    write_stack(S, B);
+    S = (S - 1) & 0xffff;
+    write_stack(S, A);
+  }
+  S = (S - 1) & 0xffff;
+  write_stack(S, get_cc());
+}
+
+static void nop (void)
 {
   cpu_clk -= 2;
 }
 
-static void
-jsr (void)
+static void jsr (void)
 {
   S = (S - 2) & 0xffff;
   write_stack16 (S, PC & 0xffff);
@@ -1458,8 +1401,7 @@ jsr (void)
   monitor_call (0);
 }
 
-static void
-rti (void)
+static void rti (void)
 {
   monitor_return ();
   cpu_clk -= 6;
@@ -1488,8 +1430,7 @@ rti (void)
   S = (S + 2) & 0xffff;
 }
 
-static void
-rts (void)
+static void rts (void)
 {
   monitor_return ();
   cpu_clk -= 5;
@@ -1498,171 +1439,123 @@ rts (void)
   S = (S + 2) & 0xffff;
 }
 
-void
-irq (void)
+void irq (void)
 {
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  if (cwai_state == CWAI_STATE_WAIT) {
+      /* In CWAI and machine state is already saved */
+      cwai_state = CWAI_STATE_IDLE;
+  }
+  else {
+      stack_machine_state(1);
+  }
   EFI |= I_FLAG;
 
-  irq_start_time = get_cycles ();
-  change_pc (read16 (0xfff8));
-#if 1
-  irqs_pending = 0;
-#endif
+  irq_start_time = get_cycles();
+  change_pc(read16(0xfff8));
 }
 
-
-void
-firq (void)
+void firq (void)
 {
-  EFI &= ~E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  if (cwai_state == CWAI_STATE_WAIT) {
+      /* In CWAI and machine state is already saved */
+      cwai_state = CWAI_STATE_IDLE;
+  }
+  else {
+      stack_machine_state(0);
+  }
   EFI |= (I_FLAG | F_FLAG);
 
-  change_pc (read16 (0xfff6));
-#if 1
-  firqs_pending = 0;
-#endif
+  change_pc(read16(0xfff6));
 }
 
-
-void
-swi (void)
+void swi (void)
 {
-  cpu_clk -= 19;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  stack_machine_state(1);
   EFI |= (I_FLAG | F_FLAG);
 
   change_pc (read16 (0xfffa));
 }
 
-void
-swi2 (void)
+void swi2 (void)
 {
-  cpu_clk -= 20;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  cpu_clk -= 1;
+  stack_machine_state(1);
 
   change_pc (read16 (0xfff4));
 }
 
-void
-swi3 (void)
+void swi3 (void)
 {
-  cpu_clk -= 20;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  cpu_clk -= 1;
+  stack_machine_state(1);
 
   change_pc (read16 (0xfff2));
 }
 
 #ifdef H6309
-void
-trap (void)
+void trap (void)
 {
-  cpu_clk -= 20;
-  EFI |= E_FLAG;
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, PC & 0xffff);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, U);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, Y);
-  S = (S - 2) & 0xffff;
-  write_stack16 (S, X);
-  S = (S - 1) & 0xffff;
-  write_stack (S, DP >> 8);
-  S = (S - 1) & 0xffff;
-  write_stack (S, B);
-  S = (S - 1) & 0xffff;
-  write_stack (S, A);
-  S = (S - 1) & 0xffff;
-  write_stack (S, get_cc ());
+  cpu_clk -= 1;
+  stack_machine_state(1);
 
   change_pc (read16 (0xfff0));
 }
 #endif
 
-void
-cwai (void)
+/* CWAI handling is controlled by a variable cwai_state and divided
+   into 3 parts:
+   - code here
+   - code in the main instruction loop
+   - code in irq() and firq()
+
+   CWAI masks the CC then saves all of the user registers on the
+   hardware stack and waits for interrupt (so that the interrupt has lower
+   latency).
+
+   [NAC HACK 2017Mar11] should abort main loop here when CWAI_STATE_WAIT
+   otherwise we're simply burning cycles to no benefit
+   [NAC HACK 2017Mar11] need to fix other bugs in main scheduler?
+   [NAC HACK 2017Mar11] why doesn't nitros L1 work now? Doesn't get any
+   I/O? Do I need to mock up a serial interrupt? I thought it was all
+   done on the timer?
+*/
+void cwai (void)
 {
-  sim_error ("CWAI - not supported yet!");
+  switch (cwai_state) {
+  case CWAI_STATE_IDLE:
+      /* PC has advanced to this CWAI instruction. Set flags,
+         stack machine state for when we take the interrupt; the
+         stacked PC points after the CWAI
+      */
+      EFI &= (INT8) imm_byte ();
+      cpu_clk -= 1;
+      stack_machine_state(1);
+
+      /* remember we're in CWAI, adjust PC to re-execute this instruction
+      */
+      cwai_state = CWAI_STATE_WAIT;
+      change_pc (PC - 2); /* instruction + immediate */
+      break;
+  case CWAI_STATE_WAIT:
+      /* Been here before. Still waiting for interrupt. Adjust PC so that
+         we will re-execute this instruction
+      */
+      cpu_clk -= 1; /* [NAC HACK 2017Mar11] not correct.. */
+      change_pc (PC - 1); /* instruction -- did not fetch immediate */
+      break;
+  default:
+      sim_error ("invalid value of cwai_state %02X\n", cwai_state);
+      break;
+  }
 }
 
-void
-sync (void)
+void sync (void)
 {
   cpu_clk -= 4;
   sim_error ("SYNC - not supported yet!");
 }
 
-static void
-orcc (void)
+static void orcc (void)
 {
   unsigned tmp = imm_byte ();
 
@@ -1670,8 +1563,7 @@ orcc (void)
   cpu_clk -= 3;
 }
 
-static void
-andcc (void)
+static void andcc (void)
 {
   unsigned tmp = imm_byte ();
 
@@ -1696,15 +1588,13 @@ andcc (void)
 #define cond_GT() ((((N^OV) & 0x80) == 0) && (Z != 0))
 #define cond_LE() ((((N^OV) & 0x80) != 0) || (Z == 0))
 
-static void
-bra (void)
+static void bra (void)
 {
   INT8 tmp = (INT8) imm_byte ();
   change_pc (PC + tmp);
 }
 
-static void
-branch (unsigned cond)
+static void branch (unsigned cond)
 {
   if (cond)
     bra ();
@@ -1714,15 +1604,13 @@ branch (unsigned cond)
   cpu_clk -= 3;
 }
 
-static void
-long_bra (void)
+static void long_bra (void)
 {
   INT16 tmp = (INT16) imm_word ();
   change_pc (PC + tmp);
 }
 
-static void
-long_branch (unsigned cond)
+static void long_branch (unsigned cond)
 {
   if (cond)
     {
@@ -1736,8 +1624,7 @@ long_branch (unsigned cond)
     }
 }
 
-static void
-long_bsr (void)
+static void long_bsr (void)
 {
   INT16 tmp = (INT16) imm_word ();
   ea = PC + tmp;
@@ -1748,8 +1635,7 @@ long_bsr (void)
   monitor_call (0);
 }
 
-static void
-bsr (void)
+static void bsr (void)
 {
   INT8 tmp = (INT8) imm_byte ();
   ea = PC + tmp;
@@ -1760,10 +1646,8 @@ bsr (void)
   monitor_call (0);
 }
 
-
 /* Execute 6809 code for a certain number of cycles. */
-int
-cpu_execute (int cycles)
+int cpu_execute (int cycles)
 {
   unsigned opcode;
 
@@ -2464,7 +2348,7 @@ cpu_execute (int cycles)
 	  indexed ();
 	  cpu_clk += 1;
 	  PC = ea;
-     check_pc ();
+	  check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP indexed */
 	case 0x6f:
@@ -2539,7 +2423,7 @@ cpu_execute (int cycles)
 	  extended ();
 	  cpu_clk -= 4;
 	  PC = ea;
-     check_pc ();
+	  check_pc ();
 	  monitor_call (FC_TAIL_CALL);
 	  break;		/* JMP extended */
 	case 0x7f:
@@ -3126,13 +3010,13 @@ cpu_execute (int cycles)
 
 	default:
 	  cpu_clk -= 2;
-     sim_error ("invalid opcode '%02X'\n", opcode);
-     PC = iPC;
+	  sim_error ("invalid opcode '%02X'\n", opcode);
+	  PC = iPC;
 	  break;
 	}
 
 	if (cc_changed)
-		cc_modified ();
+	  cc_modified ();
     }
   while (cpu_clk > 0);
 
@@ -3142,17 +3026,39 @@ cpu_exit:
    return cpu_period;
 }
 
-void
-cpu_reset (void)
+void cpu_reset (void)
 {
-  X = Y = S = U = A = B = DP = 0;
-  H = N = OV = C = 0;
-  Z = 1;
-  EFI = F_FLAG | I_FLAG;
+   X = Y = S = U = A = B = DP = 0;
+   H = N = OV = C = 0;
+   Z = 1;
+   EFI = F_FLAG | I_FLAG;
 #ifdef H6309
-  MD = E = F = V = 0;
+   MD = E = F = V = 0;
 #endif
 
-  change_pc (read16 (0xfffe));
-  cpu_is_running ();
+   change_pc (read16 (0xfffe));
+   cpu_is_running ();
+}
+
+void print_regs (void)
+{
+   char flags[9] = "        \0";
+   if (get_cc() & C_FLAG) flags[0] = 'C';
+   if (get_cc() & V_FLAG) flags[1] = 'V';
+   if (get_cc() & Z_FLAG) flags[2] = 'Z';
+   if (get_cc() & N_FLAG) flags[3] = 'N';
+   if (get_cc() & I_FLAG) flags[4] = 'I';
+   if (get_cc() & H_FLAG) flags[5] = 'H';
+   if (get_cc() & F_FLAG) flags[6] = 'F';
+   if (get_cc() & E_FLAG) flags[7] = 'E';
+
+   printf (" X: 0x%04X  [X]: 0x%04X    Y: 0x%04X  [Y]: 0x%04X    ",
+            get_x(), read16(get_x()), get_y(), read16(get_y()) );
+   printf ("PC: 0x%04X [PC]: 0x%04X\n",
+            get_pc(), read16(get_pc()) );
+   printf (" U: 0x%04X  [U]: 0x%04X    S: 0x%04X  [S]: 0x%04X    ",
+            get_u(), read16(get_u()), get_s(), read16(get_s()) );
+   printf ("DP: 0x%02X\n", get_dp() );
+   printf (" A: 0x%02X      B: 0x%02X    [D]: 0x%04X   CC: %s\n",
+            get_a(), get_b(), read16(get_d()), flags );
 }
